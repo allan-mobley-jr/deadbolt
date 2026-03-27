@@ -39,12 +39,12 @@ export function generateSeed(length: number = SEED_LENGTH): string {
   const bytes = new Uint8Array(length);
   globalThis.crypto.getRandomValues(bytes);
 
-  const chars: string[] = [];
+  let result = '';
   for (let i = 0; i < length; i++) {
-    chars.push(SEED_CHARS[bytes[i] % SEED_CHARS.length]);
+    result += SEED_CHARS[bytes[i] % SEED_CHARS.length];
   }
 
-  return chars.join('');
+  return result;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface WeightedItem<T> {
  * ```
  */
 export class RNG {
-  private _seed: string;
+  private readonly _seed: string;
   private _prng: PRNG;
 
   constructor(seed: string) {
@@ -203,7 +203,6 @@ export class RNG {
     // Unreachable — the loop always returns via the last-item guard above.
     // If we somehow get here, there is a genuine logic error.
     throw new Error('RNG.weightedPick: unreachable — weight accumulation error');
-
   }
 
   /**

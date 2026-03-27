@@ -20,6 +20,6 @@ export interface RunConfig {
 
 /** Sensible defaults for a new run (seed must be provided separately). */
 export const RUN_DEFAULTS = {
-  difficulty: 2 as Difficulty,
+  difficulty: 2,
   targetMinutes: 15,
-} as const;
+} as const satisfies Omit<RunConfig, 'seed'>;

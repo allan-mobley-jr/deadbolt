@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateSeed, RNG } from '@/lib/rng';
-import type { WeightedItem } from '@/lib/rng';
+import { generateSeed, RNG, type WeightedItem } from '@/lib/rng';
 
 // ---------------------------------------------------------------------------
 // generateSeed
