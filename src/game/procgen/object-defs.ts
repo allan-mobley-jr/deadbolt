@@ -5,12 +5,6 @@
  * and gameplay characteristics. Systems reference these definitions by the
  * `type` key (which matches PlacedObject.objectType in the procgen pipeline).
  *
- * Physical properties drive gameplay in M3 (barricading) and M4 (traps):
- *   - mass: Matter.js body mass and push/drag threshold
- *   - durability: structural hit points (0 = fragile, 1 = indestructible)
- *   - flammability: fire spread rate (0 = fireproof, 1 = instant ignition)
- *   - conductivity: electricity propagation (0 = insulator, 1 = perfect conductor)
- *
  * NO React imports allowed — this is pure TypeScript.
  */
 

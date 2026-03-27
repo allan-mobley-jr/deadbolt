@@ -109,21 +109,15 @@ export function getPlaceableTiles(
   const endX = room.origin.x + room.width - 1;
   const endY = room.origin.y + room.height - 1;
 
-  // Pre-compute inner floor bounds for wall-adjacency checks.
-  const innerWidth = room.width - 2;
-  const innerHeight = room.height - 2;
-
   for (let y = startY; y < endY; y++) {
     for (let x = startX; x < endX; x++) {
       const key = `${x},${y}`;
       if (blockedKeys.has(key) || occupiedSet.has(key)) continue;
 
-      if (
-        x === startX ||
-        x === startX + innerWidth - 1 ||
-        y === startY ||
-        y === startY + innerHeight - 1
-      ) {
+      const isEdge =
+        x === startX || x === endX - 1 || y === startY || y === endY - 1;
+
+      if (isEdge) {
         wallAdjacent.push({ x, y });
       } else {
         interior.push({ x, y });
@@ -147,6 +141,38 @@ function pickRandomTile(tiles: TileCoord[], rng: PRNG): TileCoord | null {
   tiles[idx] = tiles[tiles.length - 1];
   tiles.pop();
   return picked;
+}
+
+/**
+ * Place a list of object types into a building room, preferring tiles from
+ * the primary pool and falling back to the secondary pool.
+ */
+function placeTypes(
+  types: string[],
+  primaryPool: TileCoord[],
+  secondaryPool: TileCoord[],
+  building: Building,
+  room: Room,
+  occupiedSet: Set<string>,
+  rng: PRNG,
+): void {
+  for (const type of types) {
+    const tile =
+      pickRandomTile(primaryPool, rng) ?? pickRandomTile(secondaryPool, rng);
+    if (!tile) break;
+
+    occupiedSet.add(`${tile.x},${tile.y}`);
+    const def = getObjectDef(type)!; // Safe: callers filter unknown types.
+
+    const objIdx = building.objects.length;
+    building.objects.push({
+      position: tile,
+      category: def.category,
+      blocksMovement: def.blocksMovement,
+      objectType: type,
+    });
+    room.objectIndices.push(objIdx);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -196,8 +222,8 @@ export function placeObjectsInBuilding(
     // Track occupied positions across this room.
     const occupiedSet = new Set<string>();
 
-    // Sort: furniture/containers first (prefer wall-adjacent), then loot/debris.
-    // Skip types with no definition — prevents crashes from data entry errors.
+    // Partition into furniture/containers (wall-adjacent) vs loot/debris (interior).
+    // Unknown types are silently skipped to prevent crashes from data entry errors.
     const furnitureTypes: string[] = [];
     const otherTypes: string[] = [];
 
@@ -214,7 +240,7 @@ export function placeObjectsInBuilding(
       }
     }
 
-    // Get initial placeable tile pools.
+    // Get placeable tile pools (already mutable arrays from getPlaceableTiles).
     const { wallAdjacent, interior } = getPlaceableTiles(
       room,
       roomIdx,
@@ -222,45 +248,10 @@ export function placeObjectsInBuilding(
       occupiedSet,
     );
 
-    // Copy into mutable arrays for pick-and-remove.
-    const wallPool = [...wallAdjacent];
-    const interiorPool = [...interior];
-
-    // Place furniture/containers preferring wall-adjacent tiles.
-    for (const type of furnitureTypes) {
-      const tile = pickRandomTile(wallPool, rng) ?? pickRandomTile(interiorPool, rng);
-      if (!tile) break;
-
-      occupiedSet.add(`${tile.x},${tile.y}`);
-      const def = getObjectDef(type)!; // Safe: filtered above.
-
-      const objIdx = building.objects.length;
-      building.objects.push({
-        position: tile,
-        category: def.category,
-        blocksMovement: def.blocksMovement,
-        objectType: type,
-      });
-      room.objectIndices.push(objIdx);
-    }
-
-    // Place loot/debris in any remaining tile.
-    for (const type of otherTypes) {
-      const tile = pickRandomTile(interiorPool, rng) ?? pickRandomTile(wallPool, rng);
-      if (!tile) break;
-
-      occupiedSet.add(`${tile.x},${tile.y}`);
-      const def = getObjectDef(type)!; // Safe: filtered above.
-
-      const objIdx = building.objects.length;
-      building.objects.push({
-        position: tile,
-        category: def.category,
-        blocksMovement: def.blocksMovement,
-        objectType: type,
-      });
-      room.objectIndices.push(objIdx);
-    }
+    // Place furniture/containers preferring wall-adjacent tiles,
+    // then loot/debris preferring interior tiles.
+    placeTypes(furnitureTypes, wallAdjacent, interior, building, room, occupiedSet, rng);
+    placeTypes(otherTypes, interior, wallAdjacent, building, room, occupiedSet, rng);
   }
 }
 
