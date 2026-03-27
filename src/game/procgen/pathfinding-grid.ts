@@ -23,21 +23,27 @@ import { PATHFINDING } from './constants';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Returns true if the given tile type should be walkable. */
+/**
+ * Returns true if the given tile type should be walkable.
+ *
+ * Uses exhaustive matching — adding a new TileType without updating this
+ * function will produce a compile-time error.
+ */
 export function isWalkableTileType(tileType: TileType): boolean {
   switch (tileType) {
     case TileType.Wall:
-      return false;
     case TileType.Empty:
+      return false;
     case TileType.Floor:
     case TileType.Door:
     case TileType.Window:
     case TileType.Road:
     case TileType.Sidewalk:
       return true;
-    default:
-      return false;
   }
+  // Exhaustive check: compile error if a new TileType is added without handling.
+  const _exhaustive: never = tileType;
+  throw new Error(`Unknown TileType: ${_exhaustive}`);
 }
 
 /**
@@ -105,10 +111,18 @@ export class PathfindingGrid {
   /**
    * Build a PathfindingGrid from a CityLayout.
    *
-   * Constructs the walkability matrix from tiles, then layers in
-   * movement-blocking objects.
+   * Validates grid dimensions, constructs the walkability matrix from tiles,
+   * then layers in movement-blocking objects.
+   *
+   * @throws if the city layout has zero or negative dimensions.
    */
   static fromCityLayout(cityLayout: CityLayout): PathfindingGrid {
+    if (cityLayout.widthTiles <= 0 || cityLayout.heightTiles <= 0) {
+      throw new Error(
+        `Cannot create PathfindingGrid from empty CityLayout ` +
+        `(${cityLayout.widthTiles}x${cityLayout.heightTiles})`,
+      );
+    }
     const matrix = buildWalkabilityMatrix(cityLayout);
     applyObjectBlocking(matrix, cityLayout.buildings);
     return new PathfindingGrid(matrix);
@@ -120,10 +134,15 @@ export class PathfindingGrid {
     return this.grid.isWalkableAt(x, y);
   }
 
-  /** Update the walkability of a single tile (e.g. barricade placed). */
-  setWalkable(x: number, y: number, walkable: boolean): void {
-    if (!this.isInBounds(x, y)) return;
+  /**
+   * Update the walkability of a single tile (e.g. barricade placed).
+   *
+   * @returns true if the update was applied, false if out of bounds.
+   */
+  setWalkable(x: number, y: number, walkable: boolean): boolean {
+    if (!this.isInBounds(x, y)) return false;
     this.grid.setWalkableAt(x, y, walkable);
+    return true;
   }
 
   /** Batch-update walkability for multiple tiles. */
@@ -160,6 +179,9 @@ export class PathfindingGrid {
 
   /**
    * Find a path and smooth it (fewer waypoints for smoother movement).
+   *
+   * Two separate grid clones are used: one for the A* search (which
+   * mutates node state) and one for smooth-path line-of-sight checks.
    */
   findSmoothedPath(start: TileCoord, end: TileCoord): PathResult {
     if (!this.isInBounds(start.x, start.y) || !this.isInBounds(end.x, end.y)) {
@@ -169,14 +191,16 @@ export class PathfindingGrid {
       return { path: [], found: false, length: 0 };
     }
 
-    const cloned = this.grid.clone();
-    const rawPath = this.finder.findPath(start.x, start.y, end.x, end.y, cloned);
+    const searchClone = this.grid.clone();
+    const rawPath = this.finder.findPath(start.x, start.y, end.x, end.y, searchClone);
 
     if (rawPath.length === 0) {
       return { path: [], found: false, length: 0 };
     }
 
-    const smoothed = PF.Util.smoothenPath(this.grid.clone(), rawPath);
+    // Fresh clone for smoothing — the search clone has mutated node state.
+    const smoothClone = this.grid.clone();
+    const smoothed = PF.Util.smoothenPath(smoothClone, rawPath);
     const path: TileCoord[] = smoothed.map(([x, y]) => ({ x, y }));
     return { path, found: true, length: path.length };
   }

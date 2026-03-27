@@ -201,14 +201,17 @@ describe('scoreBuilding', () => {
   });
 
   it('gives higher loot proximity score when more loot nearby', () => {
+    // Both buildings have entry points so they are scoreable
     const b1 = makeBuilding({
       id: 'b1',
+      entryPoints: [makeEntryPoint(1, 0)],
       objects: [makeLoot(1, 1), makeLoot(2, 2), makeLoot(3, 3)],
     });
     // Place b2 far away so it doesn't benefit from b1's loot proximity
     const b2 = makeBuilding({
       id: 'b2',
       origin: { x: 40, y: 40 },
+      entryPoints: [makeEntryPoint(41, 40)],
       objects: [],
     });
 
@@ -220,10 +223,10 @@ describe('scoreBuilding', () => {
   });
 
   it('gives higher size score to buildings in the ideal range', () => {
-    // Ideal range: 40-120 tiles
-    const ideal = makeBuilding({ id: 'ideal', width: 10, height: 8 }); // 80 tiles
-    const tiny = makeBuilding({ id: 'tiny', width: 3, height: 3 });    // 9 tiles
-    const huge = makeBuilding({ id: 'huge', width: 20, height: 20 });  // 400 tiles
+    // Ideal range: 40-120 tiles — all have entry points
+    const ideal = makeBuilding({ id: 'ideal', width: 10, height: 8, entryPoints: [makeEntryPoint(1, 0)] });
+    const tiny = makeBuilding({ id: 'tiny', width: 3, height: 3, entryPoints: [makeEntryPoint(1, 0)] });
+    const huge = makeBuilding({ id: 'huge', width: 20, height: 20, entryPoints: [makeEntryPoint(1, 0)] });
 
     const layout = makeLayout([ideal, tiny, huge]);
 
@@ -238,11 +241,16 @@ describe('scoreBuilding', () => {
   it('gives higher object density score with more furniture', () => {
     const furnished = makeBuilding({
       id: 'b1',
+      entryPoints: [makeEntryPoint(1, 0)],
       objects: Array.from({ length: 5 }, (_, i) =>
         makeFurniture(i, 0),
       ),
     });
-    const empty = makeBuilding({ id: 'b2', objects: [] });
+    const empty = makeBuilding({
+      id: 'b2',
+      entryPoints: [makeEntryPoint(1, 0)],
+      objects: [],
+    });
 
     const layout = makeLayout([furnished, empty]);
     const s1 = scoreBuilding(furnished, layout);
@@ -263,6 +271,41 @@ describe('scoreBuilding', () => {
     const score = scoreBuilding(b, layout);
 
     expect(score.totalScore).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns zero score for buildings with zero entry points (sealed)', () => {
+    const sealed = makeBuilding({
+      id: 'sealed',
+      width: 10,
+      height: 10,
+      entryPoints: [],
+      objects: [makeLoot(1, 1), makeFurniture(2, 2)],
+    });
+
+    const layout = makeLayout([sealed]);
+    const score = scoreBuilding(sealed, layout);
+
+    expect(score.totalScore).toBe(0);
+    expect(score.entryPointScore).toBe(0);
+    expect(score.lootProximityScore).toBe(0);
+    expect(score.buildingSizeScore).toBe(0);
+    expect(score.objectDensityScore).toBe(0);
+  });
+
+  it('totalScore equals the sum of individual scores', () => {
+    const b = makeBuilding({
+      id: 'b1',
+      width: 10,
+      height: 8,
+      entryPoints: [makeEntryPoint(1, 0), makeEntryPoint(2, 0)],
+      objects: [makeLoot(3, 3), makeFurniture(4, 4)],
+    });
+
+    const layout = makeLayout([b]);
+    const s = scoreBuilding(b, layout);
+
+    const sum = s.entryPointScore + s.lootProximityScore + s.buildingSizeScore + s.objectDensityScore;
+    expect(s.totalScore).toBeCloseTo(sum);
   });
 });
 
@@ -304,6 +347,7 @@ describe('selectSafehouse', () => {
 
     expect(result.building.id).toBe('best');
     expect(result.buildingIndex).toBe(0);
+    expect(result.usedFallback).toBe(false);
   });
 
   it('filters out buildings below MIN_SAFEHOUSE_AREA', () => {
@@ -347,6 +391,8 @@ describe('selectSafehouse', () => {
 
     // s2 is larger (16 > 9)
     expect(result.building.id).toBe('s2');
+    expect(result.usedFallback).toBe(true);
+    expect(result.scoreBreakdown).toBeDefined();
   });
 
   it('throws when city has no buildings', () => {

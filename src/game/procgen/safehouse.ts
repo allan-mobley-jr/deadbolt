@@ -16,11 +16,11 @@
 import type {
   Building,
   CityLayout,
-  TileCoord,
   SafehouseResult,
   SafehouseScoreBreakdown,
 } from '@/types/procgen';
 import { ObjectCategory } from '@/types/procgen';
+import { tileDistance, getBuildingCenter } from './geometry';
 import {
   SAFEHOUSE_WEIGHTS,
   IDEAL_SIZE_MIN,
@@ -31,24 +31,8 @@ import {
   LOOT_SEARCH_RADIUS,
 } from './constants';
 
-// ---------------------------------------------------------------------------
-// Geometry helpers
-// ---------------------------------------------------------------------------
-
-/** Calculate the center tile of a building's bounding box. */
-export function getBuildingCenter(building: Building): TileCoord {
-  return {
-    x: Math.floor(building.origin.x + building.width / 2),
-    y: Math.floor(building.origin.y + building.height / 2),
-  };
-}
-
-/** Euclidean distance between two tile coordinates. */
-export function tileDistance(a: TileCoord, b: TileCoord): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
+// Re-export geometry helpers for consumers that imported them from here.
+export { tileDistance, getBuildingCenter } from './geometry';
 
 // ---------------------------------------------------------------------------
 // Scoring helpers
@@ -116,6 +100,18 @@ export function scoreBuilding(
   const W = SAFEHOUSE_WEIGHTS;
   const entryCount = building.entryPoints.length;
 
+  // Buildings with zero entry points are sealed — not valid safehouse candidates.
+  // Return zero score so they are never selected over valid buildings.
+  if (entryCount === 0) {
+    return {
+      entryPointScore: 0,
+      lootProximityScore: 0,
+      buildingSizeScore: 0,
+      objectDensityScore: 0,
+      totalScore: 0,
+    };
+  }
+
   // 1. Entry-point defensibility — fewer is better
   const entryBase = W.ENTRY_POINTS * (1 / Math.max(1, entryCount));
   const excessPenalty =
@@ -158,10 +154,13 @@ export function scoreBuilding(
  * Select the best safehouse from a city layout.
  *
  * Iterates all buildings, scores each, and returns the highest-scoring
- * candidate that meets the minimum area requirement.
+ * candidate that meets the minimum area requirement and has at least
+ * one entry point.
  *
- * If no building meets the minimum area, the largest building is selected
- * as a fallback.
+ * If no building qualifies, the largest building with entry points is
+ * selected as a fallback and `usedFallback` is set to true.
+ *
+ * @throws if the city has no buildings.
  */
 export function selectSafehouse(cityLayout: CityLayout): SafehouseResult {
   const { buildings } = cityLayout;
@@ -200,9 +199,15 @@ export function selectSafehouse(cityLayout: CityLayout): SafehouseResult {
   }
 
   // Fallback: no building met minimum area → use largest
+  let usedFallback = false;
   if (bestIndex === -1) {
     bestIndex = largestIndex;
     bestBreakdown = scoreBuilding(buildings[largestIndex], cityLayout);
+    usedFallback = true;
+  }
+
+  if (bestBreakdown === null) {
+    throw new Error('selectSafehouse: internal error — no score breakdown computed');
   }
 
   const selected = buildings[bestIndex];
@@ -210,8 +215,9 @@ export function selectSafehouse(cityLayout: CityLayout): SafehouseResult {
   return {
     building: selected,
     buildingIndex: bestIndex,
-    scoreBreakdown: bestBreakdown!,
+    scoreBreakdown: bestBreakdown,
     entryPointsToDefend: selected.entryPoints.filter((ep) => !ep.barricaded),
     minimapPosition: getBuildingCenter(selected),
+    usedFallback,
   };
 }

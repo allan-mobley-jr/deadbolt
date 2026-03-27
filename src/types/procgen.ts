@@ -142,6 +142,8 @@ export interface SafehouseResult {
   entryPointsToDefend: EntryPoint[];
   /** Center position for minimap marker. */
   minimapPosition: TileCoord;
+  /** True if no building met the minimum area threshold (fallback used). */
+  usedFallback: boolean;
 }
 
 /** Result of a pathfinding query. */

@@ -19,17 +19,10 @@ import type {
 } from '@/types/procgen';
 import { TileType } from '@/types/procgen';
 import { SPAWN_ZONE } from './constants';
+import { tileDistance, getBuildingCenter } from './geometry';
 
-// ---------------------------------------------------------------------------
-// Geometry helpers
-// ---------------------------------------------------------------------------
-
-/** Euclidean distance between two tile coordinates. */
-export function tileDistance(a: TileCoord, b: TileCoord): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
+// Re-export for consumers that imported tileDistance from here.
+export { tileDistance } from './geometry';
 
 // ---------------------------------------------------------------------------
 // Walkable-point scanning
@@ -172,10 +165,7 @@ export function generateFarBuildingSpawnZones(
   // Collect candidate buildings
   const candidates = cityLayout.buildings.filter((b) => {
     if (b.id === safehouseBuildingId) return false;
-    const center: TileCoord = {
-      x: Math.floor(b.origin.x + b.width / 2),
-      y: Math.floor(b.origin.y + b.height / 2),
-    };
+    const center = getBuildingCenter(b);
     return tileDistance(center, safehouseCenter) >= MIN_DISTANCE_FROM_SAFEHOUSE;
   });
 
@@ -190,10 +180,7 @@ export function generateFarBuildingSpawnZones(
     const position: TileCoord =
       building.entryPoints.length > 0
         ? { ...building.entryPoints[0].position }
-        : {
-            x: Math.floor(building.origin.x + building.width / 2),
-            y: Math.floor(building.origin.y + building.height / 2),
-          };
+        : getBuildingCenter(building);
 
     const spawnPoints = findWalkableSpawnPoints(cityLayout, position, ZONE_RADIUS);
 

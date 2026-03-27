@@ -38,12 +38,14 @@ const D = TileType.Door;
 // ---------------------------------------------------------------------------
 
 describe('isWalkableTileType', () => {
-  it('marks Wall as non-walkable', () => {
-    expect(isWalkableTileType(TileType.Wall)).toBe(false);
+  it.each([
+    ['Wall', TileType.Wall],
+    ['Empty', TileType.Empty],
+  ] as const)('marks %s as non-walkable', (_, type) => {
+    expect(isWalkableTileType(type)).toBe(false);
   });
 
   it.each([
-    ['Empty', TileType.Empty],
     ['Floor', TileType.Floor],
     ['Door', TileType.Door],
     ['Window', TileType.Window],
@@ -237,14 +239,21 @@ describe('PathfindingGrid', () => {
       expect(grid.isWalkable(1, 0)).toBe(true);
     });
 
-    it('ignores out-of-bounds coordinates silently', () => {
+    it('returns true for in-bounds updates', () => {
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([[R, R]]),
+      );
+
+      expect(grid.setWalkable(0, 0, false)).toBe(true);
+    });
+
+    it('returns false for out-of-bounds coordinates', () => {
       const grid = PathfindingGrid.fromCityLayout(
         createLayout([[R]]),
       );
 
-      // Should not throw
-      grid.setWalkable(-1, 0, false);
-      grid.setWalkable(0, 99, false);
+      expect(grid.setWalkable(-1, 0, false)).toBe(false);
+      expect(grid.setWalkable(0, 99, false)).toBe(false);
     });
   });
 
@@ -380,6 +389,23 @@ describe('PathfindingGrid', () => {
       const result = grid.findSmoothedPath({ x: 0, y: 0 }, { x: 2, y: 0 });
       expect(result.found).toBe(false);
     });
+
+    it('returns not-found for out-of-bounds coordinates', () => {
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([[R, R, R]]),
+      );
+
+      expect(grid.findSmoothedPath({ x: -1, y: 0 }, { x: 2, y: 0 }).found).toBe(false);
+      expect(grid.findSmoothedPath({ x: 0, y: 0 }, { x: 99, y: 0 }).found).toBe(false);
+    });
+
+    it('returns not-found when start is non-walkable', () => {
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([[W, R, R]]),
+      );
+
+      expect(grid.findSmoothedPath({ x: 0, y: 0 }, { x: 2, y: 0 }).found).toBe(false);
+    });
   });
 
   describe('hasPath', () => {
@@ -427,6 +453,48 @@ describe('PathfindingGrid', () => {
 
       grid.setWalkable(0, 0, false);
       expect(grid.toMatrix()).toEqual([[1, 0]]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Edge cases
+  // -------------------------------------------------------------------------
+
+  describe('edge cases', () => {
+    it('throws on zero-dimension CityLayout', () => {
+      const emptyLayout: CityLayout = {
+        widthTiles: 0,
+        heightTiles: 0,
+        tiles: [],
+        buildings: [],
+        seed: 'test',
+      };
+
+      expect(() => PathfindingGrid.fromCityLayout(emptyLayout)).toThrow(
+        'Cannot create PathfindingGrid from empty CityLayout',
+      );
+    });
+
+    it('finds a trivial path from a tile to itself', () => {
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([[R, R, R]]),
+      );
+
+      const result = grid.findPath({ x: 1, y: 0 }, { x: 1, y: 0 });
+      expect(result.found).toBe(true);
+      expect(result.path.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('treats Empty tiles as non-walkable in the grid', () => {
+      const E = TileType.Empty;
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([
+          [R, E, R],
+        ]),
+      );
+
+      expect(grid.isWalkable(1, 0)).toBe(false);
+      expect(grid.findPath({ x: 0, y: 0 }, { x: 2, y: 0 }).found).toBe(false);
     });
   });
 
