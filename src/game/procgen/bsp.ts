@@ -551,11 +551,12 @@ function placeExteriorEntrance(
     chosen.interiorX,
     chosen.interiorY,
   );
+  if (roomIdx < 0) return; // Interior tile not inside any room — skip
   entryPoints.push({
     position: chosen.pos,
     type: 'door',
     facingDirection: chosen.dir,
-    roomIndex: Math.max(0, roomIdx),
+    roomIndex: roomIdx,
     barricaded: false,
   });
 }
@@ -714,11 +715,12 @@ function placeWindows(
         candidate.interiorX,
         candidate.interiorY,
       );
+      if (roomIdx < 0) continue; // Interior tile not inside any room — skip
       entryPoints.push({
         position: candidate.pos,
         type: 'window',
         facingDirection: candidate.dir,
-        roomIndex: Math.max(0, roomIdx),
+        roomIndex: roomIdx,
         barricaded: false,
       });
     }
@@ -782,6 +784,11 @@ export function generateBuildingInterior(
   // Clear any existing data
   building.rooms = [];
   building.entryPoints = [];
+
+  // Skip buildings too small to form a valid room
+  if (building.width < BSP.MIN_ROOM_SIZE || building.height < BSP.MIN_ROOM_SIZE) {
+    return;
+  }
 
   // Build BSP tree
   const rootRect: BSPRect = {

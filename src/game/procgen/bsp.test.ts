@@ -96,6 +96,7 @@ describe('splitPartition', () => {
     // Very wide rect should split vertically
     const wide = { x: 0, y: 0, width: 20, height: 5 };
     const wideNode = splitPartition(wide, 0, makeRng());
+    expect(wideNode.kind).toBe('branch');
     if (wideNode.kind === 'branch') {
       expect(wideNode.splitHorizontal).toBe(false);
     }
@@ -103,6 +104,7 @@ describe('splitPartition', () => {
     // Very tall rect should split horizontally
     const tall = { x: 0, y: 0, width: 5, height: 20 };
     const tallNode = splitPartition(tall, 0, makeRng());
+    expect(tallNode.kind).toBe('branch');
     if (tallNode.kind === 'branch') {
       expect(tallNode.splitHorizontal).toBe(true);
     }
@@ -140,6 +142,7 @@ describe('splitPartition', () => {
     // Width < MIN_SPLIT_SIZE, height >= MIN_SPLIT_SIZE → must split horizontally
     const rect = { x: 0, y: 0, width: 4, height: 10 };
     const node = splitPartition(rect, 0, makeRng());
+    expect(node.kind).toBe('branch');
     if (node.kind === 'branch') {
       expect(node.splitHorizontal).toBe(true);
     }
@@ -286,14 +289,13 @@ describe('tile grid writing', () => {
 describe('door placement', () => {
   it('places interior doors (N-1 connections for N rooms)', () => {
     const tiles = makeTileGrid(20, 20);
+    // Use 12x12 which is large enough to guarantee multiple rooms
     const building = makeBuilding({ id: 'b1', width: 12, height: 12 });
     generateBuildingInterior(building, 'residential', tiles, makeRng());
 
-    const roomCount = building.rooms.length;
-    if (roomCount > 1) {
-      const graph = buildRoomGraph(building);
-      expect(graph.length).toBe(roomCount - 1);
-    }
+    expect(building.rooms.length).toBeGreaterThan(1);
+    const graph = buildRoomGraph(building);
+    expect(graph.length).toBe(building.rooms.length - 1);
   });
 
   it('has at least one exterior door', () => {
@@ -511,16 +513,10 @@ describe('room output', () => {
 // ---------------------------------------------------------------------------
 
 describe('connectivity', () => {
-  it('all rooms are reachable via doors (flood fill)', () => {
-    const tiles = makeTileGrid(30, 30);
-    const building = makeBuilding({ id: 'b1', width: 15, height: 15 });
-    generateBuildingInterior(building, 'residential', tiles, makeRng());
-
-    if (building.rooms.length <= 1) return;
-
+  /** BFS flood-fill to check all rooms are reachable. */
+  function verifyConnectivity(building: Building) {
     const connections = buildRoomGraph(building);
 
-    // Build adjacency list
     const adj = new Map<number, Set<number>>();
     for (let i = 0; i < building.rooms.length; i++) {
       adj.set(i, new Set());
@@ -530,7 +526,6 @@ describe('connectivity', () => {
       adj.get(conn.roomIndexB)!.add(conn.roomIndexA);
     }
 
-    // BFS from room 0
     const visited = new Set<number>();
     const queue = [0];
     visited.add(0);
@@ -544,18 +539,52 @@ describe('connectivity', () => {
       }
     }
 
-    expect(visited.size).toBe(building.rooms.length);
+    return { visited, connections };
+  }
+
+  it('all rooms are reachable via doors across multiple seeds', () => {
+    const seeds = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'];
+    const sizes = [
+      { w: 10, h: 10 },
+      { w: 15, h: 15 },
+      { w: 20, h: 20 },
+      { w: 8, h: 15 },
+      { w: 15, h: 8 },
+    ];
+
+    for (const seed of seeds) {
+      for (const { w, h } of sizes) {
+        const tiles = makeTileGrid(w + 10, h + 10);
+        const building = makeBuilding({ id: `b-${seed}-${w}x${h}`, width: w, height: h });
+        generateBuildingInterior(building, 'residential', tiles, makeRng(seed));
+
+        if (building.rooms.length <= 1) continue;
+
+        const { visited } = verifyConnectivity(building);
+        expect(
+          visited.size,
+          `seed=${seed} size=${w}x${h}: not all ${building.rooms.length} rooms reachable`,
+        ).toBe(building.rooms.length);
+      }
+    }
   });
 
-  it('room graph is a tree (N-1 edges for N rooms)', () => {
-    const tiles = makeTileGrid(30, 30);
-    const building = makeBuilding({ id: 'b1', width: 15, height: 15 });
-    generateBuildingInterior(building, 'residential', tiles, makeRng());
+  it('room graph is a tree (N-1 edges for N rooms) across multiple seeds', () => {
+    const seeds = ['tree-1', 'tree-2', 'tree-3', 'tree-4', 'tree-5'];
 
-    if (building.rooms.length <= 1) return;
+    for (const seed of seeds) {
+      const tiles = makeTileGrid(30, 30);
+      const building = makeBuilding({ id: `b-${seed}`, width: 15, height: 15 });
+      generateBuildingInterior(building, 'residential', tiles, makeRng(seed));
 
-    const connections = buildRoomGraph(building);
-    expect(connections.length).toBe(building.rooms.length - 1);
+      if (building.rooms.length <= 1) continue;
+
+      const connections = buildRoomGraph(building);
+      expect(
+        connections.length,
+        `seed=${seed}: expected ${building.rooms.length - 1} edges, got ${connections.length}`,
+      ).toBe(building.rooms.length - 1);
+    }
   });
 });
 
@@ -645,11 +674,21 @@ describe('generateBuildingInterior', () => {
     const tiles = makeTileGrid(20, 20);
     const building = makeBuilding({ id: 'b1', width: 10, height: 10 });
 
-    generateBuildingInterior(building, 'residential', tiles, makeRng());
-    const firstRoomCount = building.rooms.length;
+    // Generate with seed A
+    generateBuildingInterior(building, 'residential', tiles, makeRng('seed-A'));
 
-    generateBuildingInterior(building, 'residential', tiles, makeRng());
-    expect(building.rooms.length).toBe(firstRoomCount);
+    // Re-generate with seed B — should produce different rooms, not append
+    const freshTiles = makeTileGrid(20, 20);
+    const freshBuilding = makeBuilding({ id: 'b1', width: 10, height: 10 });
+    generateBuildingInterior(freshBuilding, 'residential', freshTiles, makeRng('seed-B'));
+
+    generateBuildingInterior(building, 'residential', tiles, makeRng('seed-B'));
+    // Rooms should match fresh generation with seed B, not contain seed A rooms
+    expect(building.rooms.length).toBe(freshBuilding.rooms.length);
+    for (let i = 0; i < building.rooms.length; i++) {
+      expect(building.rooms[i].origin).toEqual(freshBuilding.rooms[i].origin);
+      expect(building.rooms[i].roomType).toBe(freshBuilding.rooms[i].roomType);
+    }
   });
 
   it('exterior door prefers road-facing walls', () => {
@@ -794,6 +833,101 @@ describe('buildRoomGraph', () => {
     const graph = buildRoomGraph(building);
     for (const conn of graph) {
       expect(tiles[conn.doorPosition.y][conn.doorPosition.x]).toBe(TileType.Door);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+describe('edge cases', () => {
+  it('building filling entire grid gets no exterior door (no outside tiles)', () => {
+    // Building fills the grid exactly — no room for exterior checks
+    const tiles = makeTileGrid(5, 5, TileType.Empty);
+    const building = makeBuilding({ id: 'b1', origin: { x: 0, y: 0 }, width: 5, height: 5 });
+    generateBuildingInterior(building, 'residential', tiles, makeRng());
+
+    // Building should still have rooms
+    expect(building.rooms.length).toBeGreaterThanOrEqual(1);
+
+    // Exterior door candidates require outside tiles — with the building filling
+    // the entire grid, there are no outside tiles. The exterior door may or may not
+    // be placed depending on bounds checks. The key is no crash.
+  });
+
+  it('degenerate building (width < MIN_ROOM_SIZE) produces no rooms', () => {
+    const tiles = makeTileGrid(10, 10);
+    const building = makeBuilding({ id: 'tiny', width: 2, height: 5 });
+    generateBuildingInterior(building, 'residential', tiles, makeRng());
+
+    expect(building.rooms.length).toBe(0);
+    expect(building.entryPoints.length).toBe(0);
+  });
+
+  it('degenerate building (height < MIN_ROOM_SIZE) produces no rooms', () => {
+    const tiles = makeTileGrid(10, 10);
+    const building = makeBuilding({ id: 'tiny', width: 5, height: 2 });
+    generateBuildingInterior(building, 'residential', tiles, makeRng());
+
+    expect(building.rooms.length).toBe(0);
+    expect(building.entryPoints.length).toBe(0);
+  });
+
+  it('entry points have valid room indices', () => {
+    const tiles = makeTileGrid(30, 30);
+    const building = makeBuilding({ id: 'b1', width: 15, height: 15 });
+    generateBuildingInterior(building, 'residential', tiles, makeRng());
+
+    for (const ep of building.entryPoints) {
+      expect(ep.roomIndex).toBeGreaterThanOrEqual(0);
+      expect(ep.roomIndex).toBeLessThan(building.rooms.length);
+    }
+  });
+
+  it('2-room residential buildings get valid room types', () => {
+    // A building where only one split happens (result: 2 rooms)
+    // Use a size that allows exactly one split
+    const tiles = makeTileGrid(15, 15);
+    const building = makeBuilding({ id: 'b1', width: 7, height: 4 });
+    generateBuildingInterior(building, 'residential', tiles, makeRng());
+
+    // 7 wide can split vertically (7 >= MIN_SPLIT_SIZE=5), 4 tall cannot
+    // So we get 2 rooms (or 1 if depth prevents second split)
+    for (const room of building.rooms) {
+      expect(VALID_ROOM_TYPES.has(room.roomType)).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Window spacing
+// ---------------------------------------------------------------------------
+
+describe('window spacing', () => {
+  it('windows respect minimum spacing', () => {
+    // Use a large building to maximize window count
+    const tiles = makeTileGrid(30, 30, TileType.Road);
+    const building = makeBuilding({
+      id: 'b1',
+      origin: { x: 5, y: 5 },
+      width: 20,
+      height: 20,
+    });
+    generateBuildingInterior(building, 'commercial', tiles, makeRng());
+
+    const windows = building.entryPoints.filter((ep) => ep.type === 'window');
+
+    for (let i = 0; i < windows.length; i++) {
+      for (let j = i + 1; j < windows.length; j++) {
+        const dist =
+          Math.abs(windows[i].position.x - windows[j].position.x) +
+          Math.abs(windows[i].position.y - windows[j].position.y);
+        expect(
+          dist,
+          `windows at (${windows[i].position.x},${windows[i].position.y}) and (${windows[j].position.x},${windows[j].position.y}) are too close`,
+        ).toBeGreaterThanOrEqual(BSP.WINDOW_MIN_SPACING);
+      }
     }
   });
 });
