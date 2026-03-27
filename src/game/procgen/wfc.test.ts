@@ -20,6 +20,7 @@ import {
   MACRO_TILE_COUNT,
   MacroTileType,
   isRoadTile,
+  TILE_WEIGHT_LOG_WEIGHTS,
   isBuildingTile,
   TILE_WEIGHTS,
   type Socket,
@@ -380,14 +381,10 @@ describe('solveMacroGrid', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateMacroGrid', () => {
-  it('accepts a valid WFC-solved grid', () => {
-    const grid = solveMacroGrid(8, 8, makeRng('validate-pass'));
-    expect(grid).not.toBeNull();
-    // Validation may or may not pass depending on road distribution
-    // but the solver should produce generally valid grids
-    const result = validateMacroGrid(grid!, 8, 8);
-    // We just verify it returns a boolean
-    expect(typeof result).toBe('boolean');
+  it('accepts a known-valid fallback grid', () => {
+    // The fallback grid is deterministic and always has connected roads
+    const grid = generateFallbackGrid(16, 16, makeRng('validate-ok'));
+    expect(validateMacroGrid(grid, 16, 16)).toBe(true);
   });
 
   it('rejects a grid with zero roads', () => {
@@ -405,15 +402,29 @@ describe('validateMacroGrid', () => {
   });
 
   it('rejects disconnected road networks', () => {
-    // Create a grid with two isolated road tiles
-    const grid: MacroTileType[][] = Array.from({ length: 4 }, () =>
-      new Array<MacroTileType>(4).fill(MacroTileType.BUILDING_RESIDENTIAL),
+    // 10×10 grid with enough roads and buildings but two isolated road clusters
+    const grid: MacroTileType[][] = Array.from({ length: 10 }, () =>
+      new Array<MacroTileType>(10).fill(MacroTileType.BUILDING_RESIDENTIAL),
     );
-    // Place two road tiles that aren't connected
-    grid[0][0] = MacroTileType.ROAD_EW;
-    grid[3][3] = MacroTileType.ROAD_EW;
-    // Needs enough road and building fractions
-    expect(validateMacroGrid(grid, 4, 4)).toBe(false);
+    // Cluster 1: connected NS road in column 2, rows 1-4
+    grid[1][2] = MacroTileType.ROAD_NS;
+    grid[2][2] = MacroTileType.ROAD_NS;
+    grid[3][2] = MacroTileType.ROAD_NS;
+    grid[4][2] = MacroTileType.ROAD_NS;
+    // Cluster 2: connected NS road in column 7, rows 6-9
+    grid[6][7] = MacroTileType.ROAD_NS;
+    grid[7][7] = MacroTileType.ROAD_NS;
+    grid[8][7] = MacroTileType.ROAD_NS;
+    grid[9][7] = MacroTileType.ROAD_NS;
+    // 8 roads / 100 = 0.08 — still below MIN_ROAD_FRACTION (0.12)
+    // Add more roads to cluster 1 to meet the threshold
+    grid[1][3] = MacroTileType.ROAD_EW;
+    grid[1][4] = MacroTileType.ROAD_EW;
+    grid[6][8] = MacroTileType.ROAD_EW;
+    grid[6][9] = MacroTileType.ROAD_EW;
+    // Now 12 roads / 100 = 0.12, meeting the threshold
+    // But the two clusters are not connected → should reject
+    expect(validateMacroGrid(grid, 10, 10)).toBe(false);
   });
 });
 
@@ -470,6 +481,24 @@ describe('generateFallbackGrid', () => {
     const g1 = generateFallbackGrid(8, 8, makeRng('det'));
     const g2 = generateFallbackGrid(8, 8, makeRng('det'));
     expect(g1).toEqual(g2);
+  });
+
+  it('passes validateMacroGrid', () => {
+    const grid = generateFallbackGrid(16, 16, makeRng('fallback-valid'));
+    expect(validateMacroGrid(grid, 16, 16)).toBe(true);
+  });
+
+  it('has correct road tile types at grid positions', () => {
+    const grid = generateFallbackGrid(16, 16, makeRng('fallback-structure'));
+    // With FALLBACK_ROAD_INTERVAL=4, roads at y%4===1 and x%4===1
+    // Intersection: both road row and road col
+    expect(grid[1][1]).toBe(MacroTileType.ROAD_CROSS);
+    // Road row, non-road col
+    expect(grid[1][2]).toBe(MacroTileType.ROAD_EW);
+    // Road col, non-road row
+    expect(grid[2][1]).toBe(MacroTileType.ROAD_NS);
+    // Non-road cell is a building
+    expect(isBuildingTile(grid[2][2])).toBe(true);
   });
 });
 
@@ -623,6 +652,18 @@ describe('extractBuildings', () => {
     ];
     const { buildings } = extractBuildings(macroGrid, 2, 1);
     expect(buildings.length).toBe(0);
+  });
+
+  it('same-class buildings separated by road stay separate', () => {
+    const macroGrid: MacroTileType[][] = [
+      [
+        MacroTileType.BUILDING_RESIDENTIAL,
+        MacroTileType.ROAD_NS,
+        MacroTileType.BUILDING_RESIDENTIAL,
+      ],
+    ];
+    const { buildings } = extractBuildings(macroGrid, 3, 1);
+    expect(buildings.length).toBe(2);
   });
 });
 
@@ -799,5 +840,27 @@ describe('edge cases', () => {
 
   it('TILE_WEIGHTS has correct length', () => {
     expect(TILE_WEIGHTS.length).toBe(MACRO_TILE_COUNT);
+  });
+
+  it('rejects grid smaller than 2×2', () => {
+    expect(() => generateCityLayout('tiny', { width: 1, height: 4 })).toThrow(
+      /at least 2×2/,
+    );
+    expect(() => generateCityLayout('tiny', { width: 4, height: 0 })).toThrow(
+      /at least 2×2/,
+    );
+  });
+
+  it('rejects grid larger than 128×128', () => {
+    expect(() =>
+      generateCityLayout('huge', { width: 200, height: 200 }),
+    ).toThrow(/exceeds maximum/);
+  });
+
+  it('TILE_WEIGHT_LOG_WEIGHTS matches formula', () => {
+    for (let i = 0; i < MACRO_TILE_COUNT; i++) {
+      const expected = TILE_WEIGHTS[i] * Math.log(TILE_WEIGHTS[i]);
+      expect(TILE_WEIGHT_LOG_WEIGHTS[i]).toBeCloseTo(expected);
+    }
   });
 });

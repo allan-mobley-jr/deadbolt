@@ -120,21 +120,43 @@ const R = TileType.Road;
 const S = TileType.Sidewalk;
 const E = TileType.Empty;
 
+const PATTERN_SIZE = 8;
+const VALID_CHARS = new Set(['R', 'S', '.']);
+
 /**
  * Parse a compact string template into an 8×8 tile pattern.
- * Characters: R = Road, S = Sidewalk, . = Empty
+ * Characters: R = Road, S = Sidewalk, . = Empty.
+ * Throws on invalid characters or wrong dimensions.
  */
 function parsePattern(template: string): TileType[][] {
-  return template
+  const rows = template
     .trim()
     .split('\n')
-    .map((row) =>
-      [...row.trim()].map((ch) => {
+    .map((row, rowIdx) =>
+      [...row.trim()].map((ch, colIdx) => {
+        if (!VALID_CHARS.has(ch)) {
+          throw new Error(
+            `parsePattern: invalid character '${ch}' at row ${rowIdx}, col ${colIdx}`,
+          );
+        }
         if (ch === 'R') return R;
         if (ch === 'S') return S;
         return E;
       }),
     );
+  if (rows.length !== PATTERN_SIZE) {
+    throw new Error(
+      `parsePattern: expected ${PATTERN_SIZE} rows, got ${rows.length}`,
+    );
+  }
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].length !== PATTERN_SIZE) {
+      throw new Error(
+        `parsePattern: row ${i} has ${rows[i].length} columns, expected ${PATTERN_SIZE}`,
+      );
+    }
+  }
+  return rows;
 }
 
 /**

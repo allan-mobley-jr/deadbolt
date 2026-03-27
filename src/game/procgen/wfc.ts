@@ -262,12 +262,8 @@ function weightedCollapse(possibleMask: number, rng: PRNG): number {
     if (roll <= 0) return t;
   }
 
-  // Floating-point fallback: return last possible tile
-  let last = -1;
-  for (const t of iterBits(possibleMask)) {
-    last = t;
-  }
-  return last;
+  // Floating-point rounding fallback: return highest set bit
+  return 31 - Math.clz32(possibleMask);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,7 +432,7 @@ export function validateMacroGrid(
   if (roadCount / total < WFC.MIN_ROAD_FRACTION) return false;
   if (buildingCount / total < WFC.MIN_BUILDING_FRACTION) return false;
 
-  // Check road connectivity via BFS through road-connected edges
+  // Check road connectivity via DFS through road-connected edges
   if (roadCount === 0) return false;
 
   const visited = new Uint8Array(total);
@@ -537,6 +533,15 @@ export function expandMacroGrid(
   macroWidth: number,
   macroHeight: number,
 ): TileType[][] {
+  if (
+    macroGrid.length !== macroHeight ||
+    (macroGrid.length > 0 && macroGrid[0].length !== macroWidth)
+  ) {
+    throw new Error(
+      `expandMacroGrid: grid dimensions (${macroGrid.length}×${macroGrid[0]?.length}) ` +
+        `do not match declared size (${macroHeight}×${macroWidth})`,
+    );
+  }
   const size = WFC.MACRO_TILE_SIZE;
   const tileW = macroWidth * size;
   const tileH = macroHeight * size;
@@ -697,6 +702,17 @@ export function generateCityLayout(
 ): CityGenerationResult {
   const width = options?.width ?? WFC.GRID_WIDTH;
   const height = options?.height ?? WFC.GRID_HEIGHT;
+
+  if (width < 2 || height < 2) {
+    throw new Error(
+      `generateCityLayout: grid must be at least 2×2, got ${width}×${height}`,
+    );
+  }
+  if (width > 128 || height > 128) {
+    throw new Error(
+      `generateCityLayout: grid exceeds maximum 128×128, got ${width}×${height}`,
+    );
+  }
 
   // Try WFC with derived seeds per attempt
   for (let attempt = 0; attempt < WFC.MAX_RETRIES; attempt++) {
