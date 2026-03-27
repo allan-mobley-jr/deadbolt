@@ -67,11 +67,16 @@ export function countNearbyLoot(
 
 /** Count non-loot objects that provide cover (furniture, containers). */
 function countCoverObjects(building: Building): number {
-  return building.objects.filter(
-    (o) =>
-      o.category === ObjectCategory.Furniture ||
-      o.category === ObjectCategory.Container,
-  ).length;
+  let count = 0;
+  for (const obj of building.objects) {
+    if (
+      obj.category === ObjectCategory.Furniture ||
+      obj.category === ObjectCategory.Container
+    ) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /** Compute the building-size fitness score (0-1). */

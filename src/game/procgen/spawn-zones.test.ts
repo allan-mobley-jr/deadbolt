@@ -9,12 +9,22 @@ import {
   generateSpawnZones,
 } from './spawn-zones';
 import { TileType } from '@/types/procgen';
-import type { Building, CityLayout, TileCoord } from '@/types/procgen';
+import type { Building, CityLayout, EntryPoint, TileCoord } from '@/types/procgen';
 import { SPAWN_ZONE } from './constants';
 
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
+
+function makeEntryPoint(x: number, y: number): EntryPoint {
+  return {
+    position: { x, y },
+    type: 'door',
+    facingDirection: 'north',
+    roomIndex: 0,
+    barricaded: false,
+  };
+}
 
 function makeBuilding(overrides: Partial<Building> & { id: string }): Building {
   return {
@@ -189,15 +199,7 @@ describe('generateFarBuildingSpawnZones', () => {
     const farBuilding = makeBuilding({
       id: 'far',
       origin: { x: 0, y: 0 },
-      entryPoints: [
-        {
-          position: { x: 3, y: 0 },
-          type: 'door',
-          facingDirection: 'north',
-          roomIndex: 0,
-          barricaded: false,
-        },
-      ],
+      entryPoints: [makeEntryPoint(3, 0)],
     });
 
     const city = makeRoadCity(80, [farBuilding]);
@@ -219,15 +221,7 @@ describe('generateFarBuildingSpawnZones', () => {
     const safehouse = makeBuilding({
       id: 'safehouse',
       origin: { x: 0, y: 0 },
-      entryPoints: [
-        {
-          position: { x: 3, y: 0 },
-          type: 'door',
-          facingDirection: 'north',
-          roomIndex: 0,
-          barricaded: false,
-        },
-      ],
+      entryPoints: [makeEntryPoint(3, 0)],
     });
 
     const city = makeRoadCity(80, [safehouse]);
@@ -247,15 +241,7 @@ describe('generateFarBuildingSpawnZones', () => {
     const nearBuilding = makeBuilding({
       id: 'near',
       origin: { x: 22, y: 22 }, // center at (25, 25) — same as safehouse
-      entryPoints: [
-        {
-          position: { x: 25, y: 22 },
-          type: 'door',
-          facingDirection: 'north',
-          roomIndex: 0,
-          barricaded: false,
-        },
-      ],
+      entryPoints: [makeEntryPoint(25, 22)],
     });
 
     const city = makeRoadCity(80, [nearBuilding]);
@@ -275,15 +261,7 @@ describe('generateFarBuildingSpawnZones', () => {
       makeBuilding({
         id: `far-${i}`,
         origin: { x: i * 2, y: 0 },
-        entryPoints: [
-          {
-            position: { x: i * 2 + 3, y: 0 },
-            type: 'door' as const,
-            facingDirection: 'north' as const,
-            roomIndex: 0,
-            barricaded: false,
-          },
-        ],
+        entryPoints: [makeEntryPoint(i * 2 + 3, 0)],
       }),
     );
 
@@ -314,15 +292,7 @@ describe('generateSpawnZones', () => {
     const farBuilding = makeBuilding({
       id: 'far',
       origin: { x: 0, y: 0 },
-      entryPoints: [
-        {
-          position: { x: 3, y: 0 },
-          type: 'door',
-          facingDirection: 'north',
-          roomIndex: 0,
-          barricaded: false,
-        },
-      ],
+      entryPoints: [makeEntryPoint(3, 0)],
     });
 
     const city = makeRoadCity(80, [farBuilding]);
@@ -341,28 +311,12 @@ describe('generateSpawnZones', () => {
       makeBuilding({
         id: 'far1',
         origin: { x: 0, y: 0 },
-        entryPoints: [
-          {
-            position: { x: 3, y: 0 },
-            type: 'door',
-            facingDirection: 'north',
-            roomIndex: 0,
-            barricaded: false,
-          },
-        ],
+        entryPoints: [makeEntryPoint(3, 0)],
       }),
       makeBuilding({
         id: 'far2',
         origin: { x: 0, y: 10 },
-        entryPoints: [
-          {
-            position: { x: 3, y: 10 },
-            type: 'door',
-            facingDirection: 'north',
-            roomIndex: 0,
-            barricaded: false,
-          },
-        ],
+        entryPoints: [makeEntryPoint(3, 10)],
       }),
     ];
 

@@ -92,6 +92,8 @@ export function applyObjectBlocking(
 // PathfindingGrid class
 // ---------------------------------------------------------------------------
 
+const NO_PATH: PathResult = { path: [], found: false, length: 0 };
+
 export class PathfindingGrid {
   private grid: PF.Grid;
   private readonly finder: PF.AStarFinder;
@@ -159,19 +161,12 @@ export class PathfindingGrid {
    * mutates grid node state during traversal.
    */
   findPath(start: TileCoord, end: TileCoord): PathResult {
-    if (!this.isInBounds(start.x, start.y) || !this.isInBounds(end.x, end.y)) {
-      return { path: [], found: false, length: 0 };
-    }
-    if (!this.grid.isWalkableAt(start.x, start.y) || !this.grid.isWalkableAt(end.x, end.y)) {
-      return { path: [], found: false, length: 0 };
-    }
+    if (!this.canPathBetween(start, end)) return NO_PATH;
 
     const cloned = this.grid.clone();
     const rawPath = this.finder.findPath(start.x, start.y, end.x, end.y, cloned);
 
-    if (rawPath.length === 0) {
-      return { path: [], found: false, length: 0 };
-    }
+    if (rawPath.length === 0) return NO_PATH;
 
     const path: TileCoord[] = rawPath.map(([x, y]) => ({ x, y }));
     return { path, found: true, length: path.length };
@@ -184,19 +179,12 @@ export class PathfindingGrid {
    * mutates node state) and one for smooth-path line-of-sight checks.
    */
   findSmoothedPath(start: TileCoord, end: TileCoord): PathResult {
-    if (!this.isInBounds(start.x, start.y) || !this.isInBounds(end.x, end.y)) {
-      return { path: [], found: false, length: 0 };
-    }
-    if (!this.grid.isWalkableAt(start.x, start.y) || !this.grid.isWalkableAt(end.x, end.y)) {
-      return { path: [], found: false, length: 0 };
-    }
+    if (!this.canPathBetween(start, end)) return NO_PATH;
 
     const searchClone = this.grid.clone();
     const rawPath = this.finder.findPath(start.x, start.y, end.x, end.y, searchClone);
 
-    if (rawPath.length === 0) {
-      return { path: [], found: false, length: 0 };
-    }
+    if (rawPath.length === 0) return NO_PATH;
 
     // Fresh clone for smoothing — the search clone has mutated node state.
     const smoothClone = this.grid.clone();
@@ -226,6 +214,16 @@ export class PathfindingGrid {
       matrix.push(row);
     }
     return matrix;
+  }
+
+  /** Check whether both endpoints are in-bounds and walkable. */
+  private canPathBetween(start: TileCoord, end: TileCoord): boolean {
+    return (
+      this.isInBounds(start.x, start.y) &&
+      this.isInBounds(end.x, end.y) &&
+      this.grid.isWalkableAt(start.x, start.y) &&
+      this.grid.isWalkableAt(end.x, end.y)
+    );
   }
 
   /** Check if coordinates are within the grid bounds. */
