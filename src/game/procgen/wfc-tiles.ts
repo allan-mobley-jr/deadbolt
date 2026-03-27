@@ -71,8 +71,8 @@ export interface Sockets {
  */
 export function socketsCompatible(a: Socket, b: Socket): boolean {
   if (a === 'R') return b === 'R';
-  if (a === 'O') return b === 'S' || b === 'O';
-  /* a === 'S' */ return b === 'S' || b === 'O';
+  // S and O are interchangeable — both accept S or O but never R
+  return b !== 'R';
 }
 
 // ---------------------------------------------------------------------------

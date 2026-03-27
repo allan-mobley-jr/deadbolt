@@ -28,8 +28,8 @@ import {
   EXPANSION_PATTERNS,
   isBuildingTile,
   isRoadTile,
-  MacroTileType,
   MACRO_TILE_COUNT,
+  MacroTileType,
   socketsCompatible,
   TILE_DEFINITIONS,
   TILE_WEIGHT_LOG_WEIGHTS,
@@ -436,16 +436,15 @@ export function validateMacroGrid(
   if (roadCount === 0) return false;
 
   const visited = new Uint8Array(total);
-  const queue: number[] = [firstRoadIdx];
+  const stack: number[] = [firstRoadIdx];
   visited[firstRoadIdx] = 1;
   let visitedCount = 1;
 
-  while (queue.length > 0) {
-    const idx = queue.pop()!;
+  while (stack.length > 0) {
+    const idx = stack.pop()!;
     const cx = idx % width;
     const cy = (idx - cx) / width;
-    const tile = macroGrid[cy][cx];
-    const tileDef = TILE_DEFINITIONS[tile];
+    const tileDef = TILE_DEFINITIONS[macroGrid[cy][cx]];
 
     for (let d = 0; d < 4; d++) {
       const nx = cx + DX[d];
@@ -465,7 +464,7 @@ export function validateMacroGrid(
       if (mySocket === 'R' && theirSocket === 'R') {
         visited[nIdx] = 1;
         visitedCount++;
-        queue.push(nIdx);
+        stack.push(nIdx);
       }
     }
   }

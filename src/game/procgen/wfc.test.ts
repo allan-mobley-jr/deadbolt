@@ -14,25 +14,25 @@ import type { PRNG } from 'seedrandom';
 import { TileType } from '@/types/procgen';
 import { WFC } from './constants';
 import {
-  socketsCompatible,
-  TILE_DEFINITIONS,
   EXPANSION_PATTERNS,
+  isBuildingTile,
+  isRoadTile,
   MACRO_TILE_COUNT,
   MacroTileType,
-  isRoadTile,
+  socketsCompatible,
+  TILE_DEFINITIONS,
   TILE_WEIGHT_LOG_WEIGHTS,
-  isBuildingTile,
   TILE_WEIGHTS,
   type Socket,
 } from './wfc-tiles';
 import {
-  solveMacroGrid,
+  debugMacroGrid,
   expandMacroGrid,
   extractBuildings,
-  generateFallbackGrid,
-  validateMacroGrid,
   generateCityLayout,
-  debugMacroGrid,
+  generateFallbackGrid,
+  solveMacroGrid,
+  validateMacroGrid,
 } from './wfc';
 
 // ---------------------------------------------------------------------------
