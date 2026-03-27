@@ -37,9 +37,9 @@ export default function Home() {
         </CardContent>
 
         <CardFooter className="justify-center">
-          <Link href="/play">
-            <Button size="lg">Play</Button>
-          </Link>
+          <Button size="lg" render={<Link href="/play" />}>
+            Play
+          </Button>
         </CardFooter>
       </Card>
     </main>
