@@ -50,12 +50,7 @@ export function generateTileset(scene: Phaser.Scene): void {
     const props = TILE_PROPERTIES[key as TileType];
     const frameIndex = key - 1; // TileType 1 → frame 0, etc.
 
-    // Convert 24-bit hex to CSS colour string.
-    const r = (props.color >> 16) & 0xff;
-    const g = (props.color >> 8) & 0xff;
-    const b = props.color & 0xff;
-
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillStyle = `#${props.color.toString(16).padStart(6, '0')}`;
     ctx.fillRect(frameIndex * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
   }
 

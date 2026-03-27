@@ -21,10 +21,21 @@ export type PhysicsSyncSystem = () => void;
  * it back to the ECS position component.
  */
 export function createPhysicsSyncSystem(queries: Queries): PhysicsSyncSystem {
+  // Track entities that have already been warned about to avoid log spam.
+  const warned = new WeakSet<object>();
+
   return () => {
     for (const entity of queries.spriteEntities) {
       const gameObject = entity.sprite.gameObject as Phaser.Physics.Matter.Image;
-      if (!gameObject?.body) continue;
+      if (!gameObject?.body) {
+        if (!warned.has(entity)) {
+          console.warn(
+            '[PhysicsSync] Entity has sprite but no physics body — position will not update.',
+          );
+          warned.add(entity);
+        }
+        continue;
+      }
 
       entity.position.x = gameObject.x;
       entity.position.y = gameObject.y;

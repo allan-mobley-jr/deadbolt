@@ -8,7 +8,7 @@
  * NO React imports allowed — this is pure TypeScript.
  */
 
-import { World, Query, type With } from 'miniplex';
+import { World, type Query, type With } from 'miniplex';
 import type { Entity } from './components';
 
 // ---------------------------------------------------------------------------

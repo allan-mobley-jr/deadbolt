@@ -39,6 +39,9 @@ const FIXED_DT_MS = 1000 / 60;
 /** Maximum physics steps per frame to prevent spiral of death. */
 const MAX_STEPS_PER_FRAME = 5;
 
+/** Scale factor to convert ECS velocity (px/s) to Matter.js velocity (px/tick). */
+const VELOCITY_SCALE = FIXED_DT_MS / 1000;
+
 // ---------------------------------------------------------------------------
 // Scene
 // ---------------------------------------------------------------------------
@@ -56,6 +59,9 @@ export class GameScene extends Phaser.Scene {
   // Player body reference for velocity application
   private playerBody!: Phaser.Physics.Matter.Image;
 
+  // Set to true if create() fails so update() bails out safely.
+  private initFailed = false;
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -65,33 +71,41 @@ export class GameScene extends Phaser.Scene {
   // -----------------------------------------------------------------------
 
   create(): void {
-    // ECS world
-    this.ctx = createWorld();
+    try {
+      // ECS world
+      this.ctx = createWorld();
 
-    // Tilemap
-    this.buildTilemap();
+      // Tilemap
+      this.buildTilemap();
 
-    // Player
-    this.spawnPlayer();
+      // Player
+      this.spawnPlayer();
 
-    // Input
-    this.inputManager = createInputManager(this);
+      // Input
+      this.inputManager = createInputManager(this);
 
-    // Systems
-    this.movementSystem = createMovementSystem(
-      this.ctx.queries,
-      this.inputManager.state,
-    );
-    this.physicsSyncSystem = createPhysicsSyncSystem(this.ctx.queries);
+      // Systems
+      this.movementSystem = createMovementSystem(
+        this.ctx.queries,
+        this.inputManager.state,
+      );
+      this.physicsSyncSystem = createPhysicsSyncSystem(this.ctx.queries);
 
-    // Disable gravity (top-down game)
-    this.matter.world.setGravity(0, 0);
+      // Disable gravity (top-down game)
+      this.matter.world.setGravity(0, 0);
 
-    // Clean up on scene shutdown
-    this.events.on('shutdown', this.onShutdown, this);
+      // Clean up on scene shutdown
+      this.events.on('shutdown', this.onShutdown, this);
+    } catch (err) {
+      this.initFailed = true;
+      console.error('[GameScene] Initialization failed:', err);
+      this.game.events.emit('scene-error', err);
+    }
   }
 
   update(_time: number, delta: number): void {
+    if (this.initFailed) return;
+
     // Poll input
     this.inputManager.update();
 
@@ -149,11 +163,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Mark colliding tile types.
-    const collidingIndices = Object.values(TileType)
-      .filter(
-        (v): v is TileType =>
-          typeof v === 'number' && TILE_PROPERTIES[v as TileType]?.collides,
-      );
+    const collidingIndices = Object.values(TileType).filter(
+      (v): v is TileType =>
+        typeof v === 'number' && TILE_PROPERTIES[v as TileType].collides,
+    );
 
     map.setCollision(collidingIndices);
 
@@ -182,6 +195,13 @@ export class GameScene extends Phaser.Scene {
       frictionAir: 0,
       label: 'player',
     });
+
+    if (!this.playerBody?.body) {
+      throw new Error(
+        `Failed to create player physics body at (${px}, ${py}). ` +
+        `Texture "${PLAYER_TEXTURE_KEY}" may be missing.`,
+      );
+    }
 
     // Prevent rotation (top-down character).
     this.playerBody.setFixedRotation();
@@ -212,16 +232,15 @@ export class GameScene extends Phaser.Scene {
     for (const entity of this.ctx.queries.players) {
       if (!this.playerBody?.body) continue;
 
-      const scale = FIXED_DT_MS / 1000;
       this.playerBody.setVelocity(
-        entity.velocity.x * scale,
-        entity.velocity.y * scale,
+        entity.velocity.x * VELOCITY_SCALE,
+        entity.velocity.y * VELOCITY_SCALE,
       );
     }
   }
 
   private onShutdown(): void {
-    this.inputManager.destroy();
+    this.inputManager?.destroy();
     this.events.off('shutdown', this.onShutdown, this);
   }
 }

@@ -23,14 +23,19 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Generate the tileset strip texture.
-    generateTileset(this);
+    try {
+      // Generate the tileset strip texture.
+      generateTileset(this);
 
-    // Generate the player texture (a coloured square).
-    this.createPlayerTexture();
+      // Generate the player texture (a coloured square).
+      this.createPlayerTexture();
 
-    // All assets ready — start the game.
-    this.scene.start('GameScene');
+      // All assets ready — start the game.
+      this.scene.start('GameScene');
+    } catch (err) {
+      console.error('[BootScene] Failed to generate assets:', err);
+      this.game.events.emit('boot-error', err);
+    }
   }
 
   private createPlayerTexture(): void {
