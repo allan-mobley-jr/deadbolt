@@ -6,7 +6,7 @@ Top-down zombie survival base builder that runs entirely in the browser. Physics
 
 - **Framework**: Next.js 16 (App Router, Turbopack, React 19)
 - **Language**: TypeScript (strict mode)
-- **Styling**: Tailwind CSS v4, shadcn/ui (new-york style, Radix UI base)
+- **Styling**: Tailwind CSS v4, shadcn/ui (base-nova style, Base UI primitives)
 - **Fonts**: Geist Sans (UI text) + Geist Mono (stats, timers, IDs, damage numbers) via next/font
 - **Game Engine**: Phaser 3 with Matter.js physics (integrated plugin)
 - **ECS**: Miniplex 2 (entity-component system for all game state)
