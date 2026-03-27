@@ -89,4 +89,6 @@ Phaser accesses `window`, `document`, and canvas APIs — it is strictly client-
 
 - `pnpm lint` — ESLint
 - `pnpm exec tsc --noEmit` — Type checking
+- `pnpm test:run` — Vitest (single run, for CI)
+- `pnpm test` — Vitest (watch mode, for development)
 - `pnpm build` — Production build (must pass with zero errors)
