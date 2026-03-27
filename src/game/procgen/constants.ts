@@ -74,6 +74,27 @@ export const SPAWN_ZONE = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Object placement
+// ---------------------------------------------------------------------------
+
+export const OBJECT_PLACEMENT = {
+  /** Tiles of clearance to leave around door tiles. */
+  DOOR_CLEARANCE: 1,
+  /** Reference room area (tiles) for density scaling. baseDensity targets this size. */
+  REFERENCE_ROOM_AREA: 25,
+  /** Maximum object density (objects per tile). Prevents cluttering. */
+  MAX_DENSITY: 0.15,
+  /** Minimum room area (tiles) to receive any objects. */
+  MIN_ROOM_AREA: 4,
+  /** Distance (tiles) from safehouse at which loot value scaling begins. */
+  LOOT_DISTANCE_NEAR: 15,
+  /** Distance (tiles) from safehouse at which maximum loot value is allowed. */
+  LOOT_DISTANCE_FAR: 60,
+  /** Max loot value allowed in buildings within LOOT_DISTANCE_NEAR of safehouse. */
+  NEAR_MAX_LOOT_VALUE: 3,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Pathfinding
 // ---------------------------------------------------------------------------
 
