@@ -11,9 +11,8 @@ import {
 } from './bsp';
 import type { BSPLeaf } from './bsp';
 import { BSP } from './constants';
-import type { Building, CityLayout } from '@/types/procgen';
+import type { Building, BuildingClass, CityLayout } from '@/types/procgen';
 import { TileType } from '@/types/procgen';
-import type { BuildingClass } from '@/types/procgen';
 
 // ---------------------------------------------------------------------------
 // Test helpers

@@ -268,8 +268,14 @@ export function assignRoomTypes(
 }
 
 // ---------------------------------------------------------------------------
-// Tile grid writing
+// Tile grid helpers
 // ---------------------------------------------------------------------------
+
+/** Return [height, width] of a 2D tile grid. */
+function gridSize(tiles: TileType[][]): [number, number] {
+  const h = tiles.length;
+  return [h, h > 0 ? tiles[0].length : 0];
+}
 
 /**
  * Fill the building footprint with walls, then carve floor interiors.
@@ -279,8 +285,7 @@ function writeBuildingTiles(
   rooms: Room[],
   tiles: TileType[][],
 ): void {
-  const gridH = tiles.length;
-  const gridW = gridH > 0 ? tiles[0].length : 0;
+  const [gridH, gridW] = gridSize(tiles);
 
   // Fill entire building footprint with walls
   for (let y = building.origin.y; y < building.origin.y + building.height; y++) {
@@ -345,8 +350,7 @@ function placeInteriorDoors(
   placeInteriorDoors(node.left, rooms, tiles, entryPoints, rng);
   placeInteriorDoors(node.right, rooms, tiles, entryPoints, rng);
 
-  const gridH = tiles.length;
-  const gridW = gridH > 0 ? tiles[0].length : 0;
+  const [gridH, gridW] = gridSize(tiles);
   const candidates: TileCoord[] = [];
 
   if (node.splitHorizontal) {
@@ -385,53 +389,165 @@ function placeInteriorDoors(
   const door = candidates[Math.floor(rng() * candidates.length)];
   tiles[door.y][door.x] = TileType.Door;
 
-  // Create entry points for both adjacent rooms
-  if (node.splitHorizontal) {
-    const topIdx = findRoomAtInterior(rooms, door.x, door.y - 1);
-    const bottomIdx = findRoomAtInterior(rooms, door.x, door.y + 1);
+  // Create entry points for both adjacent rooms.
+  // Each side is checked: the room lookup uses the tile one step into the
+  // interior, and the facing direction points toward that room.
+  const sides: Array<{ dx: number; dy: number; facing: Direction }> =
+    node.splitHorizontal
+      ? [
+          { dx: 0, dy: -1, facing: 'south' },
+          { dx: 0, dy: 1, facing: 'north' },
+        ]
+      : [
+          { dx: -1, dy: 0, facing: 'east' },
+          { dx: 1, dy: 0, facing: 'west' },
+        ];
 
-    if (topIdx >= 0) {
+  for (const { dx, dy, facing } of sides) {
+    const roomIdx = findRoomAtInterior(rooms, door.x + dx, door.y + dy);
+    if (roomIdx >= 0) {
       entryPoints.push({
         position: { x: door.x, y: door.y },
         type: 'door',
-        facingDirection: 'south',
-        roomIndex: topIdx,
-        barricaded: false,
-      });
-    }
-    if (bottomIdx >= 0) {
-      entryPoints.push({
-        position: { x: door.x, y: door.y },
-        type: 'door',
-        facingDirection: 'north',
-        roomIndex: bottomIdx,
-        barricaded: false,
-      });
-    }
-  } else {
-    const leftIdx = findRoomAtInterior(rooms, door.x - 1, door.y);
-    const rightIdx = findRoomAtInterior(rooms, door.x + 1, door.y);
-
-    if (leftIdx >= 0) {
-      entryPoints.push({
-        position: { x: door.x, y: door.y },
-        type: 'door',
-        facingDirection: 'east',
-        roomIndex: leftIdx,
-        barricaded: false,
-      });
-    }
-    if (rightIdx >= 0) {
-      entryPoints.push({
-        position: { x: door.x, y: door.y },
-        type: 'door',
-        facingDirection: 'west',
-        roomIndex: rightIdx,
+        facingDirection: facing,
+        roomIndex: roomIdx,
         barricaded: false,
       });
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Exterior wall scanning
+// ---------------------------------------------------------------------------
+
+/** A candidate tile on a building's exterior wall. */
+interface WallCandidate {
+  pos: TileCoord;
+  dir: Direction;
+  interiorX: number;
+  interiorY: number;
+  outsideTile: TileType;
+}
+
+/**
+ * Scan all four exterior walls of a building and return candidate tiles.
+ *
+ * For each non-corner wall tile, the callback receives the wall position,
+ * direction, interior neighbor, and outside tile type. A tile is included
+ * only when both the inside and outside neighbors are within grid bounds
+ * and the inside neighbor is floor.
+ *
+ * An optional `wallFilter` rejects tiles where the wall tile itself is not
+ * the expected type (used by window placement to skip doors).
+ */
+function collectWallCandidates(
+  building: Building,
+  tiles: TileType[][],
+  wallFilter?: TileType,
+): WallCandidate[] {
+  const bx = building.origin.x;
+  const by = building.origin.y;
+  const bw = building.width;
+  const bh = building.height;
+  const [gridH, gridW] = gridSize(tiles);
+
+  const candidates: WallCandidate[] = [];
+
+  // Each wall is described by: direction, wall coordinate, inside offset,
+  // outside offset, and a range of tiles to iterate (horizontal or vertical).
+  const walls: Array<{
+    dir: Direction;
+    horizontal: boolean;
+    wallCoord: number;
+    insideOffset: number;
+    outsideOffset: number;
+    rangeStart: number;
+    rangeEnd: number;
+  }> = [
+    {
+      dir: 'north',
+      horizontal: true,
+      wallCoord: by,
+      insideOffset: 1,
+      outsideOffset: -1,
+      rangeStart: bx + 1,
+      rangeEnd: bx + bw - 1,
+    },
+    {
+      dir: 'south',
+      horizontal: true,
+      wallCoord: by + bh - 1,
+      insideOffset: -1,
+      outsideOffset: 1,
+      rangeStart: bx + 1,
+      rangeEnd: bx + bw - 1,
+    },
+    {
+      dir: 'west',
+      horizontal: false,
+      wallCoord: bx,
+      insideOffset: 1,
+      outsideOffset: -1,
+      rangeStart: by + 1,
+      rangeEnd: by + bh - 1,
+    },
+    {
+      dir: 'east',
+      horizontal: false,
+      wallCoord: bx + bw - 1,
+      insideOffset: -1,
+      outsideOffset: 1,
+      rangeStart: by + 1,
+      rangeEnd: by + bh - 1,
+    },
+  ];
+
+  for (const wall of walls) {
+    for (let i = wall.rangeStart; i < wall.rangeEnd; i++) {
+      // Compute positions depending on whether the wall is horizontal or vertical
+      const wallX = wall.horizontal ? i : wall.wallCoord;
+      const wallY = wall.horizontal ? wall.wallCoord : i;
+      const insideX = wall.horizontal ? i : wall.wallCoord + wall.insideOffset;
+      const insideY = wall.horizontal ? wall.wallCoord + wall.insideOffset : i;
+      const outsideX = wall.horizontal ? i : wall.wallCoord + wall.outsideOffset;
+      const outsideY = wall.horizontal ? wall.wallCoord + wall.outsideOffset : i;
+
+      // Bounds check
+      if (
+        insideX < 0 || insideX >= gridW ||
+        insideY < 0 || insideY >= gridH ||
+        outsideX < 0 || outsideX >= gridW ||
+        outsideY < 0 || outsideY >= gridH ||
+        wallX < 0 || wallX >= gridW ||
+        wallY < 0 || wallY >= gridH
+      ) {
+        continue;
+      }
+
+      // Optional wall-tile filter (e.g. windows require the tile to still be Wall)
+      if (wallFilter !== undefined && tiles[wallY][wallX] !== wallFilter) {
+        continue;
+      }
+
+      if (tiles[insideY][insideX] !== TileType.Floor) continue;
+
+      candidates.push({
+        pos: { x: wallX, y: wallY },
+        dir: wall.dir,
+        interiorX: insideX,
+        interiorY: insideY,
+        outsideTile: tiles[outsideY][outsideX],
+      });
+    }
+  }
+
+  return candidates;
+}
+
+// ---------------------------------------------------------------------------
+// Exterior entrance placement
+// ---------------------------------------------------------------------------
 
 /**
  * Place an exterior entrance door on the building perimeter.
@@ -446,101 +562,14 @@ function placeExteriorEntrance(
   entryPoints: EntryPoint[],
   rng: PRNG,
 ): void {
-  const bx = building.origin.x;
-  const by = building.origin.y;
-  const bw = building.width;
-  const bh = building.height;
-  const gridH = tiles.length;
-  const gridW = gridH > 0 ? tiles[0].length : 0;
-
-  interface DoorCandidate {
-    pos: TileCoord;
-    dir: Direction;
-    interiorX: number;
-    interiorY: number;
-    facesRoad: boolean;
-  }
-
-  const candidates: DoorCandidate[] = [];
-
-  // North wall
-  for (let x = bx + 1; x < bx + bw - 1; x++) {
-    const outsideY = by - 1;
-    const insideY = by + 1;
-    if (outsideY >= 0 && insideY < gridH && x >= 0 && x < gridW) {
-      const outside = tiles[outsideY][x];
-      if (tiles[insideY][x] === TileType.Floor) {
-        candidates.push({
-          pos: { x, y: by },
-          dir: 'north',
-          interiorX: x,
-          interiorY: insideY,
-          facesRoad: outside === TileType.Road || outside === TileType.Sidewalk,
-        });
-      }
-    }
-  }
-
-  // South wall
-  for (let x = bx + 1; x < bx + bw - 1; x++) {
-    const wy = by + bh - 1;
-    const outsideY = wy + 1;
-    const insideY = wy - 1;
-    if (outsideY < gridH && insideY >= 0 && x >= 0 && x < gridW) {
-      const outside = tiles[outsideY][x];
-      if (tiles[insideY][x] === TileType.Floor) {
-        candidates.push({
-          pos: { x, y: wy },
-          dir: 'south',
-          interiorX: x,
-          interiorY: insideY,
-          facesRoad: outside === TileType.Road || outside === TileType.Sidewalk,
-        });
-      }
-    }
-  }
-
-  // West wall
-  for (let y = by + 1; y < by + bh - 1; y++) {
-    const outsideX = bx - 1;
-    const insideX = bx + 1;
-    if (outsideX >= 0 && insideX < gridW && y >= 0 && y < gridH) {
-      const outside = tiles[y][outsideX];
-      if (tiles[y][insideX] === TileType.Floor) {
-        candidates.push({
-          pos: { x: bx, y },
-          dir: 'west',
-          interiorX: insideX,
-          interiorY: y,
-          facesRoad: outside === TileType.Road || outside === TileType.Sidewalk,
-        });
-      }
-    }
-  }
-
-  // East wall
-  for (let y = by + 1; y < by + bh - 1; y++) {
-    const wx = bx + bw - 1;
-    const outsideX = wx + 1;
-    const insideX = wx - 1;
-    if (outsideX < gridW && insideX >= 0 && y >= 0 && y < gridH) {
-      const outside = tiles[y][outsideX];
-      if (tiles[y][insideX] === TileType.Floor) {
-        candidates.push({
-          pos: { x: wx, y },
-          dir: 'east',
-          interiorX: insideX,
-          interiorY: y,
-          facesRoad: outside === TileType.Road || outside === TileType.Sidewalk,
-        });
-      }
-    }
-  }
-
+  const candidates = collectWallCandidates(building, tiles);
   if (candidates.length === 0) return;
 
+  const facesRoad = (t: TileType) =>
+    t === TileType.Road || t === TileType.Sidewalk;
+
   // Prefer road-facing candidates
-  const roadFacing = candidates.filter((c) => c.facesRoad);
+  const roadFacing = candidates.filter((c) => facesRoad(c.outsideTile));
   const pool = roadFacing.length > 0 ? roadFacing : candidates;
 
   const chosen = pool[Math.floor(rng() * pool.length)];
@@ -551,7 +580,7 @@ function placeExteriorEntrance(
     chosen.interiorX,
     chosen.interiorY,
   );
-  if (roomIdx < 0) return; // Interior tile not inside any room — skip
+  if (roomIdx < 0) return;
   entryPoints.push({
     position: chosen.pos,
     type: 'door',
@@ -565,6 +594,15 @@ function placeExteriorEntrance(
 // Window placement
 // ---------------------------------------------------------------------------
 
+/** Check whether a tile type is eligible for a window to face. */
+function isWindowEligible(tileType: TileType): boolean {
+  return (
+    tileType === TileType.Road ||
+    tileType === TileType.Sidewalk ||
+    tileType === TileType.Empty
+  );
+}
+
 /**
  * Place windows on exterior walls facing roads or open spaces.
  *
@@ -577,108 +615,17 @@ function placeWindows(
   entryPoints: EntryPoint[],
   rng: PRNG,
 ): void {
-  const bx = building.origin.x;
-  const by = building.origin.y;
-  const bw = building.width;
-  const bh = building.height;
-  const gridH = tiles.length;
-  const gridW = gridH > 0 ? tiles[0].length : 0;
+  // Only consider tiles that are still Wall (doors already placed)
+  const candidates = collectWallCandidates(building, tiles, TileType.Wall)
+    .filter((c) => isWindowEligible(c.outsideTile));
 
-  interface WindowCandidate {
-    pos: TileCoord;
-    dir: Direction;
-    interiorX: number;
-    interiorY: number;
-  }
-
-  const candidates: WindowCandidate[] = [];
-
-  const isWindowEligible = (tileType: TileType) =>
-    tileType === TileType.Road ||
-    tileType === TileType.Sidewalk ||
-    tileType === TileType.Empty;
-
-  // North wall
-  for (let x = bx + 1; x < bx + bw - 1; x++) {
-    if (by - 1 < 0 || by + 1 >= gridH || x < 0 || x >= gridW) continue;
-    if (tiles[by][x] !== TileType.Wall) continue;
-    if (
-      tiles[by + 1][x] === TileType.Floor &&
-      isWindowEligible(tiles[by - 1][x])
-    ) {
-      candidates.push({
-        pos: { x, y: by },
-        dir: 'north',
-        interiorX: x,
-        interiorY: by + 1,
-      });
-    }
-  }
-
-  // South wall
-  {
-    const wy = by + bh - 1;
-    for (let x = bx + 1; x < bx + bw - 1; x++) {
-      if (wy + 1 >= gridH || wy - 1 < 0 || x < 0 || x >= gridW) continue;
-      if (tiles[wy][x] !== TileType.Wall) continue;
-      if (
-        tiles[wy - 1][x] === TileType.Floor &&
-        isWindowEligible(tiles[wy + 1][x])
-      ) {
-        candidates.push({
-          pos: { x, y: wy },
-          dir: 'south',
-          interiorX: x,
-          interiorY: wy - 1,
-        });
-      }
-    }
-  }
-
-  // West wall
-  for (let y = by + 1; y < by + bh - 1; y++) {
-    if (bx - 1 < 0 || bx + 1 >= gridW || y < 0 || y >= gridH) continue;
-    if (tiles[y][bx] !== TileType.Wall) continue;
-    if (
-      tiles[y][bx + 1] === TileType.Floor &&
-      isWindowEligible(tiles[y][bx - 1])
-    ) {
-      candidates.push({
-        pos: { x: bx, y },
-        dir: 'west',
-        interiorX: bx + 1,
-        interiorY: y,
-      });
-    }
-  }
-
-  // East wall
-  {
-    const wx = bx + bw - 1;
-    for (let y = by + 1; y < by + bh - 1; y++) {
-      if (wx + 1 >= gridW || wx - 1 < 0 || y < 0 || y >= gridH) continue;
-      if (tiles[y][wx] !== TileType.Wall) continue;
-      if (
-        tiles[y][wx - 1] === TileType.Floor &&
-        isWindowEligible(tiles[y][wx + 1])
-      ) {
-        candidates.push({
-          pos: { x: wx, y },
-          dir: 'east',
-          interiorX: wx - 1,
-          interiorY: y,
-        });
-      }
-    }
-  }
-
-  // Collect positions of existing doors for adjacency filtering
-  const doorPositions = new Set<string>();
+  // Build a set of positions adjacent to existing doors
+  const doorNeighbors = new Set<string>();
   for (const ep of entryPoints) {
     if (ep.type === 'door') {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
-          doorPositions.add(
+          doorNeighbors.add(
             `${ep.position.x + dx},${ep.position.y + dy}`,
           );
         }
@@ -687,23 +634,19 @@ function placeWindows(
   }
 
   const filtered = candidates.filter(
-    (c) => !doorPositions.has(`${c.pos.x},${c.pos.y}`),
+    (c) => !doorNeighbors.has(`${c.pos.x},${c.pos.y}`),
   );
 
   // Place windows with spacing enforcement
   const windowPositions: TileCoord[] = [];
 
   for (const candidate of filtered) {
-    let tooClose = false;
-    for (const existing of windowPositions) {
+    const tooClose = windowPositions.some((existing) => {
       const dist =
         Math.abs(candidate.pos.x - existing.x) +
         Math.abs(candidate.pos.y - existing.y);
-      if (dist < BSP.WINDOW_MIN_SPACING) {
-        tooClose = true;
-        break;
-      }
-    }
+      return dist < BSP.WINDOW_MIN_SPACING;
+    });
     if (tooClose) continue;
 
     if (rng() < BSP.WINDOW_PROBABILITY) {
@@ -715,7 +658,7 @@ function placeWindows(
         candidate.interiorX,
         candidate.interiorY,
       );
-      if (roomIdx < 0) continue; // Interior tile not inside any room — skip
+      if (roomIdx < 0) continue;
       entryPoints.push({
         position: candidate.pos,
         type: 'window',
