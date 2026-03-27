@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -20,7 +20,8 @@ describe('directory skeleton', () => {
   ]
 
   it.each(requiredDirs)('%s directory exists', (dir) => {
-    expect(existsSync(resolve(root, dir))).toBe(true)
+    const fullPath = resolve(root, dir)
+    expect(existsSync(fullPath), `Expected directory: ${fullPath}`).toBe(true)
   })
 })
 
@@ -37,9 +38,8 @@ describe('shadcn/ui components', () => {
   it.each(requiredComponents)(
     'src/components/ui/%s.tsx exists',
     (component) => {
-      expect(
-        existsSync(resolve(root, `src/components/ui/${component}.tsx`))
-      ).toBe(true)
+      const fullPath = resolve(root, `src/components/ui/${component}.tsx`)
+      expect(existsSync(fullPath), `Expected file: ${fullPath}`).toBe(true)
     }
   )
 })
@@ -55,9 +55,12 @@ describe('project files', () => {
 })
 
 describe('game dependencies', () => {
-  const pkg = JSON.parse(
-    readFileSync(resolve(root, 'package.json'), 'utf-8')
-  )
+  let pkg: { dependencies: Record<string, string> }
+
+  beforeAll(() => {
+    const raw = readFileSync(resolve(root, 'package.json'), 'utf-8')
+    pkg = JSON.parse(raw)
+  })
 
   const requiredDeps = [
     'phaser',
@@ -74,4 +77,25 @@ describe('game dependencies', () => {
       expect(pkg.dependencies).toHaveProperty(dep)
     }
   )
+})
+
+describe('layout conventions', () => {
+  let layoutSource: string
+
+  beforeAll(() => {
+    layoutSource = readFileSync(
+      resolve(root, 'src/app/layout.tsx'),
+      'utf-8'
+    )
+  })
+
+  it('dark mode is the default on html element', () => {
+    expect(layoutSource).toContain('dark')
+    expect(layoutSource).toMatch(/<html[\s\S]*className=/)
+  })
+
+  it('TooltipProvider wraps the app at layout root', () => {
+    expect(layoutSource).toContain('TooltipProvider')
+    expect(layoutSource).toMatch(/<TooltipProvider>/)
+  })
 })
