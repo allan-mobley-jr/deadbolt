@@ -22,28 +22,26 @@ const SEED_CHARS =
  * Generate a random alphanumeric seed string for a new run.
  *
  * This is the **one** place where non-deterministic randomness is acceptable.
- * It uses `crypto.getRandomValues` when available for better entropy,
- * falling back to `Math.random` otherwise.
+ * Uses `crypto.getRandomValues` for entropy (available in all modern browsers
+ * and Node.js 16+).
  *
  * @param length - Character count of the generated seed (default 12).
  * @returns A random alphanumeric string suitable as an RNG seed.
+ * @throws {RangeError} If `length` is not a positive integer.
  */
 export function generateSeed(length: number = SEED_LENGTH): string {
-  const chars: string[] = [];
+  if (!Number.isInteger(length) || length < 1) {
+    throw new RangeError(
+      `generateSeed: length must be a positive integer, got ${length}`,
+    );
+  }
 
-  if (
-    typeof globalThis.crypto !== 'undefined' &&
-    typeof globalThis.crypto.getRandomValues === 'function'
-  ) {
-    const bytes = new Uint8Array(length);
-    globalThis.crypto.getRandomValues(bytes);
-    for (let i = 0; i < length; i++) {
-      chars.push(SEED_CHARS[bytes[i] % SEED_CHARS.length]);
-    }
-  } else {
-    for (let i = 0; i < length; i++) {
-      chars.push(SEED_CHARS[Math.floor(Math.random() * SEED_CHARS.length)]);
-    }
+  const bytes = new Uint8Array(length);
+  globalThis.crypto.getRandomValues(bytes);
+
+  const chars: string[] = [];
+  for (let i = 0; i < length; i++) {
+    chars.push(SEED_CHARS[bytes[i] % SEED_CHARS.length]);
   }
 
   return chars.join('');
@@ -121,17 +119,29 @@ export class RNG {
   /**
    * Return an integer in **[min, max]** (inclusive on both ends).
    *
-   * @throws {RangeError} If `min > max`.
+   * @throws {RangeError} If `min` or `max` is not a finite number, or `min > max`.
    */
   int(min: number, max: number): number {
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      throw new RangeError(
+        `RNG.int: min and max must be finite numbers, got min=${min}, max=${max}`,
+      );
+    }
     if (min > max) {
       throw new RangeError(
         `RNG.int: min (${min}) must be <= max (${max})`,
       );
     }
-    // seedrandom returns [0, 1) so (max - min + 1) * prng() is in [0, range).
-    // Math.floor then gives [0, range - 1], shifted to [min, max].
-    return min + Math.floor(this._prng() * (max - min + 1));
+    // Floor/ceil to handle callers who accidentally pass floats.
+    const lo = Math.ceil(min);
+    const hi = Math.floor(max);
+    if (lo > hi) {
+      // Range collapsed after rounding (e.g. int(1.5, 1.9) → ceil=2, floor=1).
+      return lo;
+    }
+    // seedrandom returns [0, 1) so (hi - lo + 1) * prng() is in [0, range).
+    // Math.floor then gives [0, range - 1], shifted to [lo, hi].
+    return lo + Math.floor(this._prng() * (hi - lo + 1));
   }
 
   /**
@@ -150,10 +160,10 @@ export class RNG {
    * Pick a random element weighted by the provided weights.
    *
    * Weights must be non-negative. At least one weight must be positive.
-   * The last item is returned as a floating-point safety net (same pattern
-   * used in the WFC weighted collapse).
+   * The last item absorbs floating-point rounding slack so the loop is
+   * guaranteed to return.
    *
-   * @throws {RangeError} If `items` is empty or all weights are &le; 0.
+   * @throws {RangeError} If `items` is empty, all weights are &le; 0, or any weight is negative.
    */
   weightedPick<T>(items: readonly WeightedItem<T>[]): T {
     if (items.length === 0) {
@@ -180,15 +190,20 @@ export class RNG {
 
     const roll = this._prng() * totalWeight;
     let cumulative = 0;
-    for (const item of items) {
-      cumulative += item.weight;
-      if (roll < cumulative) {
-        return item.value;
+    for (let i = 0; i < items.length; i++) {
+      cumulative += items[i].weight;
+      // The `i === items.length - 1` guard handles floating-point edge cases
+      // where roll === cumulative due to rounding. Without it the loop could
+      // exhaust without returning, which would indicate a real logic error.
+      if (roll < cumulative || i === items.length - 1) {
+        return items[i].value;
       }
     }
 
-    // Floating-point safety net — return the last item.
-    return items[items.length - 1].value;
+    // Unreachable — the loop always returns via the last-item guard above.
+    // If we somehow get here, there is a genuine logic error.
+    throw new Error('RNG.weightedPick: unreachable — weight accumulation error');
+
   }
 
   /**
@@ -218,8 +233,12 @@ export class RNG {
    * in one subsystem does not shift the sequence for another.
    *
    * @param namespace - A unique label for the subsystem (e.g. `"wfc"`, `"bsp"`, `"loot"`).
+   * @throws {RangeError} If `namespace` is empty.
    */
   derive(namespace: string): RNG {
+    if (namespace.length === 0) {
+      throw new RangeError('RNG.derive: namespace must not be empty');
+    }
     return new RNG(`${this._seed}-${namespace}`);
   }
 
@@ -229,6 +248,9 @@ export class RNG {
    * This exists for interop with code that already accepts `PRNG` (e.g. the
    * WFC solver). Calling `raw()()` advances the **same** internal state as
    * `float()` — they share one sequence.
+   *
+   * **Warning:** The returned reference becomes stale after {@link reset}.
+   * Do not cache it across reset boundaries.
    */
   raw(): PRNG {
     return this._prng;

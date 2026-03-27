@@ -28,6 +28,26 @@ describe('generateSeed', () => {
     // With 12-char alphanumeric seeds the collision probability is negligible.
     expect(seeds.size).toBeGreaterThan(1);
   });
+
+  it('throws RangeError on zero length', () => {
+    expect(() => generateSeed(0)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on negative length', () => {
+    expect(() => generateSeed(-1)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on NaN', () => {
+    expect(() => generateSeed(NaN)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on fractional length', () => {
+    expect(() => generateSeed(1.5)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on Infinity', () => {
+    expect(() => generateSeed(Infinity)).toThrow(RangeError);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -120,6 +140,28 @@ describe('RNG.int', () => {
   it('throws RangeError when min > max', () => {
     const rng = new RNG('error');
     expect(() => rng.int(10, 5)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on NaN', () => {
+    const rng = new RNG('nan');
+    expect(() => rng.int(NaN, 5)).toThrow(RangeError);
+    expect(() => rng.int(0, NaN)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on Infinity', () => {
+    const rng = new RNG('inf');
+    expect(() => rng.int(-Infinity, 5)).toThrow(RangeError);
+    expect(() => rng.int(0, Infinity)).toThrow(RangeError);
+  });
+
+  it('handles fractional bounds by rounding inward', () => {
+    const rng = new RNG('frac');
+    // int(1.2, 3.8) → ceil(1.2)=2, floor(3.8)=3 → range [2, 3]
+    for (let i = 0; i < 100; i++) {
+      const v = rng.int(1.2, 3.8);
+      expect(v).toBeGreaterThanOrEqual(2);
+      expect(v).toBeLessThanOrEqual(3);
+    }
   });
 
   it('is deterministic', () => {
@@ -227,6 +269,23 @@ describe('RNG.weightedPick', () => {
     expect(() => rng.weightedPick(items)).toThrow(RangeError);
   });
 
+  it('handles fractional weights correctly', () => {
+    const rng = new RNG('weighted-frac');
+    const items: WeightedItem<string>[] = [
+      { value: 'A', weight: 0.7 },
+      { value: 'B', weight: 0.3 },
+    ];
+    const counts = { A: 0, B: 0 };
+    const trials = 10_000;
+    for (let i = 0; i < trials; i++) {
+      counts[rng.weightedPick(items) as 'A' | 'B']++;
+    }
+    // Expected ratio A:B ≈ 7:3 (2.33). Allow generous tolerance.
+    const ratio = counts.A / counts.B;
+    expect(ratio).toBeGreaterThan(1.5);
+    expect(ratio).toBeLessThan(3.5);
+  });
+
   it('is deterministic', () => {
     const a = new RNG('weighted-det');
     const b = new RNG('weighted-det');
@@ -260,8 +319,8 @@ describe('RNG.shuffle', () => {
     const rng = new RNG('shuffle-elements');
     const input = [10, 20, 30, 40, 50];
     const shuffled = rng.shuffle(input);
-    expect(shuffled.sort((a, b) => a - b)).toEqual(
-      input.sort((a, b) => a - b),
+    expect([...shuffled].sort((a, b) => a - b)).toEqual(
+      [...input].sort((a, b) => a - b),
     );
   });
 
@@ -331,6 +390,11 @@ describe('RNG.derive', () => {
     const b = new RNG('root').derive('beta');
     const diffs = Array.from({ length: 10 }, () => a.float() !== b.float());
     expect(diffs.some(Boolean)).toBe(true);
+  });
+
+  it('throws RangeError on empty namespace', () => {
+    const rng = new RNG('parent');
+    expect(() => rng.derive('')).toThrow(RangeError);
   });
 
   it('derived RNG is independent from parent sequence', () => {
