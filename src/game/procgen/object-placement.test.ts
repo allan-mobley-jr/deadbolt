@@ -97,6 +97,12 @@ describe('computeMaxLootValue', () => {
     const expected = NEAR_MAX_LOOT_VALUE + (10 - NEAR_MAX_LOOT_VALUE) * 0.5;
     expect(result).toBeCloseTo(expected, 1);
   });
+
+  it('returns NEAR_MAX_LOOT_VALUE at exactly the near threshold', () => {
+    const distance = OBJECT_PLACEMENT.LOOT_DISTANCE_NEAR;
+    const result = computeMaxLootValue({ x: distance, y: 0 }, { x: 0, y: 0 });
+    expect(result).toBe(OBJECT_PLACEMENT.NEAR_MAX_LOOT_VALUE);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -159,14 +165,16 @@ describe('getPlaceableTiles', () => {
     expect(allKeys.has('3,3')).toBe(false);
   });
 
-  it('separates wall-adjacent from interior tiles', () => {
-    // 8x8 room: interior floor is 6x6. Perimeter of 6x6 = 20 wall-adjacent, 16 interior.
+  it('separates wall-adjacent from interior tiles with correct counts', () => {
+    // 8x8 room: interior floor is 6x6 = 36 tiles.
+    // Perimeter of 6x6 grid = 4*6 - 4 = 20 wall-adjacent.
+    // Interior = 4*4 = 16.
     const room = makeRoom({ origin: { x: 0, y: 0 }, width: 8, height: 8 });
     const { wallAdjacent, interior } = getPlaceableTiles(room, 0, [], new Set());
 
-    expect(wallAdjacent.length).toBeGreaterThan(0);
-    expect(interior.length).toBeGreaterThan(0);
-    expect(wallAdjacent.length + interior.length).toBe(36); // 6x6
+    expect(wallAdjacent.length).toBe(20);
+    expect(interior.length).toBe(16);
+    expect(wallAdjacent.length + interior.length).toBe(36);
   });
 
   it('returns no tiles for a room too small to have interior', () => {
@@ -444,13 +452,23 @@ describe('distance-based loot filtering', () => {
       entryPoints: [],
     });
 
-    // Place building very far from safehouse.
+    // Place building very far from safehouse so maxLootValue is uncapped.
     const farCenter: TileCoord = { x: 100, y: 100 };
-    placeObjectsInBuilding(building, farCenter, makeRng());
 
-    // At this distance, maxLootValue should be 10, allowing all objects.
-    // We just verify the building has objects placed.
-    expect(building.objects.length).toBeGreaterThan(0);
+    // Run with enough seeds to ensure high-value loot appears at least once.
+    let foundHighValue = false;
+    for (let i = 0; i < 10 && !foundHighValue; i++) {
+      building.objects = [];
+      room.objectIndices = [];
+      placeObjectsInBuilding(building, farCenter, makeRng(`far-seed-${i}`));
+      for (const obj of building.objects) {
+        const def = getObjectDef(obj.objectType);
+        if (def && def.lootValue > OBJECT_PLACEMENT.NEAR_MAX_LOOT_VALUE) {
+          foundHighValue = true;
+        }
+      }
+    }
+    expect(foundHighValue, 'distant garage should contain high-value loot').toBe(true);
   });
 });
 

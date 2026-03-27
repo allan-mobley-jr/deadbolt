@@ -63,25 +63,6 @@ function getRoomEntryTiles(
 }
 
 /**
- * Check whether a tile is adjacent to at least one wall tile in the room.
- *
- * A wall-adjacent tile is one where at least one of the four cardinal
- * neighbors is at the room boundary (i.e. would be a wall).
- */
-function isWallAdjacent(
-  x: number,
-  y: number,
-  room: Room,
-): boolean {
-  const left = room.origin.x;
-  const top = room.origin.y;
-  const right = left + room.width - 1;
-  const bottom = top + room.height - 1;
-
-  return x === left || x === right || y === top || y === bottom;
-}
-
-/**
  * Get all placeable tiles within a room, excluding door clearance zones
  * and already-occupied tiles.
  *
@@ -128,12 +109,21 @@ export function getPlaceableTiles(
   const endX = room.origin.x + room.width - 1;
   const endY = room.origin.y + room.height - 1;
 
+  // Pre-compute inner floor bounds for wall-adjacency checks.
+  const innerWidth = room.width - 2;
+  const innerHeight = room.height - 2;
+
   for (let y = startY; y < endY; y++) {
     for (let x = startX; x < endX; x++) {
       const key = `${x},${y}`;
       if (blockedKeys.has(key) || occupiedSet.has(key)) continue;
 
-      if (isWallAdjacent(x, y, { ...room, origin: { x: startX, y: startY }, width: room.width - 2, height: room.height - 2 })) {
+      if (
+        x === startX ||
+        x === startX + innerWidth - 1 ||
+        y === startY ||
+        y === startY + innerHeight - 1
+      ) {
         wallAdjacent.push({ x, y });
       } else {
         interior.push({ x, y });
@@ -207,15 +197,16 @@ export function placeObjectsInBuilding(
     const occupiedSet = new Set<string>();
 
     // Sort: furniture/containers first (prefer wall-adjacent), then loot/debris.
+    // Skip types with no definition — prevents crashes from data entry errors.
     const furnitureTypes: string[] = [];
     const otherTypes: string[] = [];
 
     for (const type of objectTypes) {
       const def = getObjectDef(type);
+      if (!def) continue;
       if (
-        def &&
-        (def.category === ObjectCategory.Furniture ||
-          def.category === ObjectCategory.Container)
+        def.category === ObjectCategory.Furniture ||
+        def.category === ObjectCategory.Container
       ) {
         furnitureTypes.push(type);
       } else {
@@ -241,7 +232,7 @@ export function placeObjectsInBuilding(
       if (!tile) break;
 
       occupiedSet.add(`${tile.x},${tile.y}`);
-      const def = getObjectDef(type)!;
+      const def = getObjectDef(type)!; // Safe: filtered above.
 
       const objIdx = building.objects.length;
       building.objects.push({
@@ -259,7 +250,7 @@ export function placeObjectsInBuilding(
       if (!tile) break;
 
       occupiedSet.add(`${tile.x},${tile.y}`);
-      const def = getObjectDef(type)!;
+      const def = getObjectDef(type)!; // Safe: filtered above.
 
       const objIdx = building.objects.length;
       building.objects.push({
