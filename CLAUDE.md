@@ -88,5 +88,5 @@ Phaser accesses `window`, `document`, and canvas APIs — it is strictly client-
 ## Quality
 
 - `pnpm lint` — ESLint
-- `pnpm tsc --noEmit` — Type checking
+- `pnpm exec tsc --noEmit` — Type checking
 - `pnpm build` — Production build (must pass with zero errors)
