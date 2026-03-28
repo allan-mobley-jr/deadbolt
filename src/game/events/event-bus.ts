@@ -113,9 +113,7 @@ export interface InteractionPromptEvent {
 }
 
 /** Emitted when no interactable object is in range. */
-export interface InteractionPromptClearEvent {
-  /* intentionally empty */
-}
+export type InteractionPromptClearEvent = Record<string, never>;
 
 /** Emitted when the player examines an object. */
 export interface ObjectExaminedEvent {

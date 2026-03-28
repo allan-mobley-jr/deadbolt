@@ -4,8 +4,6 @@ import {
   computeSpeedMultiplier,
   INTERACTION_RANGE,
   MIN_SPEED_MULTIPLIER,
-  DROP_OFFSET,
-  DRAG_FORCE,
 } from "./interaction-system";
 import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
@@ -46,7 +44,7 @@ function createMockContext(bus?: GameEventBus): SceneContext {
           remove: vi.fn(),
         },
         add: {
-          rectangle: vi.fn((_x: number, _y: number, _w: number, _h: number) => {
+          rectangle: vi.fn(() => {
             const body = createMockBody(Math.floor(Math.random() * 10000));
             bodyRegistry.register(body);
             return body;
