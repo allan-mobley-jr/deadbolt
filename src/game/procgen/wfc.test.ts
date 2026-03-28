@@ -374,6 +374,28 @@ describe('solveMacroGrid', () => {
     // At least 50% of seeds should succeed in a single attempt
     expect(successes).toBeGreaterThanOrEqual(seeds.length / 2);
   });
+
+  it('corner cells have no R sockets on both border-facing edges', () => {
+    const rng = makeRng('corner-constraints');
+    const grid = solveMacroGrid(8, 8, rng);
+    expect(grid).not.toBeNull();
+    // Top-left: no R on north or west
+    const tl = TILE_DEFINITIONS[grid![0][0]];
+    expect(tl.sockets.north).not.toBe('R');
+    expect(tl.sockets.west).not.toBe('R');
+    // Top-right: no R on north or east
+    const tr = TILE_DEFINITIONS[grid![0][7]];
+    expect(tr.sockets.north).not.toBe('R');
+    expect(tr.sockets.east).not.toBe('R');
+    // Bottom-left: no R on south or west
+    const bl = TILE_DEFINITIONS[grid![7][0]];
+    expect(bl.sockets.south).not.toBe('R');
+    expect(bl.sockets.west).not.toBe('R');
+    // Bottom-right: no R on south or east
+    const br = TILE_DEFINITIONS[grid![7][7]];
+    expect(br.sockets.south).not.toBe('R');
+    expect(br.sockets.east).not.toBe('R');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -500,6 +522,21 @@ describe('generateFallbackGrid', () => {
     // Non-road cell is a building
     expect(isBuildingTile(grid[2][2])).toBe(true);
   });
+
+  it('handles minimum viable 3×3 grid without crashing', () => {
+    const grid = generateFallbackGrid(3, 3, makeRng('min-3x3'));
+    expect(grid.length).toBe(3);
+    expect(grid[0].length).toBe(3);
+    // All border cells should be EMPTY_LOT
+    for (let x = 0; x < 3; x++) {
+      expect(grid[0][x]).toBe(MacroTileType.EMPTY_LOT);
+      expect(grid[2][x]).toBe(MacroTileType.EMPTY_LOT);
+    }
+    expect(grid[1][0]).toBe(MacroTileType.EMPTY_LOT);
+    expect(grid[1][2]).toBe(MacroTileType.EMPTY_LOT);
+    // Interior cell [1][1]: y%4===1 and x%4===1 → ROAD_CROSS
+    expect(grid[1][1]).toBe(MacroTileType.ROAD_CROSS);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -558,6 +595,23 @@ describe('expandMacroGrid', () => {
       expect(tiles[sz - 1][col]).toBe(TileType.Road);
       expect(tiles[sz][col]).toBe(TileType.Road);
     }
+  });
+
+  it('throws when row count mismatches declared macroHeight', () => {
+    const grid: MacroTileType[][] = [
+      [MacroTileType.ROAD_NS, MacroTileType.BUILDING_RESIDENTIAL],
+    ];
+    // Grid has 1 row but we declare 3 rows
+    expect(() => expandMacroGrid(grid, 2, 3)).toThrow(/do not match/);
+  });
+
+  it('throws when column count mismatches declared macroWidth', () => {
+    const grid: MacroTileType[][] = [
+      [MacroTileType.ROAD_NS],
+      [MacroTileType.PARK],
+    ];
+    // Grid has 1 column but we declare 3 columns
+    expect(() => expandMacroGrid(grid, 3, 2)).toThrow(/do not match/);
   });
 });
 
@@ -789,6 +843,113 @@ describe('generateCityLayout', () => {
         expect(validTypes.has(cell)).toBe(true);
       }
     }
+  });
+
+  it('output road tiles form a predominantly connected network', () => {
+    const result = generateCityLayout('connectivity-e2e', {
+      width: 8,
+      height: 8,
+    });
+    const tiles = result.layout.tiles;
+    const h = tiles.length;
+    const w = tiles[0].length;
+
+    // Collect all road tile positions
+    const roadPositions: [number, number][] = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (tiles[y][x] === TileType.Road) {
+          roadPositions.push([y, x]);
+        }
+      }
+    }
+    expect(roadPositions.length).toBeGreaterThan(0);
+
+    // Flood-fill from the first road cell
+    const visited = new Set<number>();
+    const stack: [number, number][] = [roadPositions[0]];
+    visited.add(roadPositions[0][0] * w + roadPositions[0][1]);
+
+    while (stack.length > 0) {
+      const [cy, cx] = stack.pop()!;
+      for (const [dy, dx] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        const ny = cy + dy;
+        const nx = cx + dx;
+        if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
+        const key = ny * w + nx;
+        if (visited.has(key)) continue;
+        if (tiles[ny][nx] === TileType.Road) {
+          visited.add(key);
+          stack.push([ny, nx]);
+        }
+      }
+    }
+
+    // The largest connected component should contain most road tiles.
+    // Parking lots expand to all Road but may form isolated islands,
+    // so we allow up to 30% disconnected tiles.
+    expect(visited.size / roadPositions.length).toBeGreaterThanOrEqual(0.7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Retry and fallback resilience
+// ---------------------------------------------------------------------------
+
+describe('retry and fallback resilience', () => {
+  it('generateCityLayout never throws for many seeds across grid sizes', () => {
+    const seeds = [
+      'retry-a', 'retry-b', 'retry-c', 'retry-d', 'retry-e',
+      'retry-f', 'retry-g', 'retry-h', 'retry-i', 'retry-j',
+    ];
+    const sizes = [3, 4, 6, 8];
+
+    for (const size of sizes) {
+      for (const seed of seeds) {
+        // Must not throw — fallback guarantees a result
+        const result = generateCityLayout(seed, {
+          width: size,
+          height: size,
+        });
+        expect(result.layout).toBeDefined();
+        expect(result.layout.tiles.length).toBe(size * WFC.MACRO_TILE_SIZE);
+        expect(result.layout.tiles[0].length).toBe(
+          size * WFC.MACRO_TILE_SIZE,
+        );
+      }
+    }
+  });
+
+  it('fallback grid produces valid pipeline output with buildings', () => {
+    // Directly test the fallback path through expansion and extraction
+    const rng = makeRng('fallback-pipeline');
+    const fallbackGrid = generateFallbackGrid(8, 8, rng);
+    const tiles = expandMacroGrid(fallbackGrid, 8, 8);
+    const { buildings, buildingClasses } = extractBuildings(
+      fallbackGrid,
+      8,
+      8,
+    );
+
+    // Expansion produces correct dimensions
+    expect(tiles.length).toBe(8 * WFC.MACRO_TILE_SIZE);
+    expect(tiles[0].length).toBe(8 * WFC.MACRO_TILE_SIZE);
+
+    // Buildings extracted and classified
+    expect(buildings.length).toBeGreaterThan(0);
+    for (const building of buildings) {
+      expect(buildingClasses.has(building.id)).toBe(true);
+    }
+  });
+
+  it('small grid output is deterministic even when fallback may activate', () => {
+    // 3×3 grid is very constrained — the fallback is likely to activate.
+    // Regardless of which path (WFC or fallback), the output must be
+    // deterministic for the same seed.
+    const r1 = generateCityLayout('small-det', { width: 3, height: 3 });
+    const r2 = generateCityLayout('small-det', { width: 3, height: 3 });
+    expect(r1.layout.tiles).toEqual(r2.layout.tiles);
+    expect(r1.layout.buildings).toEqual(r2.layout.buildings);
   });
 });
 
