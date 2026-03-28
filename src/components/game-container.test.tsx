@@ -12,6 +12,16 @@ vi.mock("@/game/PhaserGame", () => ({
   getActiveBus: mockGetActiveBus,
 }));
 
+const { mockDisconnect, mockConnectBridge } = vi.hoisted(() => {
+  const mockDisconnect = vi.fn();
+  const mockConnectBridge = vi.fn().mockReturnValue({ disconnect: mockDisconnect });
+  return { mockDisconnect, mockConnectBridge };
+});
+
+vi.mock("@/lib/bridge", () => ({
+  connectBridge: mockConnectBridge,
+}));
+
 import GameContainer from "@/components/game-container";
 
 /** Minimal error boundary for testing the throw-on-render path. */
@@ -169,4 +179,39 @@ test("does not set error state if createGame fails after unmount", async () => {
   expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
 
   consoleSpy.mockRestore();
+});
+
+test("connects bridge when getActiveBus returns a bus", async () => {
+  vi.useFakeTimers();
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  render(<GameContainer />);
+
+  // Flush dynamic import microtask + first rAF poll
+  await vi.advanceTimersByTimeAsync(20);
+
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalledTimes(1);
+  });
+  expect(mockConnectBridge).toHaveBeenCalledWith(fakeBus);
+});
+
+test("disconnects bridge on unmount after successful connection", async () => {
+  vi.useFakeTimers();
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  const { unmount } = render(<GameContainer />);
+
+  // Flush dynamic import + poll so bridge connects
+  await vi.advanceTimersByTimeAsync(20);
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalled();
+  });
+
+  unmount();
+  expect(mockDisconnect).toHaveBeenCalledTimes(1);
 });

@@ -293,6 +293,51 @@ describe("bridge", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Resilience
+  // -------------------------------------------------------------------------
+
+  describe("resilience", () => {
+    it("a throwing store action does not block handlers for other events", () => {
+      const bridge = connectBridge(bus);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      // Monkey-patch updateClock to throw, simulating a store failure
+      const original = useGameStore.getState().updateClock;
+      useGameStore.setState({
+        updateClock: () => {
+          throw new Error("store action blew up");
+        },
+      });
+
+      // Emit clock-tick (hits the broken handler) via safeEmit —
+      // the bridge registered its handler via bus.on(), and the game
+      // scene calls safeEmit, which isolates each listener in try/catch.
+      safeEmit(bus, "clock-tick", {
+        phase: "day",
+        dayNumber: 1,
+        timeRemainingInPhase: 200,
+        phaseDuration: 300,
+        elapsedTotal: 100,
+      });
+
+      // Now emit player-health-changed — should still work
+      safeEmit(bus, "player-health-changed", {
+        current: 60,
+        max: 100,
+        delta: -40,
+      });
+
+      expect(usePlayerStore.getState().health).toBe(60);
+      expect(errorSpy).toHaveBeenCalled();
+
+      // Restore and clean up
+      useGameStore.setState({ updateClock: original });
+      errorSpy.mockRestore();
+      bridge.disconnect();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Round-trip integration
   // -------------------------------------------------------------------------
 

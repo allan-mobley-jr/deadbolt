@@ -238,4 +238,27 @@ describe("safeEmit", () => {
     expect(survivor).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
   });
+
+  it("does not auto-remove once() listeners (known limitation)", () => {
+    // safeEmit iterates bus.listeners() directly, bypassing eventemitter3's
+    // once-auto-removal. This test documents the known trade-off: once()
+    // listeners fire on every safeEmit call. All production callers use
+    // bus.on(), which is unaffected.
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.once("phase-change", handler);
+
+    const payload = {
+      phase: "dusk" as const,
+      previousPhase: "day" as const,
+      dayNumber: 1,
+      timeRemainingInPhase: 15,
+    };
+
+    safeEmit(bus, "phase-change", payload);
+    safeEmit(bus, "phase-change", payload);
+
+    // With bus.emit() this would be 1. With safeEmit it's 2.
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
 });

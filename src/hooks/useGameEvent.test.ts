@@ -52,6 +52,58 @@ describe("useGameEvent", () => {
     unmount();
   });
 
+  it("subscribes when bus transitions from null to a real instance", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ currentBus }: { currentBus: typeof bus | null }) =>
+        useGameEvent(currentBus, "player-health-changed", handler),
+      { initialProps: { currentBus: null as typeof bus | null } },
+    );
+
+    // No bus yet — handler should not fire
+    safeEmit(bus, "player-health-changed", { current: 90, max: 100, delta: -10 });
+    expect(handler).not.toHaveBeenCalled();
+
+    // Transition: null → real bus
+    rerender({ currentBus: bus });
+
+    safeEmit(bus, "player-health-changed", { current: 80, max: 100, delta: -10 });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ current: 80 }));
+  });
+
+  it("unsubscribes from old bus when bus instance changes", () => {
+    const bus1 = createGameEventBus();
+    const bus2 = createGameEventBus();
+    const handler = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ currentBus }: { currentBus: typeof bus1 }) =>
+        useGameEvent(currentBus, "zombie-killed", handler),
+      { initialProps: { currentBus: bus1 } },
+    );
+
+    // Verify subscription on bus1
+    safeEmit(bus1, "zombie-killed", { position: { x: 0, y: 0 }, totalKills: 1 });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    handler.mockClear();
+
+    // Swap to bus2
+    rerender({ currentBus: bus2 });
+
+    // bus1 should no longer fire handler
+    safeEmit(bus1, "zombie-killed", { position: { x: 10, y: 10 }, totalKills: 2 });
+    expect(handler).not.toHaveBeenCalled();
+
+    // bus2 should fire handler
+    safeEmit(bus2, "zombie-killed", { position: { x: 20, y: 20 }, totalKills: 3 });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ totalKills: 3 }));
+  });
+
   it("re-subscribes when event name changes", () => {
     const bus = createGameEventBus();
     const handler = vi.fn();
