@@ -1,7 +1,7 @@
 import type Phaser from "phaser";
 import type { BodyRegistry } from "./body-registry";
 import type { DayPhase } from "./day-night-constants";
-import { DAY_NIGHT } from "./day-night-constants";
+import { DAY_NIGHT, getPhaseDuration } from "./day-night-constants";
 import type { GameEventBus } from "@/game/events/event-bus";
 
 /**
@@ -70,8 +70,8 @@ export function createInputState(): InputState {
 
 /** Create a clock state initialised to the start of day 1. */
 export function createClockState(): ClockState {
-  const { INITIAL_PHASE, INITIAL_DAY, ESCALATION } = DAY_NIGHT;
-  const phaseDuration = ESCALATION[0].day; // Day 1 day phase
+  const { INITIAL_PHASE, INITIAL_DAY } = DAY_NIGHT;
+  const phaseDuration = getPhaseDuration(INITIAL_PHASE, INITIAL_DAY);
   return {
     phase: INITIAL_PHASE,
     dayNumber: INITIAL_DAY,
