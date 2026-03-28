@@ -18,3 +18,17 @@ export const physicsBodies = world.with("position", "physicsBody");
 
 /** Entities that can take damage. */
 export const damageableEntities = world.with("health");
+
+/** Entities the player can interact with. */
+export const interactableEntities = world.with(
+  "position",
+  "interactable",
+  "objectProperties",
+);
+
+/** Player entities with inventory (for carry weight checks). */
+export const inventoryEntities = world.with(
+  "playerControlled",
+  "position",
+  "inventory",
+);

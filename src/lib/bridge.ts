@@ -128,6 +128,30 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     });
   });
 
+  onBus("interaction-prompt", (e) => {
+    useUIStore.getState().setInteractionPrompt({
+      objectType: e.objectType,
+      displayName: e.displayName,
+      interactionType: e.interactionType,
+      immovable: e.immovable,
+      worldX: e.worldX,
+      worldY: e.worldY,
+    });
+  });
+
+  onBus("interaction-prompt-clear", () => {
+    useUIStore.getState().clearInteractionPrompt();
+  });
+
+  onBus("object-examined", (e) => {
+    useUIStore.getState().addNotification({
+      id: `examine-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      message: `${e.displayName}: Durability ${Math.round(e.properties.durability * 100)}%, ${e.properties.immovable ? "Immovable" : "Movable"}`,
+      type: "info",
+      timestamp: Date.now(),
+    });
+  });
+
   // --- Zustand → Game (command events from UI actions) ----------------------
   //
   // The bridge subscribes to store changes using subscribeWithSelector

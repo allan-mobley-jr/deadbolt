@@ -24,6 +24,16 @@ export interface Notification {
   timestamp: number;
 }
 
+/** Data for the interaction prompt overlay. */
+export interface InteractionPromptData {
+  objectType: string;
+  displayName: string;
+  interactionType: "pickup" | "open" | "push" | "search";
+  immovable: boolean;
+  worldX: number;
+  worldY: number;
+}
+
 // ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
@@ -35,6 +45,8 @@ export interface UIStoreState {
   overlays: string[];
   /** Queue of HUD notifications (newest last). */
   notifications: Notification[];
+  /** Active interaction prompt (null when no object is in range). */
+  interactionPrompt: InteractionPromptData | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +66,10 @@ export interface UIStoreActions {
   addNotification: (notification: Notification) => void;
   /** Dismiss a notification by ID. */
   dismissNotification: (id: string) => void;
+  /** Set the active interaction prompt. */
+  setInteractionPrompt: (prompt: InteractionPromptData) => void;
+  /** Clear the interaction prompt. */
+  clearInteractionPrompt: () => void;
   /** Reset to initial state between game sessions. */
   reset: () => void;
 }
@@ -66,6 +82,7 @@ const initialState: UIStoreState = {
   activeMenu: "none",
   overlays: [],
   notifications: [],
+  interactionPrompt: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -99,6 +116,10 @@ export const useUIStore = create<UIStoreState & UIStoreActions>()(
       set((state) => ({
         notifications: state.notifications.filter((n) => n.id !== id),
       })),
+
+    setInteractionPrompt: (prompt) => set({ interactionPrompt: prompt }),
+
+    clearInteractionPrompt: () => set({ interactionPrompt: null }),
 
     reset: () => set(initialState),
   })),

@@ -1,6 +1,7 @@
 import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
+import type { ObjectCategory } from "@/types/procgen";
 
 // ---------------------------------------------------------------------------
 // Archetype types — narrowed Entity types with required component sets.
@@ -15,6 +16,7 @@ export type PlayerEntity = With<
   | "playerControlled"
   | "physicsBody"
   | "health"
+  | "inventory"
 >;
 
 export type ZombieEntity = With<
@@ -30,6 +32,11 @@ export type BarricadeEntity = With<
 export type ProjectileEntity = With<
   Entity,
   "position" | "velocity" | "renderable" | "physicsBody"
+>;
+
+export type ObjectEntity = With<
+  Entity,
+  "position" | "renderable" | "physicsBody" | "interactable" | "objectProperties"
 >;
 
 // ---------------------------------------------------------------------------
@@ -50,6 +57,7 @@ export function createPlayerEntity(
     playerControlled: { active: true },
     physicsBody: { bodyId },
     health: { current: 100, max: 100 },
+    inventory: { items: [], carryWeight: 0, maxCarryWeight: 50 },
   });
 }
 
@@ -95,5 +103,40 @@ export function createProjectileEntity(
     velocity: { vx, vy },
     renderable: { spriteKey: "bullet" },
     physicsBody: { bodyId },
+  });
+}
+
+/** Spawn a world object entity from an object definition. */
+export function createObjectEntity(
+  x: number,
+  y: number,
+  bodyId: number,
+  objectType: string,
+  category: ObjectCategory,
+  immovable: boolean,
+  physics: {
+    durability: number;
+    flammability: number;
+    conductivity: number;
+  },
+  lootValue: number,
+): ObjectEntity {
+  return world.add({
+    position: { x, y },
+    renderable: { spriteKey: objectType },
+    physicsBody: { bodyId },
+    interactable: {
+      interactionType: immovable ? "push" : "pickup",
+      highlighted: false,
+    },
+    objectProperties: {
+      objectType,
+      category,
+      durability: physics.durability,
+      flammability: physics.flammability,
+      conductivity: physics.conductivity,
+      lootValue,
+      immovable,
+    },
   });
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
 import type { GameEventBus } from "@/game/events/event-bus";
-import { createClockState } from "./scene-context";
+import { createClockState, createInputState } from "./scene-context";
 import type { ClockState } from "./scene-context";
 import { createCommandSystem } from "./command-system";
 import type { SystemFn } from "./system-runner";
@@ -14,7 +14,7 @@ function createTestContext(bus: GameEventBus, clockState: ClockState) {
   return {
     scene: {} as never,
     bodyRegistry: {} as never,
-    inputState: { moveX: 0, moveY: 0, aimX: 0, aimY: 0 },
+    inputState: createInputState(),
     getAlpha: () => 0,
     clockState,
     eventBus: bus,

@@ -11,6 +11,7 @@ describe("useUIStore", () => {
     expect(state.activeMenu).toBe("none");
     expect(state.overlays).toEqual([]);
     expect(state.notifications).toEqual([]);
+    expect(state.interactionPrompt).toBeNull();
   });
 
   describe("menu actions", () => {
@@ -90,6 +91,68 @@ describe("useUIStore", () => {
     });
   });
 
+  describe("interaction prompt actions", () => {
+    it("stores prompt data via setInteractionPrompt", () => {
+      useUIStore.getState().setInteractionPrompt({
+        objectType: "gas_can",
+        displayName: "Gas Can",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 50,
+        worldY: 75,
+      });
+
+      const prompt = useUIStore.getState().interactionPrompt;
+      expect(prompt).toEqual({
+        objectType: "gas_can",
+        displayName: "Gas Can",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 50,
+        worldY: 75,
+      });
+    });
+
+    it("clears prompt via clearInteractionPrompt", () => {
+      useUIStore.getState().setInteractionPrompt({
+        objectType: "gas_can",
+        displayName: "Gas Can",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 50,
+        worldY: 75,
+      });
+
+      useUIStore.getState().clearInteractionPrompt();
+
+      expect(useUIStore.getState().interactionPrompt).toBeNull();
+    });
+
+    it("replaces previous prompt when setInteractionPrompt is called again", () => {
+      useUIStore.getState().setInteractionPrompt({
+        objectType: "gas_can",
+        displayName: "Gas Can",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 50,
+        worldY: 75,
+      });
+
+      useUIStore.getState().setInteractionPrompt({
+        objectType: "bookshelf",
+        displayName: "Bookshelf",
+        interactionType: "push",
+        immovable: true,
+        worldX: 200,
+        worldY: 300,
+      });
+
+      const prompt = useUIStore.getState().interactionPrompt;
+      expect(prompt?.objectType).toBe("bookshelf");
+      expect(prompt?.interactionType).toBe("push");
+    });
+  });
+
   describe("reset", () => {
     it("returns all fields to initial values", () => {
       useUIStore.getState().openMenu("death");
@@ -100,6 +163,14 @@ describe("useUIStore", () => {
         type: "info",
         timestamp: 1000,
       });
+      useUIStore.getState().setInteractionPrompt({
+        objectType: "gas_can",
+        displayName: "Gas Can",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 50,
+        worldY: 75,
+      });
 
       useUIStore.getState().reset();
 
@@ -107,6 +178,7 @@ describe("useUIStore", () => {
       expect(state.activeMenu).toBe("none");
       expect(state.overlays).toEqual([]);
       expect(state.notifications).toEqual([]);
+      expect(state.interactionPrompt).toBeNull();
     });
   });
 });

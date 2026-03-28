@@ -1,6 +1,7 @@
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
 import { playerEntities } from "@/game/ecs/queries";
+import { computeSpeedMultiplier } from "./interaction-system";
 
 // ---------------------------------------------------------------------------
 // Tuning constants (pixels/second unless noted)
@@ -48,9 +49,16 @@ export function createMovementSystem(ctx: SceneContext): SystemFn {
 
       const vel = entity.velocity;
 
+      // Apply carry weight speed penalty
+      const inv = entity.inventory;
+      const speedMult = inv
+        ? computeSpeedMultiplier(inv.carryWeight, inv.maxCarryWeight)
+        : 1;
+      const effectiveSpeed = PLAYER_SPEED * speedMult;
+
       // Target velocity based on input direction
-      const targetVx = moveX * PLAYER_SPEED;
-      const targetVy = moveY * PLAYER_SPEED;
+      const targetVx = moveX * effectiveSpeed;
+      const targetVy = moveY * effectiveSpeed;
 
       // Choose rate: accelerate when pressing, decelerate when releasing
       const rateX = moveX !== 0 ? ACCELERATION : DECELERATION;

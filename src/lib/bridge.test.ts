@@ -216,6 +216,79 @@ describe("bridge", () => {
 
       bridge.disconnect();
     });
+
+    it("sets interactionPrompt on interaction-prompt event", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "interaction-prompt", {
+        objectType: "wooden_plank",
+        displayName: "Wooden Plank",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 100,
+        worldY: 200,
+      });
+
+      const prompt = useUIStore.getState().interactionPrompt;
+      expect(prompt).toEqual({
+        objectType: "wooden_plank",
+        displayName: "Wooden Plank",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 100,
+        worldY: 200,
+      });
+
+      bridge.disconnect();
+    });
+
+    it("clears interactionPrompt on interaction-prompt-clear event", () => {
+      const bridge = connectBridge(bus);
+
+      // First set a prompt
+      safeEmit(bus, "interaction-prompt", {
+        objectType: "wooden_plank",
+        displayName: "Wooden Plank",
+        interactionType: "pickup",
+        immovable: false,
+        worldX: 100,
+        worldY: 200,
+      });
+      expect(useUIStore.getState().interactionPrompt).not.toBeNull();
+
+      // Clear it
+      safeEmit(bus, "interaction-prompt-clear", {});
+
+      expect(useUIStore.getState().interactionPrompt).toBeNull();
+
+      bridge.disconnect();
+    });
+
+    it("adds notification on object-examined event", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "object-examined", {
+        objectType: "bookshelf",
+        displayName: "Bookshelf",
+        category: "Furniture",
+        properties: {
+          durability: 0.5,
+          flammability: 0.9,
+          conductivity: 0,
+          lootValue: 1,
+          immovable: true,
+        },
+      });
+
+      const notifications = useUIStore.getState().notifications;
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].message).toContain("Bookshelf");
+      expect(notifications[0].message).toContain("50%");
+      expect(notifications[0].message).toContain("Immovable");
+      expect(notifications[0].type).toBe("info");
+
+      bridge.disconnect();
+    });
   });
 
   // -------------------------------------------------------------------------

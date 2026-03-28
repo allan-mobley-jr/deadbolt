@@ -3,6 +3,7 @@ import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
 import { playerEntities, renderableEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
+import { getObjectDef } from "@/game/procgen/object-defs";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -29,7 +30,22 @@ const AIM_LINE_LENGTH = 32;
 // ---------------------------------------------------------------------------
 
 function spriteColour(key: string): number {
-  return SPRITE_COLOURS[key] ?? FALLBACK_COLOUR;
+  if (SPRITE_COLOURS[key] !== undefined) return SPRITE_COLOURS[key];
+  // Fall back to object definition render colour
+  const def = getObjectDef(key);
+  if (def) return def.renderColor;
+  return FALLBACK_COLOUR;
+}
+
+/** Size of world objects (immovable objects are full tile size). */
+const OBJECT_SIZE = 16;
+const IMMOVABLE_OBJECT_SIZE = 32;
+
+function getVisualSize(key: string): number {
+  if (key === "bullet") return 6;
+  const def = getObjectDef(key);
+  if (def) return def.immovable ? IMMOVABLE_OBJECT_SIZE : OBJECT_SIZE;
+  return PLAYER_SIZE;
 }
 
 function createVisual(
@@ -38,7 +54,7 @@ function createVisual(
   x: number,
   y: number,
 ): Phaser.GameObjects.Rectangle {
-  const size = key === "bullet" ? 6 : PLAYER_SIZE;
+  const size = getVisualSize(key);
   return scene.add.rectangle(x, y, size, size, spriteColour(key));
 }
 
