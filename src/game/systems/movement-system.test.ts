@@ -178,4 +178,39 @@ describe("MovementSystem", () => {
     // Velocity should have decreased (moving toward negative target)
     expect(player.velocity!.vx).toBeLessThan(speedBefore);
   });
+
+  it("reduces max speed when player has carry weight", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    // Load the player to 50% carry weight
+    player.inventory!.carryWeight = 25;
+
+    ctx.inputState.moveX = 1;
+    // Run to steady state
+    for (let i = 0; i < 120; i++) system(DT);
+
+    // Speed should be below normal PLAYER_SPEED
+    expect(player.velocity!.vx).toBeLessThan(PLAYER_SPEED);
+    expect(player.velocity!.vx).toBeGreaterThan(0);
+  });
+
+  it("reduces speed further at maximum carry weight", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    player.inventory!.carryWeight = player.inventory!.maxCarryWeight;
+
+    ctx.inputState.moveX = 1;
+    for (let i = 0; i < 120; i++) system(DT);
+
+    // Should be at minimum speed multiplier * PLAYER_SPEED
+    expect(player.velocity!.vx).toBeLessThan(PLAYER_SPEED * 0.5);
+    expect(player.velocity!.vx).toBeGreaterThan(0);
+  });
+
+  it("moves at full speed with no carry weight", () => {
+    ctx.inputState.moveX = 1;
+    const ticksNeeded = Math.ceil(PLAYER_SPEED / (ACCELERATION * DT)) + 1;
+    for (let i = 0; i < ticksNeeded; i++) system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    expect(player.velocity!.vx).toBeCloseTo(PLAYER_SPEED, 1);
+  });
 });
