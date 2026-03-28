@@ -204,8 +204,7 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
 
     // Fill the overlay with the tint at full opacity — the alpha is
     // controlled on the game object itself.
-    const [r, g, b] = unpackRgb(tint);
-    overlay.fill(r, g, b, 255);
+    overlay.fill(tint, 1);
     overlay.setAlpha(targetAlpha);
 
     // Erase a soft circle at the player position to create a visibility

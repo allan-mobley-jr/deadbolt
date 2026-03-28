@@ -72,10 +72,13 @@ export function safeEmit<K extends keyof GameEventMap>(
   event: K,
   payload: GameEventMap[K][0],
 ): void {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (bus as EventEmitter<GameEventMap>).emit(event, payload as any);
-  } catch (err) {
-    console.error(`[EventBus] Listener threw on "${String(event)}":`, err);
+  const listeners = (bus as EventEmitter<GameEventMap>).listeners(event);
+  for (const fn of listeners) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fn(payload as any);
+    } catch (err) {
+      console.error(`[EventBus] Listener threw on "${String(event)}":`, err);
+    }
   }
 }

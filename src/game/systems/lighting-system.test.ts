@@ -200,7 +200,7 @@ describe("LightingSystem", () => {
     system(DT);
 
     expect(renderTexture.setVisible).toHaveBeenCalledWith(true);
-    expect(renderTexture.fill).toHaveBeenCalled();
+    expect(renderTexture.fill).toHaveBeenCalledWith(LIGHTING.NIGHT_TINT, 1);
     expect(renderTexture.setAlpha).toHaveBeenCalledWith(
       LIGHTING.NIGHT_OVERLAY_ALPHA,
     );

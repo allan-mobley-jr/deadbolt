@@ -142,14 +142,11 @@ describe("safeEmit", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const good = vi.fn();
 
-    // eventemitter3 calls listeners in order — if the first throws,
-    // safeEmit catches the entire batch. This test verifies that
-    // safeEmit at least prevents the exception from propagating.
+    // safeEmit calls each listener in its own try/catch, so a throw
+    // in listener 1 should not prevent listener 2 from running.
     bus.on("phase-change", () => {
       throw new Error("bad listener");
     });
-    // Note: eventemitter3 stops calling remaining listeners when one
-    // throws, but safeEmit prevents the error from crashing the caller.
     bus.on("phase-change", good);
 
     safeEmit(bus, "phase-change", {
@@ -160,6 +157,7 @@ describe("safeEmit", () => {
     });
 
     expect(errorSpy).toHaveBeenCalled();
+    expect(good).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
   });
 });
