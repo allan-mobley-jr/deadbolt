@@ -23,9 +23,7 @@ describe("buildGameConfig", () => {
 
   it("sets scale to 1280x720 with FIT mode", () => {
     const config = buildGameConfig("test");
-    const scale = config.scale as Record<string, unknown>;
-    expect(scale.width).toBe(1280);
-    expect(scale.height).toBe(720);
+    expect(config.scale).toMatchObject({ width: 1280, height: 720 });
   });
 
   it("sets parent to the provided element id", () => {
@@ -40,9 +38,7 @@ describe("buildGameConfig", () => {
 
   it("targets 60 fps", () => {
     const config = buildGameConfig("test");
-    const fps = config.fps as Record<string, unknown>;
-    expect(fps.target).toBe(60);
-    expect(fps.limit).toBe(60);
+    expect(config.fps).toMatchObject({ target: 60, limit: 60 });
   });
 
   it("uses Phaser.AUTO renderer", () => {
@@ -111,8 +107,6 @@ describe("game singleton", () => {
     expect(container.querySelector("canvas")).toBe(staleCanvas);
 
     createGame("test");
-
-    // The stale canvas should have been removed
     expect(container.contains(staleCanvas)).toBe(false);
   });
 
