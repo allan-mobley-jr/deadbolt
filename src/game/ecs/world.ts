@@ -1,49 +1,26 @@
-/**
- * ECS world factory and pre-built queries.
- *
- * Each game session creates a fresh world via createWorld().  The queries
- * object provides typed views into common entity archetypes so systems
- * do not need to build ad-hoc queries on every tick.
- *
- * NO React imports allowed — this is pure TypeScript.
- */
-
-import { World, type Query, type With } from 'miniplex';
-import type { Entity } from './components';
-
-// ---------------------------------------------------------------------------
-// Query types (Miniplex narrows the Entity type automatically)
-// ---------------------------------------------------------------------------
-
-export interface Queries {
-  /** Entities with player tag, position, and velocity — for movement logic. */
-  players: Query<With<Entity, 'player' | 'position' | 'velocity'>>;
-  /** Entities with a position and a sprite — anything that renders. */
-  spriteEntities: Query<With<Entity, 'position' | 'sprite'>>;
-}
-
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
-export interface WorldContext {
-  world: World<Entity>;
-  queries: Queries;
-}
+import { World } from "miniplex";
+import type { Entity } from "./entity";
 
 /**
- * Create a new ECS world and its associated queries.
+ * The single ECS world for the current game session.
  *
- * Call once per game session.  The returned world and queries share the
- * same underlying entity storage.
+ * Unlike the Phaser singleton (create/destroy lifecycle), the Miniplex world
+ * is a lightweight module-level constant. Queries register against it lazily,
+ * so importing `world` in other modules and calling `world.with(...)` works
+ * at any point.
+ *
+ * Between runs (permadeath restart), call {@link resetWorld} to clear all
+ * entities while preserving query subscriptions.
  */
-export function createWorld(): WorldContext {
-  const world = new World<Entity>();
+export const world = new World<Entity>();
 
-  const queries: Queries = {
-    players: world.with('player', 'position', 'velocity'),
-    spriteEntities: world.with('position', 'sprite'),
-  };
-
-  return { world, queries };
+/**
+ * Remove all entities from the world. Intended for run boundaries
+ * (permadeath restart) and test cleanup.
+ *
+ * Uses `world.clear()` rather than recreating the World instance so that
+ * query references held by system modules remain valid.
+ */
+export function resetWorld(): void {
+  world.clear();
 }

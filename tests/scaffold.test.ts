@@ -52,6 +52,10 @@ describe('project files', () => {
   it('src/lib/utils.ts exists', () => {
     expect(existsSync(resolve(root, 'src/lib/utils.ts'))).toBe(true)
   })
+
+  it('vercel.json exists', () => {
+    expect(existsSync(resolve(root, 'vercel.json'))).toBe(true)
+  })
 })
 
 describe('game dependencies', () => {

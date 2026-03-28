@@ -1,63 +1,51 @@
-/**
- * ECS component type definitions.
- *
- * Every piece of game state lives as a component on a Miniplex entity.
- * Components are plain data objects — no methods, no Phaser imports.
- * The Entity interface uses optional properties so Miniplex queries can
- * narrow to only the components a system needs.
- *
- * Future issues will extend this file with health, inventory, AI state,
- * physics-body metadata, and more.  Keep each component small and focused.
- *
- * NO React imports allowed — this is pure TypeScript.
- */
-
-// ---------------------------------------------------------------------------
-// Component interfaces
-// ---------------------------------------------------------------------------
-
-/** Position in pixel space (not tile space). */
+/** 2D position in world space (pixels, not tiles). */
 export interface Position {
   x: number;
   y: number;
 }
 
-/** Velocity in pixels per second. */
+/** 2D velocity vector (pixels per second). */
 export interface Velocity {
-  x: number;
-  y: number;
+  vx: number;
+  vy: number;
 }
 
 /**
- * Reference to the Phaser game object that visually represents this entity.
- *
- * Typed as `unknown` to avoid importing Phaser types into the ECS layer.
- * Systems that work with sprites cast to the concrete Phaser type they need.
+ * Marks an entity as visible. Holds a sprite key that the render sync
+ * system maps to a Phaser GameObject. Never stores a Phaser reference
+ * directly — this preserves the game-boundary separation.
  */
-export interface Sprite {
-  gameObject: unknown;
+export interface Renderable {
+  spriteKey: string;
 }
 
-// ---------------------------------------------------------------------------
-// Tag components (presence-only, no data)
-// ---------------------------------------------------------------------------
-
-/** Marks an entity as the player-controlled character. */
-export type Player = true;
-
-// ---------------------------------------------------------------------------
-// Entity
-// ---------------------------------------------------------------------------
+/**
+ * Marks an entity as controlled by the player.
+ * The `active` flag allows temporarily disabling input (stun, cutscene)
+ * without removing and re-adding the component.
+ */
+export interface PlayerControlled {
+  active: boolean;
+}
 
 /**
- * Union entity type consumed by Miniplex.
- *
- * All properties are optional so that entities can carry any subset of
- * components.  Miniplex queries narrow the type to only the required ones.
+ * Links an entity to a Matter.js physics body via numeric ID.
+ * The physics sync system resolves IDs to actual Matter.Body references.
+ * Never stores a Matter.Body directly — this preserves the game-boundary
+ * separation.
  */
-export interface Entity {
-  position?: Position;
-  velocity?: Velocity;
-  sprite?: Sprite;
-  player?: Player;
+export interface PhysicsBody {
+  bodyId: number;
+}
+
+/**
+ * Entity health pool with current and maximum values.
+ *
+ * Intended constraint: `0 <= current <= max`. Systems that modify health
+ * (damage, healing) should maintain this constraint — no runtime enforcement
+ * is provided at the component level, so data may temporarily violate it.
+ */
+export interface Health {
+  current: number;
+  max: number;
 }
