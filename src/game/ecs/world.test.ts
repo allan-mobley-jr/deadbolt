@@ -131,6 +131,21 @@ describe("queries", () => {
     expect(damageableEntities.size).toBe(1);
   });
 
+  it("renderableEntities excludes entities with only renderable (no position)", () => {
+    world.add({ renderable: { spriteKey: "test" } });
+    expect(renderableEntities.size).toBe(0);
+  });
+
+  it("renderableEntities excludes entities with only position (no renderable)", () => {
+    world.add({ position: { x: 0, y: 0 } });
+    expect(renderableEntities.size).toBe(0);
+  });
+
+  it("physicsBodies excludes entities with only physicsBody (no position)", () => {
+    world.add({ physicsBody: { bodyId: 1 } });
+    expect(physicsBodies.size).toBe(0);
+  });
+
   it("queries update when components are added to existing entities", () => {
     const entity: Entity = world.add({ position: { x: 0, y: 0 } });
     expect(movingEntities.size).toBe(0);
@@ -231,6 +246,14 @@ describe("archetype factories", () => {
       createZombieEntity(0, 0, 1);
       expect(playerEntities.size).toBe(0);
     });
+
+    it("appears in all relevant queries", () => {
+      createZombieEntity(0, 0, 1);
+      expect(movingEntities.size).toBe(1);
+      expect(renderableEntities.size).toBe(1);
+      expect(physicsBodies.size).toBe(1);
+      expect(damageableEntities.size).toBe(1);
+    });
   });
 
   describe("createBarricadeEntity", () => {
@@ -246,6 +269,13 @@ describe("archetype factories", () => {
       createBarricadeEntity(0, 0, 1);
       expect(movingEntities.size).toBe(0);
     });
+
+    it("appears in all other relevant queries", () => {
+      createBarricadeEntity(0, 0, 1);
+      expect(renderableEntities.size).toBe(1);
+      expect(physicsBodies.size).toBe(1);
+      expect(damageableEntities.size).toBe(1);
+    });
   });
 
   describe("createProjectileEntity", () => {
@@ -260,6 +290,13 @@ describe("archetype factories", () => {
     it("is not in damageableEntities query (no health)", () => {
       createProjectileEntity(0, 0, 1, 0, 1);
       expect(damageableEntities.size).toBe(0);
+    });
+
+    it("appears in all other relevant queries", () => {
+      createProjectileEntity(0, 0, 1, 0, 1);
+      expect(movingEntities.size).toBe(1);
+      expect(renderableEntities.size).toBe(1);
+      expect(physicsBodies.size).toBe(1);
     });
   });
 });
@@ -327,5 +364,73 @@ describe("iteration", () => {
     expect(xs).toHaveLength(2);
     expect(xs).toContain(10);
     expect(xs).toContain(30);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Component mutation and reference identity
+// ---------------------------------------------------------------------------
+
+describe("component mutation", () => {
+  it("entity references are live — mutations are visible via queries", () => {
+    const entity = world.add({
+      position: { x: 0, y: 0 },
+      velocity: { vx: 0, vy: 0 },
+    });
+    entity.position!.x = 42;
+    entity.velocity!.vy = 7;
+
+    const [found] = movingEntities.entities;
+    expect(found.position.x).toBe(42);
+    expect(found.velocity.vy).toBe(7);
+  });
+
+  it("mutating one entity does not affect another", () => {
+    const z1 = createZombieEntity(0, 0, 1);
+    const z2 = createZombieEntity(100, 200, 2);
+
+    z1.position.x = 999;
+    expect(z2.position.x).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-entity independence
+// ---------------------------------------------------------------------------
+
+describe("multi-entity independence", () => {
+  it("spawning multiple entities of the same archetype creates independent entries", () => {
+    const z1 = createZombieEntity(0, 0, 1);
+    const z2 = createZombieEntity(100, 200, 2);
+    const z3 = createZombieEntity(300, 400, 3);
+
+    expect(world.size).toBe(3);
+    expect(z1.position).toEqual({ x: 0, y: 0 });
+    expect(z2.position).toEqual({ x: 100, y: 200 });
+    expect(z3.position).toEqual({ x: 300, y: 400 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+describe("edge cases", () => {
+  it("removing an entity twice is a no-op", () => {
+    const entity = world.add({ position: { x: 0, y: 0 } });
+    world.remove(entity);
+    world.remove(entity);
+    expect(world.size).toBe(0);
+  });
+
+  it("adding the same entity reference twice does not duplicate", () => {
+    const entity = world.add({ position: { x: 0, y: 0 } });
+    world.add(entity);
+    expect(world.size).toBe(1);
+  });
+
+  it("resetWorld on an empty world is a no-op", () => {
+    resetWorld();
+    expect(world.size).toBe(0);
   });
 });

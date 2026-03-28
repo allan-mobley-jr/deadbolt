@@ -38,7 +38,13 @@ export interface PhysicsBody {
   bodyId: number;
 }
 
-/** Entity health pool with current and maximum values. */
+/**
+ * Entity health pool with current and maximum values.
+ *
+ * Invariant: `0 <= current <= max`. Systems that modify health (damage,
+ * healing) must maintain this invariant — no runtime enforcement is provided
+ * at the component level.
+ */
 export interface Health {
   current: number;
   max: number;
