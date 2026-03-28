@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { describe, it, expect, afterEach } from "vitest";
 import {
   world,
@@ -432,5 +434,162 @@ describe("edge cases", () => {
   it("resetWorld on an empty world is a no-op", () => {
     resetWorld();
     expect(world.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Boundary values — document contracts for falsy and edge-case inputs
+// ---------------------------------------------------------------------------
+
+describe("boundary values", () => {
+  it("physicsBody with bodyId=0 is a valid physics entity", () => {
+    const entity = world.add({
+      position: { x: 0, y: 0 },
+      physicsBody: { bodyId: 0 },
+    });
+    expect(physicsBodies.size).toBe(1);
+    expect(physicsBodies.entities[0].physicsBody.bodyId).toBe(0);
+    expect(entity.physicsBody!.bodyId).toBe(0);
+  });
+
+  it("entity with zero health is still in damageableEntities", () => {
+    world.add({ health: { current: 0, max: 100 } });
+    expect(damageableEntities.size).toBe(1);
+    expect(damageableEntities.entities[0].health.current).toBe(0);
+  });
+
+  it("entity with current > max is accepted (no runtime enforcement)", () => {
+    const entity = world.add({ health: { current: 150, max: 100 } });
+    expect(damageableEntities.size).toBe(1);
+    expect(entity.health!.current).toBe(150);
+    expect(entity.health!.max).toBe(100);
+  });
+
+  it("entity with empty spriteKey string is in renderableEntities", () => {
+    world.add({
+      position: { x: 0, y: 0 },
+      renderable: { spriteKey: "" },
+    });
+    expect(renderableEntities.size).toBe(1);
+    expect(renderableEntities.entities[0].renderable.spriteKey).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Progressive query membership — verify query reindexing as components change
+// ---------------------------------------------------------------------------
+
+describe("progressive query membership", () => {
+  it("entity progressively enters queries as components are added", () => {
+    const entity: Entity = world.add({});
+    expect(movingEntities.size).toBe(0);
+    expect(renderableEntities.size).toBe(0);
+    expect(damageableEntities.size).toBe(0);
+    expect(physicsBodies.size).toBe(0);
+    expect(playerEntities.size).toBe(0);
+
+    world.addComponent(entity, "position", { x: 0, y: 0 });
+    expect(movingEntities.size).toBe(0);
+
+    world.addComponent(entity, "health", { current: 10, max: 10 });
+    expect(damageableEntities.size).toBe(1);
+
+    world.addComponent(entity, "velocity", { vx: 1, vy: 0 });
+    expect(movingEntities.size).toBe(1);
+
+    world.addComponent(entity, "renderable", { spriteKey: "test" });
+    expect(renderableEntities.size).toBe(1);
+
+    world.addComponent(entity, "physicsBody", { bodyId: 1 });
+    expect(physicsBodies.size).toBe(1);
+
+    world.addComponent(entity, "playerControlled", { active: true });
+    expect(playerEntities.size).toBe(1);
+  });
+
+  it("entity with all components appears in all 5 queries", () => {
+    world.add({
+      position: { x: 0, y: 0 },
+      velocity: { vx: 1, vy: 1 },
+      renderable: { spriteKey: "full" },
+      playerControlled: { active: true },
+      physicsBody: { bodyId: 1 },
+      health: { current: 100, max: 100 },
+    });
+    expect(movingEntities.size).toBe(1);
+    expect(renderableEntities.size).toBe(1);
+    expect(playerEntities.size).toBe(1);
+    expect(physicsBodies.size).toBe(1);
+    expect(damageableEntities.size).toBe(1);
+  });
+
+  it("removing a component from a factory entity drops it from the correct query only", () => {
+    const player = createPlayerEntity(0, 0, 1);
+    expect(playerEntities.size).toBe(1);
+    expect(movingEntities.size).toBe(1);
+    expect(renderableEntities.size).toBe(1);
+    expect(physicsBodies.size).toBe(1);
+    expect(damageableEntities.size).toBe(1);
+
+    world.removeComponent(player, "playerControlled");
+    expect(playerEntities.size).toBe(0);
+    expect(movingEntities.size).toBe(1);
+    expect(renderableEntities.size).toBe(1);
+    expect(physicsBodies.size).toBe(1);
+    expect(damageableEntities.size).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Post-reset query accuracy
+// ---------------------------------------------------------------------------
+
+describe("post-reset query accuracy", () => {
+  it("entities added after reset appear in correct queries based on components", () => {
+    createPlayerEntity(0, 0, 1);
+    resetWorld();
+
+    const barricade = createBarricadeEntity(10, 10, 2);
+    const bullet = createProjectileEntity(20, 20, 5, -3, 3);
+
+    expect(world.size).toBe(2);
+    // Barricade: no velocity → not in movingEntities, but in damageableEntities
+    expect(damageableEntities.size).toBe(1);
+    expect(damageableEntities.entities[0]).toBe(barricade);
+    expect(movingEntities.size).toBe(1);
+    expect(movingEntities.entities[0]).toBe(bullet);
+    // Both in renderableEntities and physicsBodies
+    expect(renderableEntities.size).toBe(2);
+    expect(physicsBodies.size).toBe(2);
+    // Neither is a player
+    expect(playerEntities.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Import boundary — static analysis of the game-boundary rule
+// ---------------------------------------------------------------------------
+
+describe("import boundary", () => {
+  it("ECS source files contain no phaser or react imports", () => {
+    const ecsFiles = [
+      "components.ts",
+      "entity.ts",
+      "world.ts",
+      "queries.ts",
+      "archetypes.ts",
+      "index.ts",
+    ];
+
+    for (const file of ecsFiles) {
+      const content = readFileSync(
+        resolve(__dirname, file),
+        "utf-8",
+      );
+      expect(content).not.toMatch(/from\s+["']react/);
+      expect(content).not.toMatch(/from\s+["']phaser/);
+      expect(content).not.toMatch(/import\s+["']react/);
+      expect(content).not.toMatch(/import\s+["']phaser/);
+    }
   });
 });
