@@ -64,6 +64,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // --- Allow recovery if a prior cycle crashed (e.g. update before create) ---
+    this.crashed = false;
+
     // --- Reset ECS world from any prior run ---
     resetWorld();
 

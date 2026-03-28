@@ -19,6 +19,9 @@ import { movingEntities } from "@/game/ecs/queries";
  * (the fixed timestep duration) to convert.
  */
 export function createPhysicsSyncSystem(ctx: SceneContext): SystemFn {
+  /** Track body IDs that have already been warned about to avoid 60 Hz spam. */
+  const warnedMissing = new Set<number>();
+
   return (dt: number): void => {
     const { bodyRegistry, scene } = ctx;
     const matterWorld = (
@@ -29,13 +32,20 @@ export function createPhysicsSyncSystem(ctx: SceneContext): SystemFn {
     for (const entity of movingEntities) {
       if (!entity.physicsBody) continue;
       const body = bodyRegistry.get(entity.physicsBody.bodyId);
-      if (!body) continue;
+      if (!body) {
+        if (!warnedMissing.has(entity.physicsBody.bodyId)) {
+          warnedMissing.add(entity.physicsBody.bodyId);
+          console.warn(
+            `[PhysicsSyncSystem] No body found for bodyId=${entity.physicsBody.bodyId}. Entity will not receive velocity updates.`,
+          );
+        }
+        continue;
+      }
 
       // Matter.js velocity = displacement per step (pixels per step)
       const stepVx = entity.velocity.vx * dt;
       const stepVy = entity.velocity.vy * dt;
 
-      // Use Matter.Body.setVelocity via the body's engine reference
       body.velocity.x = stepVx;
       body.velocity.y = stepVy;
 
@@ -50,7 +60,15 @@ export function createPhysicsSyncSystem(ctx: SceneContext): SystemFn {
     // 3. Read: Matter.js body position → ECS position
     for (const entity of physicsBodies) {
       const body = bodyRegistry.get(entity.physicsBody.bodyId);
-      if (!body) continue;
+      if (!body) {
+        if (!warnedMissing.has(entity.physicsBody.bodyId)) {
+          warnedMissing.add(entity.physicsBody.bodyId);
+          console.warn(
+            `[PhysicsSyncSystem] No body found for bodyId=${entity.physicsBody.bodyId}. Entity position will not update.`,
+          );
+        }
+        continue;
+      }
 
       // Store previous position for render interpolation
       entity.previousPosition = {

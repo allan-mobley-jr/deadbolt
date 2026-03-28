@@ -329,21 +329,32 @@ describe("GameScene", () => {
       consoleSpy.mockRestore();
     });
 
-    it("scene remains permanently halted after update-before-create crash", () => {
+    it("create() resets the crashed flag so the scene can recover", () => {
       const consoleSpy = vi
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
+      // Trigger crash: update before create
       scene.update(0, 16.67);
       expect(consoleSpy).toHaveBeenCalledTimes(1);
 
       consoleSpy.mockClear();
 
+      // create() should reset crashed flag
       scene.create();
 
+      // Subsequent updates should work (not silently halted)
       scene.update(16.67, 16.67);
       scene.update(33.34, 16.67);
       expect(consoleSpy).not.toHaveBeenCalled();
+
+      // Verify the game loop is ticking (not crashed)
+      const gameLoop = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      const tickSpy = vi.spyOn(gameLoop, "tick");
+      scene.update(50, 16.67);
+      expect(tickSpy).toHaveBeenCalledTimes(1);
 
       consoleSpy.mockRestore();
     });

@@ -116,9 +116,28 @@ describe("PhysicsSyncSystem", () => {
     expect(entity.previousPosition!.y).toBe(200);
   });
 
-  it("handles entities with no registered body gracefully", () => {
+  it("warns once for entities with no registered body", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     // Entity references a body id that isn't in the registry
     createPlayerEntity(50, 50, 999);
+
+    system(DT);
+    expect(warnSpy).toHaveBeenCalledTimes(1); // warn-once per bodyId
+
+    // Second tick should NOT warn again (warn-once)
+    warnSpy.mockClear();
+    system(DT);
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("skips entities that have velocity but no physicsBody", () => {
+    // A moving entity without a physicsBody (e.g. a visual effect)
+    world.add({
+      position: { x: 0, y: 0 },
+      velocity: { vx: 100, vy: 0 },
+    });
     expect(() => system(DT)).not.toThrow();
   });
 

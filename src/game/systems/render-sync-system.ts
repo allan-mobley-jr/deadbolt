@@ -123,8 +123,9 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     }
 
     // --- Clean up sprites for removed entities ---
+    const activeEntities = new Set<Entity>(renderableEntities);
     for (const [entity, sprite] of sprites) {
-      if (!(renderableEntities as unknown as { has: (e: Entity) => boolean }).has(entity)) {
+      if (!activeEntities.has(entity)) {
         sprite.destroy();
         sprites.delete(entity);
       }
