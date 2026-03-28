@@ -18,6 +18,8 @@ import type {
  */
 export interface Entity {
   position?: Position;
+  /** Previous-tick position for render interpolation. */
+  previousPosition?: Position;
   velocity?: Velocity;
   renderable?: Renderable;
   playerControlled?: PlayerControlled;
