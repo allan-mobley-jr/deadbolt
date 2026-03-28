@@ -19,11 +19,11 @@ const mockWorldData = {
 
 vi.mock('@/game/procgen/world-generator', () => ({
   generateWorld: vi.fn().mockImplementation(function* () {
-    yield { stage: 'city_layout', message: 'Generating city layout...', progress: 0 };
-    yield { stage: 'building_interiors', message: 'Building interiors...', progress: 0.2 };
-    yield { stage: 'safehouse_selection', message: 'Selecting safehouse...', progress: 0.4 };
-    yield { stage: 'object_placement', message: 'Placing objects...', progress: 0.6 };
-    yield { stage: 'navigation_grid', message: 'Preparing navigation...', progress: 0.8 };
+    yield { stage: GenerationStage.CityLayout, message: 'Generating city layout...', progress: 0 };
+    yield { stage: GenerationStage.BuildingInteriors, message: 'Building interiors...', progress: 0.2 };
+    yield { stage: GenerationStage.SafehouseSelection, message: 'Selecting safehouse...', progress: 0.4 };
+    yield { stage: GenerationStage.ObjectPlacement, message: 'Placing objects...', progress: 0.6 };
+    yield { stage: GenerationStage.NavigationGrid, message: 'Preparing navigation...', progress: 0.8 };
     return mockWorldData;
   }),
 }));
