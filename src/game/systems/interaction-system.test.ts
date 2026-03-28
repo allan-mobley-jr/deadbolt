@@ -1030,7 +1030,7 @@ describe("InteractionSystem — drop failure resilience", () => {
     errorSpy.mockRestore();
   });
 
-  it("does not emit inventory-changed when matter.add.rectangle throws during drop", () => {
+  it("emits inventory-changed after re-adding item when spawn fails during drop", () => {
     spawnPickupable(ctx, 110, 100, "wooden_plank");
     ctx.inputState.interactPressed = true;
     system(DT);
@@ -1048,7 +1048,15 @@ describe("InteractionSystem — drop failure resilience", () => {
     safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
     system(DT);
 
-    expect(invHandler).not.toHaveBeenCalled();
+    // Should emit inventory-changed so UI stays in sync after re-add
+    expect(invHandler).toHaveBeenCalledOnce();
+    expect(invHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slots: expect.arrayContaining([
+          expect.objectContaining({ itemType: "wooden_plank" }),
+        ]),
+      }),
+    );
 
     errorSpy.mockRestore();
   });

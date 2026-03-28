@@ -191,8 +191,15 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
           nearestEntity = null;
 
           if (pickupSucceeded) {
-            // Add to inventory slot(s) — addItem handles weight update
-            addItem(inv, objectType);
+            // Add to inventory slot(s) — addItem handles weight update.
+            // canAddItem was checked before world removal, so this should
+            // succeed. Guard against edge cases defensively.
+            const added = addItem(inv, objectType);
+            if (!added) {
+              console.error(
+                `[InteractionSystem] addItem failed after world removal for ${objectType}`,
+              );
+            }
 
             // Emit events
             safeEmit(ctx.eventBus, "item-picked-up", {
@@ -268,16 +275,29 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
     while (pendingDrops.length > 0) {
       const dropCmd = pendingDrops.pop()!;
 
-      // Resolve what to drop — slot index takes priority
+      // Resolve what to drop — validate definition BEFORE removing from
+      // inventory so the item is never lost on undefined-def errors.
       let objectType: string | null = null;
+      let resolvedSlotIndex: number | undefined;
+
       if (dropCmd.slotIndex !== undefined) {
-        objectType = removeItem(inv, dropCmd.slotIndex);
+        const slot = inv.slots[dropCmd.slotIndex];
+        if (!slot) continue;
+        // Resolve to primary slot for medium items
+        const primary = slot.primary
+          ? dropCmd.slotIndex
+          : inv.slots.findIndex(
+              (s, i) =>
+                i < dropCmd.slotIndex! &&
+                s !== null &&
+                s.primary &&
+                s.objectType === slot.objectType,
+            );
+        if (primary < 0) continue;
+        objectType = inv.slots[primary]!.objectType;
+        resolvedSlotIndex = primary;
       } else if (dropCmd.objectType !== undefined) {
-        // Find first matching item, remove it from inventory
         objectType = dropCmd.objectType;
-        if (!removeItemByType(inv, objectType)) {
-          objectType = null; // not found
-        }
       }
 
       if (!objectType) continue;
@@ -287,7 +307,14 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         console.warn(
           `[InteractionSystem] Unknown object type for drop: ${objectType}`,
         );
-        continue;
+        continue; // Safe: inventory not yet mutated
+      }
+
+      // NOW remove from inventory (after validation)
+      if (resolvedSlotIndex !== undefined) {
+        removeItem(inv, resolvedSlotIndex);
+      } else if (!removeItemByType(inv, objectType)) {
+        continue; // Item not found in inventory
       }
 
       // Compute drop position in front of player (based on aim direction)
@@ -339,10 +366,16 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         );
         // Re-add item to inventory to prevent loss
         addItem(inv, objectType);
+        // Emit inventory-changed so UI stays in sync
+        safeEmit(ctx.eventBus, "inventory-changed", {
+          slots: buildEventSlots(inv),
+          carryWeight: inv.carryWeight,
+          maxCarryWeight: inv.maxCarryWeight,
+        });
         continue;
       }
 
-      // Emit events (inventory already mutated by removeItem/removeItemByType)
+      // Emit events
       safeEmit(ctx.eventBus, "object-dropped", {
         objectType,
         position: { x: dropX, y: dropY },

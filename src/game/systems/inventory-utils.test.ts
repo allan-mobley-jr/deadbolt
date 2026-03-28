@@ -175,6 +175,24 @@ describe("addItem", () => {
     expect(addItem(inv, "wooden_plank")).toBe(false);
   });
 
+  it("finds consecutive gap for medium item between occupied slots", () => {
+    const inv = createEmptyInventory(50);
+    addItem(inv, "wooden_plank"); // slot 0
+    addItem(inv, "gas_can"); // slot 1
+    addItem(inv, "wire_spool"); // slot 2
+
+    // Remove middle two to create a gap
+    removeItem(inv, 1);
+    removeItem(inv, 2);
+    // slots: [plank, null, null, ...]
+
+    addItem(inv, "car_battery"); // medium, needs 2 consecutive
+    expect(inv.slots[1]?.objectType).toBe("car_battery");
+    expect(inv.slots[1]?.primary).toBe(true);
+    expect(inv.slots[2]?.objectType).toBe("car_battery");
+    expect(inv.slots[2]?.primary).toBe(false);
+  });
+
   it("fills gap after removal", () => {
     const inv = createEmptyInventory(50);
     addItem(inv, "wooden_plank");
@@ -341,6 +359,56 @@ describe("swapItems", () => {
     swapItems(inv, 0, 1);
     expect(inv.carryWeight).toBeCloseTo(weight);
   });
+
+  it("swaps a medium item with a small item", () => {
+    const inv = createEmptyInventory(50);
+    addItem(inv, "car_battery"); // slots 0-1 (medium)
+    addItem(inv, "wooden_plank"); // slot 2 (small)
+
+    const result = swapItems(inv, 0, 2);
+    expect(result).toBe(true);
+    expect(inv.slots[2]?.objectType).toBe("car_battery");
+    expect(inv.slots[2]?.primary).toBe(true);
+    expect(inv.slots[3]?.objectType).toBe("car_battery");
+    expect(inv.slots[3]?.primary).toBe(false);
+    expect(inv.slots[0]?.objectType).toBe("wooden_plank");
+    expect(inv.slots[0]?.primary).toBe(true);
+    expect(inv.slots[1]).toBeNull();
+  });
+
+  it("swaps two medium items", () => {
+    const inv = createEmptyInventory(50);
+    addItem(inv, "car_battery"); // slots 0-1
+    addItem(inv, "metal_sheet"); // slots 2-3
+
+    const result = swapItems(inv, 0, 2);
+    expect(result).toBe(true);
+    expect(inv.slots[0]?.objectType).toBe("metal_sheet");
+    expect(inv.slots[1]?.objectType).toBe("metal_sheet");
+    expect(inv.slots[2]?.objectType).toBe("car_battery");
+    expect(inv.slots[3]?.objectType).toBe("car_battery");
+  });
+
+  it("returns false when medium item would overflow end of array", () => {
+    const inv = createEmptyInventory(50);
+    addItem(inv, "wooden_plank"); // slot 0
+    // Try to swap small item at 0 with empty slot at 7 —
+    // the small item can go to 7, but medium cannot go to 7 (overflow at 8)
+    inv.slots[0] = null;
+    inv.carryWeight = 0;
+    addItem(inv, "car_battery"); // slots 0-1 (medium)
+
+    // Swap medium at 0 to slot 7 — would need slots 7-8 but only 0-7 exist
+    const result = swapItems(inv, 0, 7);
+    expect(result).toBe(false);
+    // Original positions preserved
+    expect(inv.slots[0]).toEqual(
+      expect.objectContaining({ objectType: "car_battery", primary: true }),
+    );
+    expect(inv.slots[1]).toEqual(
+      expect.objectContaining({ objectType: "car_battery", primary: false }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -420,6 +488,22 @@ describe("buildEventSlots", () => {
     expect(slots[1].itemType).toBe("car_battery");
     expect(slots[1].slotIndex).toBe(1);
     expect(slots[1].sizeCategory).toBe("medium");
+  });
+
+  it("preserves correct slotIndex values after removals create gaps", () => {
+    const inv = createEmptyInventory(50);
+    addItem(inv, "wooden_plank"); // slot 0
+    addItem(inv, "gas_can"); // slot 1
+    addItem(inv, "wire_spool"); // slot 2
+
+    removeItem(inv, 1); // Remove gas_can from slot 1
+
+    const slots = buildEventSlots(inv);
+    expect(slots).toHaveLength(2);
+    expect(slots[0].slotIndex).toBe(0);
+    expect(slots[0].itemType).toBe("wooden_plank");
+    expect(slots[1].slotIndex).toBe(2);
+    expect(slots[1].itemType).toBe("wire_spool");
   });
 });
 
