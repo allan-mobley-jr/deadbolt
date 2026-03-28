@@ -57,6 +57,10 @@ export function createGame(parentId: string): Phaser.Game {
   if (parent) {
     const staleCanvas = parent.querySelector("canvas");
     if (staleCanvas) {
+      console.warn(
+        `[PhaserGame] Removing stale canvas from #${parentId}. ` +
+          "Expected during HMR but may indicate a cleanup bug in production.",
+      );
       staleCanvas.remove();
     }
   }
@@ -70,8 +74,15 @@ export function destroyGame(): void {
   if (instance === null) {
     return;
   }
-  instance.destroy(true);
+  // Clear singleton FIRST so a failed destroy() never leaves a broken
+  // reference that the singleton guard would return on the next createGame().
+  const ref = instance;
   instance = null;
+  try {
+    ref.destroy(true);
+  } catch (err) {
+    console.error("[PhaserGame] Error during game destruction:", err);
+  }
 }
 
 /** Read-only accessor for the current Phaser.Game (or null). */
