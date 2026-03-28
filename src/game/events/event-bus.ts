@@ -13,7 +13,7 @@ import EventEmitter from "eventemitter3";
 import type { DayPhase } from "@/game/systems/day-night-constants";
 
 // ---------------------------------------------------------------------------
-// Event payload types
+// Event payload types — Game → UI
 // ---------------------------------------------------------------------------
 
 /** Emitted once when the day/night phase transitions. */
@@ -33,13 +33,123 @@ export interface ClockTickEvent {
   elapsedTotal: number;
 }
 
+/** Emitted when the player's health changes (damage or healing). */
+export interface PlayerHealthChangedEvent {
+  current: number;
+  max: number;
+  /** Positive = heal, negative = damage. */
+  delta: number;
+}
+
+/** A single inventory slot for display purposes. */
+export interface InventorySlot {
+  itemType: string;
+  quantity: number;
+  slotIndex: number;
+}
+
+/** Emitted when the player's inventory contents change. */
+export interface InventoryChangedEvent {
+  slots: InventorySlot[];
+  carryWeight: number;
+  maxCarryWeight: number;
+}
+
+/** Emitted when a zombie wave begins. */
+export interface WaveStartedEvent {
+  waveNumber: number;
+  zombieCount: number;
+  dayNumber: number;
+}
+
+/** Emitted when all zombies in a wave are cleared. */
+export interface WaveEndedEvent {
+  waveNumber: number;
+  zombiesKilled: number;
+  dayNumber: number;
+}
+
+/** Emitted each time a zombie is killed. */
+export interface ZombieKilledEvent {
+  position: { x: number; y: number };
+  totalKills: number;
+}
+
+/** Emitted when the player places a barricade. */
+export interface BarricadePlacedEvent {
+  position: { x: number; y: number };
+  health: number;
+  maxHealth: number;
+}
+
+/** Emitted when a barricade is destroyed. */
+export interface BarricadeBrokenEvent {
+  position: { x: number; y: number };
+}
+
+/** Emitted when the player picks up an item. */
+export interface ItemPickedUpEvent {
+  itemType: string;
+  quantity: number;
+}
+
+/** Emitted when the player dies (permadeath). */
+export interface PlayerDiedEvent {
+  dayNumber: number;
+  totalKills: number;
+  /** Total survival time in seconds. */
+  survivalTime: number;
+  cause: string;
+}
+
+// ---------------------------------------------------------------------------
+// Event payload types — UI → Game commands
+// ---------------------------------------------------------------------------
+
+/** Emitted by UI to pause the game. */
+export interface PauseCommandEvent {
+  source: "ui";
+}
+
+/** Emitted by UI to resume the game. */
+export interface ResumeCommandEvent {
+  source: "ui";
+}
+
+/** Emitted by UI when a setting changes at runtime. */
+export interface SettingsChangedEvent {
+  key: string;
+  value: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Event map — maps event names to handler signatures
 // ---------------------------------------------------------------------------
 
 export interface GameEventMap {
+  // Clock / day-night cycle
   "phase-change": [event: PhaseChangeEvent];
   "clock-tick": [event: ClockTickEvent];
+
+  // Player state
+  "player-health-changed": [event: PlayerHealthChangedEvent];
+  "inventory-changed": [event: InventoryChangedEvent];
+  "player-died": [event: PlayerDiedEvent];
+
+  // Combat / waves
+  "wave-started": [event: WaveStartedEvent];
+  "wave-ended": [event: WaveEndedEvent];
+  "zombie-killed": [event: ZombieKilledEvent];
+
+  // Building / items
+  "barricade-placed": [event: BarricadePlacedEvent];
+  "barricade-broken": [event: BarricadeBrokenEvent];
+  "item-picked-up": [event: ItemPickedUpEvent];
+
+  // UI → Game commands (prefixed with cmd:)
+  "cmd:pause": [event: PauseCommandEvent];
+  "cmd:resume": [event: ResumeCommandEvent];
+  "cmd:settings-changed": [event: SettingsChangedEvent];
 }
 
 // ---------------------------------------------------------------------------

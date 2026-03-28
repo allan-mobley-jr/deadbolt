@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { createGameEventBus, safeEmit } from "./event-bus";
-import type { PhaseChangeEvent, ClockTickEvent } from "./event-bus";
+import type {
+  PhaseChangeEvent,
+  ClockTickEvent,
+  PlayerHealthChangedEvent,
+  WaveStartedEvent,
+  PauseCommandEvent,
+} from "./event-bus";
 
 describe("GameEventBus", () => {
   it("creates a new event bus instance", () => {
@@ -93,6 +99,50 @@ describe("GameEventBus", () => {
     });
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("emits player-health-changed events with correct payload", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.on("player-health-changed", handler);
+
+    const event: PlayerHealthChangedEvent = {
+      current: 75,
+      max: 100,
+      delta: -25,
+    };
+    bus.emit("player-health-changed", event);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(event);
+  });
+
+  it("emits wave-started events with correct payload", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.on("wave-started", handler);
+
+    const event: WaveStartedEvent = {
+      waveNumber: 3,
+      zombieCount: 20,
+      dayNumber: 2,
+    };
+    bus.emit("wave-started", event);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(event);
+  });
+
+  it("emits UI command events with correct payload", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.on("cmd:pause", handler);
+
+    const event: PauseCommandEvent = { source: "ui" };
+    bus.emit("cmd:pause", event);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(event);
   });
 });
 
