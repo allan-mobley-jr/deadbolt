@@ -66,10 +66,7 @@ export class GameLoop {
     }
 
     // --- FPS (exponential moving average) ---
-    {
-      const instant = 1 / dtSeconds;
-      this._fps += GameLoop.SMOOTHING * (instant - this._fps);
-    }
+    this._fps += GameLoop.SMOOTHING * (1 / dtSeconds - this._fps);
 
     // --- Accumulator ---
     this.accumulator += dtSeconds;
@@ -93,7 +90,7 @@ export class GameLoop {
     // --- Interpolation alpha ---
     // How far between the last physics tick and the next [0, 1).
     // Render systems will use this to interpolate sprite positions.
-    this._alpha = this.fixedDt > 0 ? this.accumulator / this.fixedDt : 0;
+    this._alpha = this.accumulator / this.fixedDt;
   }
 
   /** Interpolation alpha [0, 1) for rendering between physics states. */
