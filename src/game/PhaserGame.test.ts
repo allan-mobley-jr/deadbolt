@@ -1,7 +1,8 @@
 import Phaser from "phaser";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import {
   buildGameConfig,
+  createGame,
   destroyGame,
   getGame,
 } from "@/game/PhaserGame";
@@ -56,8 +57,17 @@ describe("buildGameConfig", () => {
 });
 
 describe("game singleton", () => {
+  let container: HTMLDivElement;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    container.id = "test";
+    document.body.appendChild(container);
+  });
+
   afterEach(() => {
     destroyGame();
+    container.remove();
   });
 
   it("getGame returns null before creation", () => {
@@ -66,5 +76,65 @@ describe("game singleton", () => {
 
   it("destroyGame is safe to call when no game exists", () => {
     expect(() => destroyGame()).not.toThrow();
+  });
+
+  it("createGame returns a game instance", () => {
+    const game = createGame("test");
+    expect(game).toBeDefined();
+    expect(getGame()).toBe(game);
+  });
+
+  it("createGame returns the same instance on double call (singleton guard)", () => {
+    const first = createGame("test");
+    const second = createGame("test");
+    expect(first).toBe(second);
+  });
+
+  it("destroyGame resets getGame to null", () => {
+    createGame("test");
+    expect(getGame()).not.toBeNull();
+    destroyGame();
+    expect(getGame()).toBeNull();
+  });
+
+  it("createGame works again after destroyGame", () => {
+    const first = createGame("test");
+    destroyGame();
+    const second = createGame("test");
+    expect(second).toBeDefined();
+    expect(second).not.toBe(first);
+  });
+
+  it("removes stale canvas from parent before creating game", () => {
+    const staleCanvas = document.createElement("canvas");
+    container.appendChild(staleCanvas);
+    expect(container.querySelector("canvas")).toBe(staleCanvas);
+
+    createGame("test");
+
+    // The stale canvas should have been removed
+    expect(container.contains(staleCanvas)).toBe(false);
+  });
+
+  it("clears singleton before calling destroy to prevent corrupted state", () => {
+    const game = createGame("test");
+    // Make destroy throw to simulate a Phaser teardown failure
+    game.destroy = () => {
+      throw new Error("WebGL context lost");
+    };
+
+    // Should not throw — the error is caught internally
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => destroyGame()).not.toThrow();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+
+    // Singleton should be cleared despite the destroy failure
+    expect(getGame()).toBeNull();
+
+    // A new game can be created without getting the broken instance
+    const newGame = createGame("test");
+    expect(newGame).toBeDefined();
+    expect(newGame).not.toBe(game);
   });
 });

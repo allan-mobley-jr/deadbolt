@@ -39,3 +39,12 @@ test("calls destroyGame on unmount", async () => {
   unmount();
   expect(mockDestroyGame).toHaveBeenCalled();
 });
+
+test("does not call createGame if unmounted before import resolves", async () => {
+  const { unmount } = render(<GameContainer />);
+  // Unmount immediately before the dynamic import can resolve
+  unmount();
+  // Let any pending microtasks flush
+  await new Promise((r) => setTimeout(r, 0));
+  expect(mockCreateGame).not.toHaveBeenCalled();
+});
