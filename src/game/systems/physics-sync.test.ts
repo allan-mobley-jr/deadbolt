@@ -1,8 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createWorld } from '../ecs/world';
 import { createPhysicsSyncSystem } from './physics-sync';
 
 describe('physics-sync system', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   /**
    * Create a world with a sprite entity whose gameObject is a plain mock.
    * The mock has `x`, `y`, and a truthy `body` to simulate a Phaser
@@ -19,6 +23,20 @@ describe('physics-sync system', () => {
 
     const runSync = createPhysicsSyncSystem(queries);
     return { world, queries, entity, mockGameObject, runSync };
+  }
+
+  /** Create a world with a bodyless sprite entity (physics body is null). */
+  function setupBodyless(posX = 0, posY = 0) {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { world, queries } = createWorld();
+    const entity = world.add({
+      position: { x: posX, y: posY },
+      sprite: { gameObject: { x: 99, y: 99, body: null } as unknown },
+    });
+
+    const runSync = createPhysicsSyncSystem(queries);
+    return { world, queries, entity, runSync };
   }
 
   it('copies gameObject position to ECS position', () => {
@@ -42,17 +60,6 @@ describe('physics-sync system', () => {
     expect(entity.position.y).toBe(40);
   });
 
-  it('skips entities with no physics body without throwing', () => {
-    const { world, queries } = createWorld();
-    world.add({
-      position: { x: 5, y: 5 },
-      sprite: { gameObject: { x: 99, y: 99, body: null } as unknown },
-    });
-
-    const runSync = createPhysicsSyncSystem(queries);
-    expect(() => runSync()).not.toThrow();
-  });
-
   it('warns once per bodyless entity, not on every tick', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -71,27 +78,14 @@ describe('physics-sync system', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('no physics body'),
     );
-
-    warnSpy.mockRestore();
   });
 
   it('does not update position for bodyless entities', () => {
-    const { world, queries } = createWorld();
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const entity = world.add({
-      position: { x: 5, y: 10 },
-      sprite: { gameObject: { x: 99, y: 99, body: null } as unknown },
-    });
-
-    const runSync = createPhysicsSyncSystem(queries);
+    const { entity, runSync } = setupBodyless(5, 10);
     runSync();
 
-    // Position should remain unchanged since the body is missing.
     expect(entity.position.x).toBe(5);
     expect(entity.position.y).toBe(10);
-
-    vi.restoreAllMocks();
   });
 
   it('processes zero sprite entities without error', () => {
