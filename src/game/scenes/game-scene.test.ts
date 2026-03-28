@@ -4,6 +4,7 @@ import { resetWorld, world } from "@/game/ecs/world";
 import { TILE_SIZE, TileType } from "@/game/tiles/tile-types";
 import type { WorldData } from "@/types/world";
 import { TileType as ProcgenTileType } from "@/types/procgen";
+import { setActiveBus, getActiveBus } from "@/game/PhaserGame";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -286,6 +287,21 @@ describe("GameScene", () => {
     expect(player!.renderable).toBeDefined();
     expect(player!.physicsBody).toBeDefined();
     expect(player!.health).toBeDefined();
+  });
+
+  it("publishes the event bus via setActiveBus on create", () => {
+    // Clear any prior bus to verify create() sets a fresh one
+    setActiveBus(null);
+    expect(getActiveBus()).toBeNull();
+
+    scene.create();
+
+    const bus = getActiveBus();
+    expect(bus).not.toBeNull();
+    expect(bus!.emit).toBeTypeOf("function");
+
+    // Clean up to avoid leaking into other tests
+    setActiveBus(null);
   });
 
   it("resets the ECS world on create to support re-entry", () => {

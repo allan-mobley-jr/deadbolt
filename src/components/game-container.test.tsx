@@ -4,10 +4,22 @@ import { render, cleanup, screen } from "@testing-library/react";
 
 const mockCreateGame = vi.fn();
 const mockDestroyGame = vi.fn();
+const mockGetActiveBus = vi.fn().mockReturnValue(null);
 
 vi.mock("@/game/PhaserGame", () => ({
   createGame: mockCreateGame,
   destroyGame: mockDestroyGame,
+  getActiveBus: mockGetActiveBus,
+}));
+
+const { mockDisconnect, mockConnectBridge } = vi.hoisted(() => {
+  const mockDisconnect = vi.fn();
+  const mockConnectBridge = vi.fn().mockReturnValue({ disconnect: mockDisconnect });
+  return { mockDisconnect, mockConnectBridge };
+});
+
+vi.mock("@/lib/bridge", () => ({
+  connectBridge: mockConnectBridge,
 }));
 
 import GameContainer from "@/components/game-container";
@@ -31,7 +43,8 @@ class TestErrorBoundary extends React.Component<
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.useRealTimers();
+  vi.resetAllMocks();
 });
 
 test("renders a div with id game-container", () => {
@@ -92,6 +105,59 @@ test("throws to error boundary when createGame fails", async () => {
   consoleSpy.mockRestore();
 });
 
+test("throws to error boundary when bridge polling exhausts retries", async () => {
+  // mockGetActiveBus returns undefined after resetAllMocks — bus never becomes available.
+  // Use fake timers to deterministically advance through 300+ rAF callbacks.
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Advance timers enough to flush the dynamic import microtask + 300 rAF
+  // retries. Each rAF fires on the next frame (~16ms). 320 × 20ms gives
+  // generous headroom.
+  for (let i = 0; i < 320; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  // After 300 retries, setError is called → re-render → throw → boundary.
+  expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
+  expect(screen.getByTestId("boundary-error").textContent).toContain(
+    "Event bus not available after timeout",
+  );
+
+  consoleSpy.mockRestore();
+});
+
+test("does not set error state if unmounted during bridge polling", async () => {
+  vi.useFakeTimers();
+
+  const { unmount } = render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Advance past import resolution + a few rAF polls.
+  for (let i = 0; i < 10; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  // Unmount mid-polling — sets cancelled=true.
+  unmount();
+
+  // Continue advancing — cancelled guard should prevent setError.
+  for (let i = 0; i < 400; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
+});
+
 test("does not set error state if createGame fails after unmount", async () => {
   // Make createGame throw — but the component will unmount first
   mockCreateGame.mockImplementation(() => {
@@ -113,4 +179,39 @@ test("does not set error state if createGame fails after unmount", async () => {
   expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
 
   consoleSpy.mockRestore();
+});
+
+test("connects bridge when getActiveBus returns a bus", async () => {
+  vi.useFakeTimers();
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  render(<GameContainer />);
+
+  // Flush dynamic import microtask + first rAF poll
+  await vi.advanceTimersByTimeAsync(20);
+
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalledTimes(1);
+  });
+  expect(mockConnectBridge).toHaveBeenCalledWith(fakeBus);
+});
+
+test("disconnects bridge on unmount after successful connection", async () => {
+  vi.useFakeTimers();
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  const { unmount } = render(<GameContainer />);
+
+  // Flush dynamic import + poll so bridge connects
+  await vi.advanceTimersByTimeAsync(20);
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalled();
+  });
+
+  unmount();
+  expect(mockDisconnect).toHaveBeenCalledTimes(1);
 });

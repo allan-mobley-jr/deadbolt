@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { createGameEventBus, safeEmit } from "./event-bus";
-import type { PhaseChangeEvent, ClockTickEvent } from "./event-bus";
+import type {
+  PhaseChangeEvent,
+  ClockTickEvent,
+  PlayerHealthChangedEvent,
+  WaveStartedEvent,
+  PauseCommandEvent,
+} from "./event-bus";
 
 describe("GameEventBus", () => {
   it("creates a new event bus instance", () => {
@@ -93,6 +99,50 @@ describe("GameEventBus", () => {
     });
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("emits player-health-changed events with correct payload", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.on("player-health-changed", handler);
+
+    const event: PlayerHealthChangedEvent = {
+      current: 75,
+      max: 100,
+      delta: -25,
+    };
+    bus.emit("player-health-changed", event);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(event);
+  });
+
+  it("emits wave-started events with correct payload", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.on("wave-started", handler);
+
+    const event: WaveStartedEvent = {
+      waveNumber: 3,
+      zombieCount: 20,
+      dayNumber: 2,
+    };
+    bus.emit("wave-started", event);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(event);
+  });
+
+  it("emits UI command events with correct payload", () => {
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.on("cmd:pause", handler);
+
+    const event: PauseCommandEvent = { source: "ui" };
+    bus.emit("cmd:pause", event);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(event);
   });
 });
 
@@ -187,5 +237,28 @@ describe("safeEmit", () => {
     expect(errorSpy).toHaveBeenCalledTimes(2);
     expect(survivor).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
+  });
+
+  it("does not auto-remove once() listeners (known limitation)", () => {
+    // safeEmit iterates bus.listeners() directly, bypassing eventemitter3's
+    // once-auto-removal. This test documents the known trade-off: once()
+    // listeners fire on every safeEmit call. All production callers use
+    // bus.on(), which is unaffected.
+    const bus = createGameEventBus();
+    const handler = vi.fn();
+    bus.once("phase-change", handler);
+
+    const payload = {
+      phase: "dusk" as const,
+      previousPhase: "day" as const,
+      dayNumber: 1,
+      timeRemainingInPhase: 15,
+    };
+
+    safeEmit(bus, "phase-change", payload);
+    safeEmit(bus, "phase-change", payload);
+
+    // With bus.emit() this would be 1. With safeEmit it's 2.
+    expect(handler).toHaveBeenCalledTimes(2);
   });
 });

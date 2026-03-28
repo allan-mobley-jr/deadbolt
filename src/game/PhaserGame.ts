@@ -2,9 +2,17 @@ import Phaser from "phaser";
 import BootScene from "@/game/scenes/boot-scene";
 import LoadingScene from "@/game/scenes/loading-scene";
 import GameScene from "@/game/scenes/game-scene";
+import type { GameEventBus } from "@/game/events/event-bus";
 
 /** Module-scoped singleton — one Phaser.Game instance at a time. */
 let instance: Phaser.Game | null = null;
+
+/**
+ * Module-scoped reference to the active game event bus.
+ * Set by GameScene.create(), cleared by destroyGame().
+ * The React layer reads this to connect the bridge.
+ */
+let activeBus: GameEventBus | null = null;
 
 /**
  * Build the Phaser game configuration without creating an instance.
@@ -75,10 +83,11 @@ export function destroyGame(): void {
   if (instance === null) {
     return;
   }
-  // Clear singleton FIRST so a failed destroy() never leaves a broken
-  // reference that the singleton guard would return on the next createGame().
+  // Clear singletons FIRST so a failed destroy() never leaves broken
+  // references that the singleton guard would return on the next createGame().
   const ref = instance;
   instance = null;
+  activeBus = null;
   try {
     ref.destroy(true);
   } catch (err) {
@@ -89,4 +98,18 @@ export function destroyGame(): void {
 /** Read-only accessor for the current Phaser.Game (or null). */
 export function getGame(): Phaser.Game | null {
   return instance;
+}
+
+// ---------------------------------------------------------------------------
+// Event bus accessors — used by the bridge and useGameEvent hook
+// ---------------------------------------------------------------------------
+
+/** Called by GameScene.create() to publish the session's event bus. */
+export function setActiveBus(bus: GameEventBus | null): void {
+  activeBus = bus;
+}
+
+/** Read-only accessor for the current event bus (or null). */
+export function getActiveBus(): GameEventBus | null {
+  return activeBus;
 }

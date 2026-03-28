@@ -10,9 +10,11 @@ import { createPhysicsSyncSystem } from "@/game/systems/physics-sync-system";
 import { createRenderSyncSystem } from "@/game/systems/render-sync-system";
 import { createDayNightSystem } from "@/game/systems/day-night-system";
 import { createLightingSystem } from "@/game/systems/lighting-system";
+import { createCommandSystem } from "@/game/systems/command-system";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus } from "@/game/events/event-bus";
+import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import type { WorldData } from "@/types/world";
@@ -96,8 +98,12 @@ export default class GameScene extends Phaser.Scene {
       eventBus: createGameEventBus(),
     };
 
+    // Publish the bus so the React bridge can connect to it.
+    setActiveBus(ctx.eventBus);
+
     // --- Assemble fixed-tick systems (60 Hz) ---
     const systems: SystemFn[] = [
+      createCommandSystem(ctx),
       createInputSystem(ctx),
       createDayNightSystem(ctx),
       createMovementSystem(ctx),

@@ -24,3 +24,4 @@ export { createPhysicsSyncSystem } from "./physics-sync-system";
 export { createRenderSyncSystem } from "./render-sync-system";
 export { createDayNightSystem } from "./day-night-system";
 export { createLightingSystem } from "./lighting-system";
+export { createCommandSystem } from "./command-system";

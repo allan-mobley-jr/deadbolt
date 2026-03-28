@@ -5,7 +5,10 @@ import {
   createGame,
   destroyGame,
   getGame,
+  setActiveBus,
+  getActiveBus,
 } from "@/game/PhaserGame";
+import { createGameEventBus } from "@/game/events/event-bus";
 import BootScene from "@/game/scenes/boot-scene";
 import LoadingScene from "@/game/scenes/loading-scene";
 import GameScene from "@/game/scenes/game-scene";
@@ -144,5 +147,37 @@ describe("game singleton", () => {
     // No DOM element with id "nonexistent" — createGame should still succeed
     expect(() => createGame("nonexistent")).not.toThrow();
     expect(getGame()).not.toBeNull();
+  });
+});
+
+describe("event bus accessors", () => {
+  afterEach(() => {
+    // Ensure bus is cleared even if destroyGame was not called
+    setActiveBus(null);
+  });
+
+  it("getActiveBus returns null before any bus is set", () => {
+    expect(getActiveBus()).toBeNull();
+  });
+
+  it("setActiveBus makes getActiveBus return the bus", () => {
+    const bus = createGameEventBus();
+    setActiveBus(bus);
+    expect(getActiveBus()).toBe(bus);
+  });
+
+  it("destroyGame clears activeBus", () => {
+    const container = document.createElement("div");
+    container.id = "bus-test";
+    document.body.appendChild(container);
+
+    createGame("bus-test");
+    setActiveBus(createGameEventBus());
+    expect(getActiveBus()).not.toBeNull();
+
+    destroyGame();
+    expect(getActiveBus()).toBeNull();
+
+    container.remove();
   });
 });
