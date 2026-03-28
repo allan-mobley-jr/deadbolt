@@ -16,10 +16,10 @@ import {
   TILE_PROPERTIES,
   TILE_SIZE,
   RENDERABLE_TILE_COUNT,
-} from './tile-types';
+} from "./tile-types";
 
 /** Texture key used by the tileset in the Phaser texture manager. */
-export const TILESET_KEY = 'tileset';
+export const TILESET_KEY = "tileset";
 
 /**
  * Generate the tileset texture and register it with the scene's texture
@@ -36,7 +36,7 @@ export function generateTileset(scene: Phaser.Scene): void {
   );
 
   if (!canvasTexture) {
-    throw new Error('Failed to create tileset canvas texture');
+    throw new Error("Failed to create tileset canvas texture");
   }
 
   const ctx = canvasTexture.getContext();
@@ -44,13 +44,13 @@ export function generateTileset(scene: Phaser.Scene): void {
   // Draw one coloured square per renderable tile type.
   // TileType values 1..N map to strip frames 0..N-1.
   for (const key of Object.values(TileType)) {
-    if (typeof key !== 'number') continue;     // skip reverse-enum strings
+    if (typeof key !== "number") continue;     // skip reverse-enum strings
     if (key === TileType.Empty) continue;      // Empty → no tile, not drawn
 
     const props = TILE_PROPERTIES[key as TileType];
     const frameIndex = key - 1; // TileType 1 → frame 0, etc.
 
-    ctx.fillStyle = `#${props.color.toString(16).padStart(6, '0')}`;
+    ctx.fillStyle = `#${props.color.toString(16).padStart(6, "0")}`;
     ctx.fillRect(frameIndex * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
   }
 

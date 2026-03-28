@@ -2,7 +2,7 @@
  * Hand-authored test map for validating the tilemap pipeline.
  *
  * Layout: 30 columns x 20 rows.
- * - Grass border around the edges
+ * - Grass border along the map edges, with breaks where the road and sidewalks exit on the left/right sides
  * - A horizontal road with sidewalk flanks crossing the map
  * - A 10x8 building in the upper-left area with 3 rooms, doors, and windows
  * - Player spawns inside the building on a floor tile
@@ -12,7 +12,7 @@
  * NO React imports allowed — this is pure TypeScript.
  */
 
-import { TileType } from './tile-types';
+import { TileType } from "./tile-types";
 
 const W = TileType.Wall;
 const F = TileType.Floor;

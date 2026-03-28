@@ -270,6 +270,22 @@ describe("GameScene", () => {
       const collisionArgs = mockTilemap.setCollision.mock.calls[0][0] as TileType[];
       expect(collisionArgs).not.toContain(TileType.Door);
     });
+
+    it("sidewalk tiles are excluded from the collision set", () => {
+      scene.create();
+      const collisionArgs = mockTilemap.setCollision.mock.calls[0][0] as TileType[];
+      expect(collisionArgs).not.toContain(TileType.Sidewalk);
+    });
+
+    it("throws when addTilesetImage returns null", () => {
+      mockTilemap.addTilesetImage.mockReturnValue(null);
+      expect(() => scene.create()).toThrow("Failed to add tileset image");
+    });
+
+    it("throws when createLayer returns null", () => {
+      mockTilemap.createLayer.mockReturnValue(null);
+      expect(() => scene.create()).toThrow("Failed to create tilemap layer");
+    });
   });
 
   // -----------------------------------------------------------------------

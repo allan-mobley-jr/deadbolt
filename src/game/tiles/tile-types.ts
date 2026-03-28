@@ -49,14 +49,14 @@ export interface TileProperties {
  * players can pass through doorways.
  */
 export const TILE_PROPERTIES: Record<TileType, TileProperties> = {
-  [TileType.Empty]:    { collides: false, color: 0x000000, label: 'empty' },
-  [TileType.Wall]:     { collides: true,  color: 0x555555, label: 'wall' },
-  [TileType.Floor]:    { collides: false, color: 0xc4a882, label: 'floor' },
-  [TileType.Door]:     { collides: false, color: 0x8b4513, label: 'door' },
-  [TileType.Window]:   { collides: true,  color: 0x87ceeb, label: 'window' },
-  [TileType.Road]:     { collides: false, color: 0x333333, label: 'road' },
-  [TileType.Sidewalk]: { collides: false, color: 0x999999, label: 'sidewalk' },
-  [TileType.Grass]:    { collides: false, color: 0x4a7c3f, label: 'grass' },
+  [TileType.Empty]:    { collides: false, color: 0x000000, label: "empty" },
+  [TileType.Wall]:     { collides: true,  color: 0x555555, label: "wall" },
+  [TileType.Floor]:    { collides: false, color: 0xc4a882, label: "floor" },
+  [TileType.Door]:     { collides: false, color: 0x8b4513, label: "door" },
+  [TileType.Window]:   { collides: true,  color: 0x87ceeb, label: "window" },
+  [TileType.Road]:     { collides: false, color: 0x333333, label: "road" },
+  [TileType.Sidewalk]: { collides: false, color: 0x999999, label: "sidewalk" },
+  [TileType.Grass]:    { collides: false, color: 0x4a7c3f, label: "grass" },
 };
 
 /** Number of renderable tile types (excludes Empty which maps to "no tile"). */
