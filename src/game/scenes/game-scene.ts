@@ -10,47 +10,19 @@ import { createPhysicsSyncSystem } from "@/game/systems/physics-sync-system";
 import { createRenderSyncSystem } from "@/game/systems/render-sync-system";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
-
-// ---------------------------------------------------------------------------
-// Test map constants
-// ---------------------------------------------------------------------------
-
-/** World dimensions for the temporary test map (pixels). */
-const MAP_WIDTH = 2000;
-const MAP_HEIGHT = 2000;
-
-/** Floor colour (slightly lighter than the camera background). */
-const FLOOR_COLOUR = 0x2a2a3e;
-
-/** Wall colour. */
-const WALL_COLOUR = 0x555577;
-
-// ---------------------------------------------------------------------------
-// Wall layout — each entry is [x, y, width, height]
-// ---------------------------------------------------------------------------
-
-const WALLS: readonly [number, number, number, number][] = [
-  // Outer boundary walls
-  [MAP_WIDTH / 2, 10, MAP_WIDTH, 20], // top
-  [MAP_WIDTH / 2, MAP_HEIGHT - 10, MAP_WIDTH, 20], // bottom
-  [10, MAP_HEIGHT / 2, 20, MAP_HEIGHT], // left
-  [MAP_WIDTH - 10, MAP_HEIGHT / 2, 20, MAP_HEIGHT], // right
-  // Interior obstacles
-  [600, 500, 200, 40],
-  [1400, 500, 40, 200],
-  [1000, 800, 300, 40],
-  [500, 1200, 40, 300],
-  [1500, 1300, 250, 40],
-  [1000, 1600, 40, 250],
-];
-
-// ---------------------------------------------------------------------------
-// Scene
-// ---------------------------------------------------------------------------
+import {
+  createTestMap,
+  TEST_MAP_WIDTH,
+  TEST_MAP_HEIGHT,
+  PLAYER_SPAWN,
+} from "@/game/tiles/test-map";
+import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
+import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 
 /**
- * Main gameplay scene. Hosts the fixed-timestep game loop that drives
- * all ECS systems at 60 Hz, independent of the browser's render rate.
+ * Main gameplay scene. Builds the tilemap from test data, spawns the player,
+ * and hosts the fixed-timestep game loop that drives all ECS systems at 60 Hz,
+ * independent of the browser's render rate.
  */
 export default class GameScene extends Phaser.Scene {
   private gameLoop!: GameLoop;
@@ -72,16 +44,9 @@ export default class GameScene extends Phaser.Scene {
 
     // --- Camera / background ---
     this.cameras.main.setBackgroundColor("#1a1a2e");
-    this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-    // --- Test floor ---
-    this.add.rectangle(
-      MAP_WIDTH / 2,
-      MAP_HEIGHT / 2,
-      MAP_WIDTH,
-      MAP_HEIGHT,
-      FLOOR_COLOUR,
-    );
+    // --- Build tilemap ---
+    this.buildTilemap();
 
     // --- Disable Matter.js auto-stepping (we step manually in PhysicsSyncSystem) ---
     this.matter.world.autoUpdate = false;
@@ -89,34 +54,21 @@ export default class GameScene extends Phaser.Scene {
     // --- Body registry ---
     const bodyRegistry = new BodyRegistry();
 
-    // --- Build test map walls ---
-    for (const [x, y, w, h] of WALLS) {
-      const wallBody = this.matter.add.rectangle(x, y, w, h, {
-        isStatic: true,
-      });
-      bodyRegistry.register(wallBody);
-      // Visual indicator for the wall
-      this.add.rectangle(x, y, w, h, WALL_COLOUR);
-    }
+    // --- Spawn player from tilemap spawn point ---
+    const px = PLAYER_SPAWN.x * TILE_SIZE + TILE_SIZE / 2;
+    const py = PLAYER_SPAWN.y * TILE_SIZE + TILE_SIZE / 2;
 
-    // --- Spawn player ---
-    const playerBody = this.matter.add.rectangle(
-      MAP_WIDTH / 2,
-      MAP_HEIGHT / 2,
-      24,
-      24,
-      {
-        friction: 0,
-        frictionAir: 0, // We handle deceleration in MovementSystem
-        frictionStatic: 0,
-        restitution: 0, // No bounce
-      },
-    );
+    const playerBody = this.matter.add.rectangle(px, py, 24, 24, {
+      friction: 0,
+      frictionAir: 0,
+      frictionStatic: 0,
+      restitution: 0,
+    });
     // Prevent rotation — set inertia after creation (not in MatterBodyConfig)
     playerBody.inertia = Infinity;
     playerBody.inverseInertia = 0;
     bodyRegistry.register(playerBody);
-    createPlayerEntity(MAP_WIDTH / 2, MAP_HEIGHT / 2, playerBody.id);
+    createPlayerEntity(px, py, playerBody.id);
 
     // --- Scene context (shared by all system factories) ---
     const ctx: SceneContext = {
@@ -182,5 +134,55 @@ export default class GameScene extends Phaser.Scene {
         `FPS: ${Math.round(fps)}\nPhysics: ${physicsTicks} ticks\nAlpha: ${alpha.toFixed(3)}`,
       );
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Tilemap construction
+  // -----------------------------------------------------------------------
+
+  private buildTilemap(): void {
+    const tileData = createTestMap();
+
+    // Create tilemap from the 2D data array.
+    const map = this.make.tilemap({
+      data: tileData,
+      tileWidth: TILE_SIZE,
+      tileHeight: TILE_SIZE,
+    });
+
+    // Add the programmatic tileset. firstgid=1 means data value 1 → frame 0.
+    const tileset = map.addTilesetImage(
+      TILESET_KEY,
+      TILESET_KEY,
+      TILE_SIZE,
+      TILE_SIZE,
+      0,
+      0,
+    );
+
+    if (!tileset) {
+      throw new Error("Failed to add tileset image");
+    }
+
+    const layer = map.createLayer(0, tileset, 0, 0);
+    if (!layer) {
+      throw new Error("Failed to create tilemap layer");
+    }
+
+    // Mark colliding tile types.
+    const collidingIndices = Object.values(TileType).filter(
+      (v): v is TileType =>
+        typeof v === "number" && TILE_PROPERTIES[v as TileType].collides,
+    );
+
+    map.setCollision(collidingIndices);
+
+    // Convert colliding tiles to Matter.js static bodies.
+    this.matter.world.convertTilemapLayer(layer);
+
+    // Camera bounds match map dimensions.
+    const mapWidth = TEST_MAP_WIDTH * TILE_SIZE;
+    const mapHeight = TEST_MAP_HEIGHT * TILE_SIZE;
+    this.cameras.main.setBounds(0, 0, mapWidth, mapHeight);
   }
 }

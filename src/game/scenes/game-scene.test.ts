@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import GameScene from "@/game/scenes/game-scene";
 import { resetWorld, world } from "@/game/ecs/world";
+import { TEST_MAP_WIDTH, TEST_MAP_HEIGHT, PLAYER_SPAWN } from "@/game/tiles/test-map";
+import { TILE_SIZE, TileType } from "@/game/tiles/tile-types";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -59,6 +61,18 @@ function createMockKeys() {
   };
 }
 
+/** Create a mock tilemap returned by this.make.tilemap(). */
+function createMockTilemap() {
+  const mockLayer = { id: "layer-0" };
+  const mockTileset = { name: "tileset" };
+  return {
+    addTilesetImage: vi.fn().mockReturnValue(mockTileset),
+    createLayer: vi.fn().mockReturnValue(mockLayer),
+    setCollision: vi.fn(),
+    _mockLayer: mockLayer,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
@@ -67,11 +81,12 @@ describe("GameScene", () => {
   let scene: GameScene;
   let setBackgroundColor: ReturnType<typeof vi.fn>;
   let setBounds: ReturnType<typeof vi.fn>;
-  // Title text was removed from the scene; variable kept for potential future UI text
   let fpsText: ReturnType<typeof createMockText>;
   let keydownHandler: ((event: unknown) => void) | undefined;
   let mockKeys: ReturnType<typeof createMockKeys>;
   let worldStep: ReturnType<typeof vi.fn>;
+  let convertTilemapLayer: ReturnType<typeof vi.fn>;
+  let mockTilemap: ReturnType<typeof createMockTilemap>;
 
   beforeEach(() => {
     nextBodyId = 1;
@@ -82,6 +97,8 @@ describe("GameScene", () => {
     fpsText = createMockText();
     mockKeys = createMockKeys();
     worldStep = vi.fn();
+    convertTilemapLayer = vi.fn();
+    mockTilemap = createMockTilemap();
 
     let textCallCount = 0;
 
@@ -99,7 +116,6 @@ describe("GameScene", () => {
     scene.add = {
       text: vi.fn().mockImplementation(() => {
         textCallCount++;
-        // First call is the FPS overlay (floor + walls use rectangle)
         return textCallCount === 1 ? fpsText : createMockText();
       }),
       rectangle: vi.fn().mockImplementation(() => createMockRect()),
@@ -112,6 +128,10 @@ describe("GameScene", () => {
         strokePath: vi.fn(),
       })),
     } as unknown as Phaser.GameObjects.GameObjectFactory;
+
+    scene.make = {
+      tilemap: vi.fn().mockReturnValue(mockTilemap),
+    } as unknown as Phaser.GameObjects.GameObjectCreator;
 
     scene.scale = {
       width: 1280,
@@ -134,6 +154,7 @@ describe("GameScene", () => {
       world: {
         autoUpdate: true,
         step: worldStep,
+        convertTilemapLayer,
       },
       add: {
         rectangle: vi.fn().mockImplementation(
@@ -157,11 +178,6 @@ describe("GameScene", () => {
     expect(setBackgroundColor).toHaveBeenCalledWith("#1a1a2e");
   });
 
-  it("sets camera bounds on create", () => {
-    scene.create();
-    expect(setBounds).toHaveBeenCalledWith(0, 0, 2000, 2000);
-  });
-
   it("disables Matter.js auto-update", () => {
     scene.create();
     expect(scene.matter.world.autoUpdate).toBe(false);
@@ -179,19 +195,6 @@ describe("GameScene", () => {
     expect(player!.health).toBeDefined();
   });
 
-  it("creates walls as static Matter.js bodies", () => {
-    scene.create();
-    const addRect = scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
-    // At least boundary walls + interior obstacles + player = many calls
-    expect(addRect.mock.calls.length).toBeGreaterThanOrEqual(5);
-    // Check that wall calls include isStatic
-    const wallCalls = addRect.mock.calls.filter(
-      (args: unknown[]) =>
-        args[4] && (args[4] as { isStatic?: boolean }).isStatic === true,
-    );
-    expect(wallCalls.length).toBeGreaterThanOrEqual(4); // at least boundary walls
-  });
-
   it("resets the ECS world on create to support re-entry", () => {
     // Add a dummy entity before create
     world.add({ position: { x: 99, y: 99 } });
@@ -207,6 +210,87 @@ describe("GameScene", () => {
     );
     expect(dummy).toBeUndefined();
   });
+
+  // -----------------------------------------------------------------------
+  // Tilemap integration
+  // -----------------------------------------------------------------------
+
+  describe("tilemap", () => {
+    it("creates a tilemap from test data with correct tile dimensions", () => {
+      scene.create();
+      const makeTilemap = scene.make.tilemap as ReturnType<typeof vi.fn>;
+      expect(makeTilemap).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tileWidth: TILE_SIZE,
+          tileHeight: TILE_SIZE,
+        }),
+      );
+    });
+
+    it("sets camera bounds to tilemap pixel dimensions", () => {
+      scene.create();
+      const expectedWidth = TEST_MAP_WIDTH * TILE_SIZE;
+      const expectedHeight = TEST_MAP_HEIGHT * TILE_SIZE;
+      expect(setBounds).toHaveBeenCalledWith(0, 0, expectedWidth, expectedHeight);
+    });
+
+    it("sets collision on Wall and Window tile types", () => {
+      scene.create();
+      const collisionArgs = mockTilemap.setCollision.mock.calls[0][0] as TileType[];
+      expect(collisionArgs).toContain(TileType.Wall);
+      expect(collisionArgs).toContain(TileType.Window);
+      expect(collisionArgs).not.toContain(TileType.Door);
+      expect(collisionArgs).not.toContain(TileType.Floor);
+      expect(collisionArgs).not.toContain(TileType.Road);
+      expect(collisionArgs).not.toContain(TileType.Grass);
+    });
+
+    it("converts colliding tiles to Matter.js static bodies", () => {
+      scene.create();
+      expect(convertTilemapLayer).toHaveBeenCalledWith(mockTilemap._mockLayer);
+    });
+
+    it("spawns player at the correct pixel position from PLAYER_SPAWN", () => {
+      scene.create();
+      const expectedX = PLAYER_SPAWN.x * TILE_SIZE + TILE_SIZE / 2;
+      const expectedY = PLAYER_SPAWN.y * TILE_SIZE + TILE_SIZE / 2;
+      const addRect = scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+      // Player rectangle is created at spawn position
+      expect(addRect).toHaveBeenCalledWith(
+        expectedX,
+        expectedY,
+        24,
+        24,
+        expect.objectContaining({ friction: 0 }),
+      );
+    });
+
+    it("door tiles are excluded from the collision set", () => {
+      scene.create();
+      const collisionArgs = mockTilemap.setCollision.mock.calls[0][0] as TileType[];
+      expect(collisionArgs).not.toContain(TileType.Door);
+    });
+
+    it("sidewalk tiles are excluded from the collision set", () => {
+      scene.create();
+      const collisionArgs = mockTilemap.setCollision.mock.calls[0][0] as TileType[];
+      expect(collisionArgs).not.toContain(TileType.Sidewalk);
+    });
+
+    it("throws when addTilesetImage returns null", () => {
+      mockTilemap.addTilesetImage.mockReturnValue(null);
+      expect(() => scene.create()).toThrow("Failed to add tileset image");
+    });
+
+    it("throws when createLayer returns null", () => {
+      mockTilemap.createLayer.mockReturnValue(null);
+      expect(() => scene.create()).toThrow("Failed to create tilemap layer");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Game loop integration
+  // -----------------------------------------------------------------------
 
   describe("game loop integration", () => {
     it("does not throw when update is called after create", () => {
@@ -250,6 +334,10 @@ describe("GameScene", () => {
       expect(spy).toHaveBeenCalledTimes(1);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // FPS debug overlay
+  // -----------------------------------------------------------------------
 
   describe("FPS debug overlay", () => {
     it("creates the FPS text on create and hides it by default", () => {
@@ -313,6 +401,10 @@ describe("GameScene", () => {
       expect(() => scene.create()).not.toThrow();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Crash recovery
+  // -----------------------------------------------------------------------
 
   describe("update before create", () => {
     it("catches crash when update() is called before create()", () => {
