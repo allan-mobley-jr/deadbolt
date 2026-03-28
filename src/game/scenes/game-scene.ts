@@ -94,6 +94,10 @@ export class GameScene extends Phaser.Scene {
       // Disable gravity (top-down game)
       this.matter.world.setGravity(0, 0);
 
+      // Disable Phaser's automatic physics stepping so we control it
+      // inside the fixed-timestep loop for frame-rate-independent movement.
+      this.matter.world.autoUpdate = false;
+
       // Clean up on scene shutdown
       this.events.on('shutdown', this.onShutdown, this);
     } catch (err) {
@@ -116,6 +120,7 @@ export class GameScene extends Phaser.Scene {
     while (this.accumulator >= FIXED_DT_MS && steps < MAX_STEPS_PER_FRAME) {
       this.movementSystem();
       this.applyVelocityToBody();
+      this.matter.world.step(FIXED_DT_MS);
       this.accumulator -= FIXED_DT_MS;
       steps++;
     }
