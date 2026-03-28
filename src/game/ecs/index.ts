@@ -6,6 +6,9 @@ export type {
   PlayerControlled,
   PhysicsBody,
   Health,
+  Inventory,
+  Interactable,
+  ObjectProperties,
 } from "./components";
 
 // Entity
@@ -20,12 +23,14 @@ export {
   createZombieEntity,
   createBarricadeEntity,
   createProjectileEntity,
+  createObjectEntity,
 } from "./archetypes";
 export type {
   PlayerEntity,
   ZombieEntity,
   BarricadeEntity,
   ProjectileEntity,
+  ObjectEntity,
 } from "./archetypes";
 
 // Queries
@@ -35,4 +40,6 @@ export {
   playerEntities,
   physicsBodies,
   damageableEntities,
+  interactableEntities,
+  inventoryEntities,
 } from "./queries";

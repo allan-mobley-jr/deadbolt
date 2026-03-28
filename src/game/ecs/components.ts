@@ -64,6 +64,22 @@ export interface Interactable {
   highlighted: boolean;
 }
 
+/**
+ * Player inventory — authoritative game state for carried items.
+ *
+ * The Zustand PlayerStore mirrors this for React display; the ECS
+ * component is the source of truth during gameplay. Systems read
+ * carryWeight to compute movement speed penalties.
+ */
+export interface Inventory {
+  /** Items currently carried by the player. */
+  items: Array<{ objectType: string; quantity: number }>;
+  /** Sum of carried item masses in kg. */
+  carryWeight: number;
+  /** Maximum carry capacity in kg. */
+  maxCarryWeight: number;
+}
+
 /** Properties specific to placed world objects. */
 export interface ObjectProperties {
   /** Object type key (matches ObjectDefinition.type). */
