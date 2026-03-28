@@ -7,14 +7,20 @@ export { GameLoop, FIXED_DT, MAX_STEPS_PER_FRAME } from "./game-loop";
 export type { GameLoopStats } from "./game-loop";
 
 // Scene context
-export type { SceneContext, InputState } from "./scene-context";
-export { createInputState } from "./scene-context";
+export type { SceneContext, InputState, ClockState } from "./scene-context";
+export { createInputState, createClockState } from "./scene-context";
 
 // Body registry
 export { BodyRegistry } from "./body-registry";
+
+// Day/night constants
+export type { DayPhase, DayNightTiming } from "./day-night-constants";
+export { DAY_NIGHT, LIGHTING, getPhaseDuration, getNextPhase } from "./day-night-constants";
 
 // Systems
 export { createInputSystem } from "./input-system";
 export { createMovementSystem } from "./movement-system";
 export { createPhysicsSyncSystem } from "./physics-sync-system";
 export { createRenderSyncSystem } from "./render-sync-system";
+export { createDayNightSystem } from "./day-night-system";
+export { createLightingSystem } from "./lighting-system";
