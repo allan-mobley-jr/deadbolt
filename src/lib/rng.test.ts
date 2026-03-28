@@ -268,6 +268,33 @@ describe('RNG.weightedPick', () => {
     expect(() => rng.weightedPick(items)).toThrow(RangeError);
   });
 
+  it('throws RangeError on NaN weight', () => {
+    const rng = new RNG('weighted-nan');
+    const items: WeightedItem<string>[] = [{ value: 'x', weight: NaN }];
+    expect(() => rng.weightedPick(items)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on Infinity weight', () => {
+    const rng = new RNG('weighted-inf');
+    const items: WeightedItem<string>[] = [{ value: 'x', weight: Infinity }];
+    expect(() => rng.weightedPick(items)).toThrow(RangeError);
+  });
+
+  it('throws RangeError on -Infinity weight', () => {
+    const rng = new RNG('weighted-neg-inf');
+    const items: WeightedItem<string>[] = [{ value: 'x', weight: -Infinity }];
+    expect(() => rng.weightedPick(items)).toThrow(RangeError);
+  });
+
+  it('throws RangeError when a non-first item has a NaN weight', () => {
+    const rng = new RNG('weighted-nan-mid');
+    const items: WeightedItem<string>[] = [
+      { value: 'ok', weight: 5 },
+      { value: 'bad', weight: NaN },
+    ];
+    expect(() => rng.weightedPick(items)).toThrow(RangeError);
+  });
+
   it('handles fractional weights correctly', () => {
     const rng = new RNG('weighted-frac');
     const items: WeightedItem<string>[] = [

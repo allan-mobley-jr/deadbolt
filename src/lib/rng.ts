@@ -159,11 +159,11 @@ export class RNG {
   /**
    * Pick a random element weighted by the provided weights.
    *
-   * Weights must be non-negative. At least one weight must be positive.
+   * Weights must be finite and non-negative. At least one weight must be positive.
    * The last item absorbs floating-point rounding slack so the loop is
    * guaranteed to return.
    *
-   * @throws {RangeError} If `items` is empty, all weights are &le; 0, or any weight is negative.
+   * @throws {RangeError} If `items` is empty, all weights are &le; 0, or any weight is non-finite or negative.
    */
   weightedPick<T>(items: readonly WeightedItem<T>[]): T {
     if (items.length === 0) {
@@ -174,9 +174,9 @@ export class RNG {
 
     let totalWeight = 0;
     for (const item of items) {
-      if (item.weight < 0) {
+      if (!Number.isFinite(item.weight) || item.weight < 0) {
         throw new RangeError(
-          `RNG.weightedPick: negative weight (${item.weight}) is not allowed`,
+          `RNG.weightedPick: weight must be a finite non-negative number, got ${item.weight}`,
         );
       }
       totalWeight += item.weight;
