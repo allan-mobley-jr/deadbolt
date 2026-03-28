@@ -1,8 +1,7 @@
 import type Phaser from "phaser";
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
-import { renderableEntities } from "@/game/ecs/queries";
-import { playerEntities } from "@/game/ecs/queries";
+import { playerEntities, renderableEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
 
 // ---------------------------------------------------------------------------
@@ -40,16 +39,7 @@ function createVisual(
   y: number,
 ): Phaser.GameObjects.Rectangle {
   const size = key === "bullet" ? 6 : PLAYER_SIZE;
-  const rect = (scene.add as unknown as {
-    rectangle: (
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      fill: number,
-    ) => Phaser.GameObjects.Rectangle;
-  }).rectangle(x, y, size, size, spriteColour(key));
-  return rect;
+  return scene.add.rectangle(x, y, size, size, spriteColour(key));
 }
 
 // ---------------------------------------------------------------------------
@@ -102,14 +92,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         ) {
           const cam = scene.cameras.main;
           if (cam) {
-            (cam as unknown as {
-              startFollow: (
-                target: Phaser.GameObjects.Rectangle,
-                roundPixels?: boolean,
-                lerpX?: number,
-                lerpY?: number,
-              ) => void;
-            }).startFollow(sprite, true, 0.08, 0.08);
+            cam.startFollow(sprite, true, 0.08, 0.08);
             cameraFollowWired = true;
           }
         }
@@ -137,9 +120,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       const playerSprite = sprites.get(player);
       if (playerSprite) {
         if (!aimGfx) {
-          aimGfx = (scene.add as unknown as {
-            graphics: () => Phaser.GameObjects.Graphics;
-          }).graphics();
+          aimGfx = scene.add.graphics();
         }
 
         aimGfx.clear();

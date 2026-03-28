@@ -1,7 +1,6 @@
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
-import { physicsBodies } from "@/game/ecs/queries";
-import { movingEntities } from "@/game/ecs/queries";
+import { movingEntities, physicsBodies } from "@/game/ecs/queries";
 
 /**
  * Factory that returns a PhysicsSyncSystem.
@@ -22,25 +21,32 @@ export function createPhysicsSyncSystem(ctx: SceneContext): SystemFn {
   /** Track body IDs that have already been warned about to avoid 60 Hz spam. */
   const warnedMissing = new Set<number>();
 
+  /** Look up a body by id, logging a warning (once) when missing. */
+  function resolveBody(
+    bodyId: number,
+    context: string,
+  ): MatterJS.BodyType | undefined {
+    const body = ctx.bodyRegistry.get(bodyId);
+    if (!body && !warnedMissing.has(bodyId)) {
+      warnedMissing.add(bodyId);
+      console.warn(
+        `[PhysicsSyncSystem] No body found for bodyId=${bodyId}. ${context}`,
+      );
+    }
+    return body;
+  }
+
   return (dt: number): void => {
-    const { bodyRegistry, scene } = ctx;
-    const matterWorld = (
-      scene as unknown as { matter: { world: { step: (delta: number) => void } } }
-    ).matter.world;
+    const matterWorld = ctx.scene.matter.world;
 
     // 1. Write: ECS velocity → Matter.js body velocity
     for (const entity of movingEntities) {
       if (!entity.physicsBody) continue;
-      const body = bodyRegistry.get(entity.physicsBody.bodyId);
-      if (!body) {
-        if (!warnedMissing.has(entity.physicsBody.bodyId)) {
-          warnedMissing.add(entity.physicsBody.bodyId);
-          console.warn(
-            `[PhysicsSyncSystem] No body found for bodyId=${entity.physicsBody.bodyId}. Entity will not receive velocity updates.`,
-          );
-        }
-        continue;
-      }
+      const body = resolveBody(
+        entity.physicsBody.bodyId,
+        "Entity will not receive velocity updates.",
+      );
+      if (!body) continue;
 
       // Matter.js velocity = displacement per step (pixels per step)
       const stepVx = entity.velocity.vx * dt;
@@ -59,16 +65,11 @@ export function createPhysicsSyncSystem(ctx: SceneContext): SystemFn {
 
     // 3. Read: Matter.js body position → ECS position
     for (const entity of physicsBodies) {
-      const body = bodyRegistry.get(entity.physicsBody.bodyId);
-      if (!body) {
-        if (!warnedMissing.has(entity.physicsBody.bodyId)) {
-          warnedMissing.add(entity.physicsBody.bodyId);
-          console.warn(
-            `[PhysicsSyncSystem] No body found for bodyId=${entity.physicsBody.bodyId}. Entity position will not update.`,
-          );
-        }
-        continue;
-      }
+      const body = resolveBody(
+        entity.physicsBody.bodyId,
+        "Entity position will not update.",
+      );
+      if (!body) continue;
 
       // Store previous position for render interpolation
       entity.previousPosition = {
