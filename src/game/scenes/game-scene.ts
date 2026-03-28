@@ -11,12 +11,14 @@ import { createRenderSyncSystem } from "@/game/systems/render-sync-system";
 import { createDayNightSystem } from "@/game/systems/day-night-system";
 import { createLightingSystem } from "@/game/systems/lighting-system";
 import { createCommandSystem } from "@/game/systems/command-system";
-import { createPlayerEntity } from "@/game/ecs/archetypes";
+import { createInteractionSystem } from "@/game/systems/interaction-system";
+import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
+import { getObjectDef } from "@/game/procgen/object-defs";
 import type { WorldData } from "@/types/world";
 
 /**
@@ -101,10 +103,14 @@ export default class GameScene extends Phaser.Scene {
     // Publish the bus so the React bridge can connect to it.
     setActiveBus(ctx.eventBus);
 
+    // --- Spawn world objects from procedural generation data ---
+    this.spawnWorldObjects(bodyRegistry);
+
     // --- Assemble fixed-tick systems (60 Hz) ---
     const systems: SystemFn[] = [
       createCommandSystem(ctx),
       createInputSystem(ctx),
+      createInteractionSystem(ctx),
       createDayNightSystem(ctx),
       createMovementSystem(ctx),
       createPhysicsSyncSystem(ctx),
@@ -212,5 +218,53 @@ export default class GameScene extends Phaser.Scene {
     const mapWidth = widthTiles * TILE_SIZE;
     const mapHeight = heightTiles * TILE_SIZE;
     this.cameras.main.setBounds(0, 0, mapWidth, mapHeight);
+  }
+
+  // -----------------------------------------------------------------------
+  // Object spawning
+  // -----------------------------------------------------------------------
+
+  /**
+   * Convert PlacedObjects from all buildings into ECS entities with
+   * Matter.js physics bodies. Each object gets components based on
+   * its ObjectDefinition.
+   */
+  private spawnWorldObjects(bodyRegistry: BodyRegistry): void {
+    const buildings = this.worldData!.layout.buildings;
+
+    for (const building of buildings) {
+      for (const placed of building.objects) {
+        const def = getObjectDef(placed.objectType);
+        if (!def) continue;
+
+        // Convert tile coords to pixel center
+        const px = placed.position.x * TILE_SIZE + TILE_SIZE / 2;
+        const py = placed.position.y * TILE_SIZE + TILE_SIZE / 2;
+
+        // Create physics body sized by immovability
+        const bodySize = def.immovable ? 32 : 16;
+        const body = this.matter.add.rectangle(px, py, bodySize, bodySize, {
+          isStatic: def.immovable,
+          friction: 0.8,
+          frictionAir: 0.1,
+          restitution: 0.2,
+          mass: def.physics.mass,
+        });
+        body.inertia = Infinity;
+        body.inverseInertia = 0;
+        bodyRegistry.register(body);
+
+        createObjectEntity(
+          px,
+          py,
+          body.id,
+          def.type,
+          def.category,
+          def.immovable,
+          def.physics,
+          def.lootValue,
+        );
+      }
+    }
   }
 }
