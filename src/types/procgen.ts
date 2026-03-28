@@ -23,6 +23,9 @@ export interface TileCoord {
 /** Cardinal direction a door or window faces outward. */
 export type Direction = 'north' | 'south' | 'east' | 'west';
 
+/** Classification of a building — determines room type distribution in BSP. */
+export type BuildingClass = 'residential' | 'commercial' | 'industrial';
+
 // ---------------------------------------------------------------------------
 // Tile types
 // ---------------------------------------------------------------------------
@@ -57,9 +60,9 @@ export interface EntryPoint {
 export interface Room {
   /** Top-left corner in tile coords. */
   origin: TileCoord;
-  /** Width in tiles. */
+  /** Width in tiles (includes wall perimeter). */
   width: number;
-  /** Height in tiles. */
+  /** Height in tiles (includes wall perimeter). */
   height: number;
   /** Room archetype identifier (e.g. 'bedroom', 'kitchen', 'store_front'). */
   roomType: string;
@@ -115,6 +118,17 @@ export interface CityLayout {
   buildings: Building[];
   /** Seed used for generation (for reproducibility logging). */
   seed: string;
+}
+
+// ---------------------------------------------------------------------------
+// Room connectivity
+// ---------------------------------------------------------------------------
+
+/** A connection between two rooms via a door. */
+export interface RoomConnection {
+  roomIndexA: number;
+  roomIndexB: number;
+  doorPosition: TileCoord;
 }
 
 // ---------------------------------------------------------------------------
