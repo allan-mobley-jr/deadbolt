@@ -1,15 +1,18 @@
 import Phaser from "phaser";
 import { GameLoop } from "@/game/systems/game-loop";
 import type { SystemFn } from "@/game/systems/system-runner";
-import { createInputState } from "@/game/systems/scene-context";
+import { createInputState, createClockState } from "@/game/systems/scene-context";
 import type { SceneContext } from "@/game/systems/scene-context";
 import { BodyRegistry } from "@/game/systems/body-registry";
 import { createInputSystem } from "@/game/systems/input-system";
 import { createMovementSystem } from "@/game/systems/movement-system";
 import { createPhysicsSyncSystem } from "@/game/systems/physics-sync-system";
 import { createRenderSyncSystem } from "@/game/systems/render-sync-system";
+import { createDayNightSystem } from "@/game/systems/day-night-system";
+import { createLightingSystem } from "@/game/systems/lighting-system";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
+import { createGameEventBus } from "@/game/events/event-bus";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import type { WorldData } from "@/types/world";
@@ -89,11 +92,14 @@ export default class GameScene extends Phaser.Scene {
       bodyRegistry,
       inputState: createInputState(),
       getAlpha: () => this.gameLoop.alpha,
+      clockState: createClockState(),
+      eventBus: createGameEventBus(),
     };
 
     // --- Assemble fixed-tick systems (60 Hz) ---
     const systems: SystemFn[] = [
       createInputSystem(ctx),
+      createDayNightSystem(ctx),
       createMovementSystem(ctx),
       createPhysicsSyncSystem(ctx),
     ];
@@ -101,7 +107,10 @@ export default class GameScene extends Phaser.Scene {
     this.gameLoop = new GameLoop(systems);
 
     // --- Render-phase systems (once per frame, after fixed ticks) ---
-    this.renderSystems = [createRenderSyncSystem(ctx)];
+    this.renderSystems = [
+      createRenderSyncSystem(ctx),
+      createLightingSystem(ctx),
+    ];
 
     // --- Debug FPS overlay (F3 to toggle) ---
     this.fpsText = this.add

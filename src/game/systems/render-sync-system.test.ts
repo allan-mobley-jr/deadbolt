@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { createRenderSyncSystem } from "./render-sync-system";
-import { createInputState } from "./scene-context";
+import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
+import { createGameEventBus } from "@/game/events/event-bus";
 import { world, resetWorld } from "@/game/ecs/world";
 
 const DT = 1 / 60;
@@ -42,6 +43,8 @@ function createMockContext(alphaValue = 0.5): {
       bodyRegistry: new BodyRegistry(),
       inputState: createInputState(),
       getAlpha: () => alphaValue,
+      clockState: createClockState(),
+      eventBus: createGameEventBus(),
     },
     addRectangle,
   };
