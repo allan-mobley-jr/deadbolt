@@ -163,6 +163,20 @@ describe('RNG.int', () => {
     }
   });
 
+  it('collapsed-range branch still advances PRNG state', () => {
+    const a = new RNG('collapsed');
+    const b = new RNG('collapsed');
+
+    // a: collapsed range (ceil(1.5)=2 > floor(1.9)=1, returns 2)
+    a.int(1.5, 1.9);
+    // b: normal call that advances PRNG once
+    b.float();
+
+    // Both should have advanced the PRNG by one step, so subsequent
+    // calls produce identical values.
+    expect(a.float()).toBe(b.float());
+  });
+
   it('is deterministic', () => {
     const a = new RNG('int-det');
     const b = new RNG('int-det');
@@ -435,6 +449,20 @@ describe('RNG.derive', () => {
       expect(child.float()).toBe(freshChild.float());
     }
   });
+
+  it('derive() does not advance the parent PRNG state', () => {
+    const a = new RNG('parent-state');
+    const b = new RNG('parent-state');
+
+    // a: call derive, then read floats
+    a.derive('child');
+    // b: skip derive, read floats directly
+
+    // Parent sequence should be identical whether or not derive() was called.
+    for (let i = 0; i < 10; i++) {
+      expect(a.float()).toBe(b.float());
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -504,6 +532,28 @@ describe('RNG.raw', () => {
     const viaFloat = rng2.float();
 
     expect(viaRaw).toBe(viaFloat);
+  });
+
+  it('cached raw() reference becomes stale after reset()', () => {
+    const rng = new RNG('stale-raw');
+    const cachedPrng = rng.raw();
+
+    // Record the first 3 values of the sequence (positions 0, 1, 2).
+    // Both rng and cachedPrng share state, so both are now at position 3.
+    const sequence = [rng.float(), rng.float(), rng.float()];
+
+    // Reset replaces the internal PRNG — rng starts over at position 0,
+    // but cachedPrng still points to the old PRNG at position 3.
+    rng.reset();
+
+    // rng replays from position 0
+    expect(rng.float()).toBe(sequence[0]);
+    expect(rng.float()).toBe(sequence[1]);
+
+    // cachedPrng is stale — it continues from position 3 (not reset).
+    const staleValues = [cachedPrng(), cachedPrng(), cachedPrng()];
+    // Positions 3, 4, 5 should NOT equal positions 0, 1, 2.
+    expect(staleValues).not.toEqual(sequence);
   });
 });
 
