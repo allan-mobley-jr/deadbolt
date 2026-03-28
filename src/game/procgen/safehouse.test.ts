@@ -9,6 +9,7 @@ import {
 } from './safehouse';
 import { TileType, ObjectCategory } from '@/types/procgen';
 import type { Building, CityLayout, EntryPoint, PlacedObject } from '@/types/procgen';
+import { SAFEHOUSE_WEIGHTS } from './constants';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -41,6 +42,15 @@ function makeFurniture(x: number, y: number, objectType = 'sofa'): PlacedObject 
   return {
     position: { x, y },
     category: ObjectCategory.Furniture,
+    blocksMovement: true,
+    objectType,
+  };
+}
+
+function makeContainer(x: number, y: number, objectType = 'crate'): PlacedObject {
+  return {
+    position: { x, y },
+    category: ObjectCategory.Container,
     blocksMovement: true,
     objectType,
   };
@@ -271,6 +281,104 @@ describe('scoreBuilding', () => {
     const score = scoreBuilding(b, layout);
 
     expect(score.totalScore).toBeGreaterThanOrEqual(0);
+  });
+
+  it('gives full size score at exactly IDEAL_SIZE_MIN boundary', () => {
+    // 8 * 5 = 40 tiles = IDEAL_SIZE_MIN
+    const b = makeBuilding({
+      id: 'b-min',
+      width: 8,
+      height: 5,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(SAFEHOUSE_WEIGHTS.BUILDING_SIZE);
+  });
+
+  it('gives full size score at exactly IDEAL_SIZE_MAX boundary', () => {
+    // 12 * 10 = 120 tiles = IDEAL_SIZE_MAX
+    const b = makeBuilding({
+      id: 'b-max',
+      width: 12,
+      height: 10,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(SAFEHOUSE_WEIGHTS.BUILDING_SIZE);
+  });
+
+  it('gives zero size score at exactly 2x IDEAL_SIZE_MAX', () => {
+    // 24 * 10 = 240 tiles = 2 * IDEAL_SIZE_MAX
+    // excess = 240 - 120 = 120, fitness = max(0, 1 - 120/120) = 0
+    const b = makeBuilding({
+      id: 'b-2x',
+      width: 24,
+      height: 10,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(0);
+  });
+
+  it('gives zero size score for area zero', () => {
+    const b = makeBuilding({
+      id: 'b-zero',
+      width: 0,
+      height: 0,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(0);
+  });
+
+  it('excludes containers from loot count but includes in object density', () => {
+    const withContainers = makeBuilding({
+      id: 'b-containers',
+      width: 10,
+      height: 8,
+      entryPoints: [makeEntryPoint(1, 0)],
+      objects: [
+        makeLoot(1, 1),
+        makeLoot(2, 2),
+        makeContainer(3, 3),
+        makeContainer(4, 4),
+        makeContainer(5, 5),
+      ],
+    });
+
+    const lootOnly = makeBuilding({
+      id: 'b-loot-only',
+      width: 10,
+      height: 8,
+      origin: { x: 20, y: 20 },
+      entryPoints: [makeEntryPoint(21, 20)],
+      objects: [
+        makeLoot(21, 21),
+        makeLoot(22, 22),
+      ],
+    });
+
+    const layout = makeLayout([withContainers, lootOnly]);
+    const sContainers = scoreBuilding(withContainers, layout);
+    const sLootOnly = scoreBuilding(lootOnly, layout);
+
+    // Same loot count → same loot proximity score
+    expect(sContainers.lootProximityScore).toBe(sLootOnly.lootProximityScore);
+
+    // Containers count as cover → higher object density score
+    expect(sContainers.objectDensityScore).toBeGreaterThan(sLootOnly.objectDensityScore);
   });
 
   it('returns zero score for buildings with zero entry points (sealed)', () => {

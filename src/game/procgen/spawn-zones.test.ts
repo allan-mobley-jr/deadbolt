@@ -188,6 +188,65 @@ describe('generateEdgeSpawnZones', () => {
     const ids = zones.map((z) => z.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('discards edge zones where walkable points are insufficient', () => {
+    // Create a city where edges are mostly walls — only a small walkable patch on north
+    const size = 50;
+    const tiles = Array.from({ length: size }, () =>
+      Array.from({ length: size }, () => TileType.Wall),
+    );
+
+    // Fill the interior with roads (rows 10-40, cols 10-40) so it's not all walls
+    for (let y = 10; y < 40; y++) {
+      for (let x = 10; x < 40; x++) {
+        tiles[y][x] = TileType.Road;
+      }
+    }
+
+    // Add a small walkable patch near the north edge for one zone to survive
+    for (let x = 15; x < 25; x++) {
+      for (let y = 0; y < 5; y++) {
+        tiles[y][x] = TileType.Road;
+      }
+    }
+
+    const city: CityLayout = {
+      widthTiles: size,
+      heightTiles: size,
+      tiles,
+      buildings: [],
+      seed: 'wall-edges',
+    };
+
+    const rng = seedrandom('discard-test');
+    const zones = generateEdgeSpawnZones(city, safehouseCenter, rng);
+
+    // Should have fewer than the maximum (4 edges * 3 zones = 12)
+    const maxPossible = 4 * SPAWN_ZONE.ZONES_PER_EDGE;
+    expect(zones.length).toBeLessThan(maxPossible);
+    expect(zones.length).toBeGreaterThan(0);
+  });
+
+  it('returns zero zones when entire edges are unwalkable', () => {
+    const size = 50;
+    // All walls — nothing walkable
+    const tiles = Array.from({ length: size }, () =>
+      Array.from({ length: size }, () => TileType.Wall),
+    );
+
+    const city: CityLayout = {
+      widthTiles: size,
+      heightTiles: size,
+      tiles,
+      buildings: [],
+      seed: 'all-walls',
+    };
+
+    const rng = seedrandom('no-zones');
+    const zones = generateEdgeSpawnZones(city, safehouseCenter, rng);
+
+    expect(zones.length).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -254,6 +313,52 @@ describe('generateFarBuildingSpawnZones', () => {
     );
 
     expect(zones.length).toBe(0);
+  });
+
+  it('uses building center when far building has no entry points', () => {
+    const sealed = makeBuilding({
+      id: 'sealed-far',
+      origin: { x: 0, y: 0 },
+      width: 6,
+      height: 6,
+      entryPoints: [], // sealed — no entry points
+    });
+
+    const city = makeRoadCity(80, [sealed]);
+    const rng = seedrandom('sealed-test');
+    const zones = generateFarBuildingSpawnZones(
+      city,
+      safehouseCenter,
+      'safehouse-id',
+      rng,
+    );
+
+    expect(zones.length).toBeGreaterThan(0);
+    // Building center is floor(0 + 6/2) = 3, floor(0 + 6/2) = 3
+    expect(zones[0].position).toEqual({ x: 3, y: 3 });
+  });
+
+  it('uses first entry point position when entry points exist', () => {
+    const withEntry = makeBuilding({
+      id: 'with-entry',
+      origin: { x: 0, y: 0 },
+      width: 6,
+      height: 6,
+      entryPoints: [makeEntryPoint(5, 3)], // entry point at a different position than center
+    });
+
+    const city = makeRoadCity(80, [withEntry]);
+    const rng = seedrandom('entry-test');
+    const zones = generateFarBuildingSpawnZones(
+      city,
+      safehouseCenter,
+      'safehouse-id',
+      rng,
+    );
+
+    expect(zones.length).toBeGreaterThan(0);
+    // Should use entry point position, not building center
+    expect(zones[0].position).toEqual({ x: 5, y: 3 });
   });
 
   it('assigns far_building type and unique IDs', () => {
