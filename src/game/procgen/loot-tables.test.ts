@@ -6,6 +6,7 @@ import {
   getAllLootTables,
   selectObjectsForRoom,
 } from './loot-tables';
+import type { LootTable } from './loot-tables';
 import { getObjectDef } from './object-defs';
 
 // ---------------------------------------------------------------------------
@@ -169,5 +170,44 @@ describe('selectObjectsForRoom', () => {
     // Set maxLootValue to -1 so nothing qualifies.
     const result = selectObjectsForRoom(table, 30, rng, -1, lookupLootValue);
     expect(result).toEqual([]);
+  });
+
+  it('returns exactly 1 object for zero-area room due to Math.max(1, ...)', () => {
+    const table = getLootTable('kitchen');
+    const result = selectObjectsForRoom(table, 0, makeRng(), Infinity, lookupLootValue);
+    expect(result.length).toBe(1);
+  });
+
+  it('returns exactly 1 object for negative area', () => {
+    const table = getLootTable('kitchen');
+    const result = selectObjectsForRoom(table, -5, makeRng(), Infinity, lookupLootValue);
+    expect(result.length).toBe(1);
+  });
+
+  it('stops early when single entry is exhausted', () => {
+    const table: LootTable = {
+      roomType: 'test-single',
+      baseDensity: 5,
+      entries: [{ objectType: 'fridge', weight: 10, maxCount: 1 }],
+    };
+    // Room area = REFERENCE_ROOM_AREA so targetCount = baseDensity = 5,
+    // but fridge maxCount is 1 so only 1 object should be returned.
+    const result = selectObjectsForRoom(table, 25, makeRng(), Infinity, lookupLootValue);
+    expect(result.length).toBe(1);
+    expect(result[0]).toBe('fridge');
+  });
+
+  it('stops at total maxCount across all entries', () => {
+    const table: LootTable = {
+      roomType: 'test-multi',
+      baseDensity: 10,
+      entries: [
+        { objectType: 'fridge', weight: 10, maxCount: 2 },
+        { objectType: 'table', weight: 10, maxCount: 1 },
+      ],
+    };
+    // Large room to push target count well above total maxCount (3).
+    const result = selectObjectsForRoom(table, 100, makeRng(), Infinity, lookupLootValue);
+    expect(result.length).toBe(3);
   });
 });

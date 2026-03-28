@@ -433,6 +433,34 @@ describe('selectSafehouse', () => {
     expect(result.minimapPosition).toEqual({ x: 13, y: 22 });
   });
 
+  it('breaks ties by selecting the first building (lower index) when scores are equal', () => {
+    // Two identical buildings far apart (>LOOT_SEARCH_RADIUS) with no objects.
+    // All scoring factors depend only on local properties, so scores are equal.
+    const b1 = makeBuilding({
+      id: 'tie-a',
+      origin: { x: 0, y: 0 },
+      width: 10,
+      height: 8,
+      entryPoints: [makeEntryPoint(1, 0), makeEntryPoint(2, 0)],
+      objects: [],
+    });
+    const b2 = makeBuilding({
+      id: 'tie-b',
+      origin: { x: 30, y: 30 },
+      width: 10,
+      height: 8,
+      entryPoints: [makeEntryPoint(31, 30), makeEntryPoint(32, 30)],
+      objects: [],
+    });
+
+    const layout = makeLayout([b1, b2]);
+    const result = selectSafehouse(layout);
+
+    // Strict greater-than comparison means first building wins on ties.
+    expect(result.buildingIndex).toBe(0);
+    expect(result.building.id).toBe('tie-a');
+  });
+
   it('is deterministic — same input produces same output', () => {
     const buildings = Array.from({ length: 5 }, (_, i) =>
       makeBuilding({
