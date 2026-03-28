@@ -137,6 +137,8 @@ export class RNG {
     const hi = Math.floor(max);
     if (lo > hi) {
       // Range collapsed after rounding (e.g. int(1.5, 1.9) → ceil=2, floor=1).
+      // Advance state to keep sequence position consistent regardless of arguments.
+      this._prng();
       return lo;
     }
     // seedrandom returns [0, 1) so (hi - lo + 1) * prng() is in [0, range).
