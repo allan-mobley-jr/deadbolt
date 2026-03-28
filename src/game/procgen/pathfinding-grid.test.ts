@@ -485,6 +485,18 @@ describe('PathfindingGrid', () => {
       expect(result.path.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('returns distinct objects for separate no-path results', () => {
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([[R, W, R]]),
+      );
+
+      const r1 = grid.findPath({ x: 0, y: 0 }, { x: 2, y: 0 });
+      const r2 = grid.findPath({ x: 0, y: 0 }, { x: 2, y: 0 });
+
+      expect(r1).not.toBe(r2);
+      expect(r1.path).not.toBe(r2.path);
+    });
+
     it('treats Empty tiles as non-walkable in the grid', () => {
       const E = TileType.Empty;
       const grid = PathfindingGrid.fromCityLayout(
