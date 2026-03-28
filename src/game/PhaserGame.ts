@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import BootScene from "@/game/scenes/boot-scene";
+import LoadingScene from "@/game/scenes/loading-scene";
 import GameScene from "@/game/scenes/game-scene";
 
 /** Module-scoped singleton — one Phaser.Game instance at a time. */
@@ -34,7 +35,7 @@ export function buildGameConfig(
       target: 60,
       limit: 60,
     },
-    scene: [BootScene, GameScene],
+    scene: [BootScene, LoadingScene, GameScene],
   };
 }
 

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import GameScene from "@/game/scenes/game-scene";
 import { resetWorld, world } from "@/game/ecs/world";
-import { TEST_MAP_WIDTH, TEST_MAP_HEIGHT, PLAYER_SPAWN } from "@/game/tiles/test-map";
 import { TILE_SIZE, TileType } from "@/game/tiles/tile-types";
+import type { WorldData } from "@/types/world";
+import { TileType as ProcgenTileType } from "@/types/procgen";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -73,6 +74,69 @@ function createMockTilemap() {
   };
 }
 
+/** Tile grid dimensions for mock world data. */
+const MOCK_MAP_WIDTH = 32;
+const MOCK_MAP_HEIGHT = 32;
+
+/** Player spawn position in mock world (safehouse center). */
+const MOCK_PLAYER_SPAWN = { x: 16, y: 16 };
+
+/** Create mock WorldData for testing. */
+function createMockWorldData(): WorldData {
+  // Build a simple tile grid
+  const tiles: ProcgenTileType[][] = [];
+  for (let y = 0; y < MOCK_MAP_HEIGHT; y++) {
+    const row: ProcgenTileType[] = [];
+    for (let x = 0; x < MOCK_MAP_WIDTH; x++) {
+      if (x === 0 || y === 0 || x === MOCK_MAP_WIDTH - 1 || y === MOCK_MAP_HEIGHT - 1) {
+        row.push(ProcgenTileType.Wall);
+      } else {
+        row.push(ProcgenTileType.Floor);
+      }
+    }
+    tiles.push(row);
+  }
+
+  return {
+    layout: {
+      widthTiles: MOCK_MAP_WIDTH,
+      heightTiles: MOCK_MAP_HEIGHT,
+      tiles,
+      buildings: [],
+      seed: 'test-seed',
+    },
+    buildingClasses: new Map(),
+    safehouse: {
+      building: {
+        id: 'building-0',
+        origin: { x: 10, y: 10 },
+        width: 12,
+        height: 12,
+        rooms: [],
+        entryPoints: [],
+        objects: [],
+      },
+      buildingIndex: 0,
+      scoreBreakdown: {
+        entryPointScore: 0,
+        lootProximityScore: 0,
+        buildingSizeScore: 0,
+        objectDensityScore: 0,
+        totalScore: 0,
+      },
+      entryPointsToDefend: [],
+      minimapPosition: MOCK_PLAYER_SPAWN,
+      usedFallback: false,
+    },
+    pathfinding: {
+      width: MOCK_MAP_WIDTH,
+      height: MOCK_MAP_HEIGHT,
+    } as WorldData['pathfinding'],
+    spawnZones: [],
+    config: { seed: 'test-seed', difficulty: 2, targetMinutes: 15 },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
@@ -87,6 +151,7 @@ describe("GameScene", () => {
   let worldStep: ReturnType<typeof vi.fn>;
   let convertTilemapLayer: ReturnType<typeof vi.fn>;
   let mockTilemap: ReturnType<typeof createMockTilemap>;
+  let mockWorldData: WorldData;
 
   beforeEach(() => {
     nextBodyId = 1;
@@ -99,6 +164,7 @@ describe("GameScene", () => {
     worldStep = vi.fn();
     convertTilemapLayer = vi.fn();
     mockTilemap = createMockTilemap();
+    mockWorldData = createMockWorldData();
 
     let textCallCount = 0;
 
@@ -163,6 +229,9 @@ describe("GameScene", () => {
         ),
       },
     } as unknown as Phaser.Physics.Matter.MatterPhysics;
+
+    // Provide world data before create
+    scene.init(mockWorldData);
   });
 
   afterEach(() => {
@@ -229,8 +298,8 @@ describe("GameScene", () => {
 
     it("sets camera bounds to tilemap pixel dimensions", () => {
       scene.create();
-      const expectedWidth = TEST_MAP_WIDTH * TILE_SIZE;
-      const expectedHeight = TEST_MAP_HEIGHT * TILE_SIZE;
+      const expectedWidth = MOCK_MAP_WIDTH * TILE_SIZE;
+      const expectedHeight = MOCK_MAP_HEIGHT * TILE_SIZE;
       expect(setBounds).toHaveBeenCalledWith(0, 0, expectedWidth, expectedHeight);
     });
 
@@ -250,12 +319,12 @@ describe("GameScene", () => {
       expect(convertTilemapLayer).toHaveBeenCalledWith(mockTilemap._mockLayer);
     });
 
-    it("spawns player at the correct pixel position from PLAYER_SPAWN", () => {
+    it("spawns player at the safehouse minimap position", () => {
       scene.create();
-      const expectedX = PLAYER_SPAWN.x * TILE_SIZE + TILE_SIZE / 2;
-      const expectedY = PLAYER_SPAWN.y * TILE_SIZE + TILE_SIZE / 2;
+      const expectedX = MOCK_PLAYER_SPAWN.x * TILE_SIZE + TILE_SIZE / 2;
+      const expectedY = MOCK_PLAYER_SPAWN.y * TILE_SIZE + TILE_SIZE / 2;
       const addRect = scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
-      // Player rectangle is created at spawn position
+      // Player rectangle is created at safehouse center
       expect(addRect).toHaveBeenCalledWith(
         expectedX,
         expectedY,
@@ -405,6 +474,21 @@ describe("GameScene", () => {
   // -----------------------------------------------------------------------
   // Crash recovery
   // -----------------------------------------------------------------------
+
+  describe("world data requirement", () => {
+    it("throws when create() is called without init()", () => {
+      const freshScene = new GameScene();
+      // Attach minimal mocks
+      freshScene.cameras = scene.cameras;
+      freshScene.add = scene.add;
+      freshScene.make = scene.make;
+      freshScene.scale = scene.scale;
+      freshScene.input = scene.input;
+      freshScene.matter = scene.matter;
+
+      expect(() => freshScene.create()).toThrow("No world data received");
+    });
+  });
 
   describe("update before create", () => {
     it("catches crash when update() is called before create()", () => {

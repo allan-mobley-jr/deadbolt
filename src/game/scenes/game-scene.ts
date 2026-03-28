@@ -10,19 +10,15 @@ import { createPhysicsSyncSystem } from "@/game/systems/physics-sync-system";
 import { createRenderSyncSystem } from "@/game/systems/render-sync-system";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
-import {
-  createTestMap,
-  TEST_MAP_WIDTH,
-  TEST_MAP_HEIGHT,
-  PLAYER_SPAWN,
-} from "@/game/tiles/test-map";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
+import type { WorldData } from "@/types/world";
 
 /**
- * Main gameplay scene. Builds the tilemap from test data, spawns the player,
- * and hosts the fixed-timestep game loop that drives all ECS systems at 60 Hz,
- * independent of the browser's render rate.
+ * Main gameplay scene. Builds the tilemap from procedurally generated world
+ * data, spawns the player at the safehouse, and hosts the fixed-timestep
+ * game loop that drives all ECS systems at 60 Hz, independent of the
+ * browser's render rate.
  */
 export default class GameScene extends Phaser.Scene {
   private gameLoop!: GameLoop;
@@ -30,12 +26,28 @@ export default class GameScene extends Phaser.Scene {
   private fpsText!: Phaser.GameObjects.Text;
   private showDebug = false;
   private crashed = false;
+  private worldData: WorldData | null = null;
 
   constructor() {
     super({ key: "GameScene" });
   }
 
+  /**
+   * Receive world data from LoadingScene.
+   * Phaser calls init(data) before create() when scene.start passes data.
+   */
+  init(data: WorldData): void {
+    this.worldData = data;
+  }
+
   create(): void {
+    if (!this.worldData) {
+      throw new Error(
+        "[GameScene] No world data received. " +
+          "GameScene must be started from LoadingScene with WorldData.",
+      );
+    }
+
     // --- Allow recovery if a prior cycle crashed (e.g. update before create) ---
     this.crashed = false;
 
@@ -45,7 +57,7 @@ export default class GameScene extends Phaser.Scene {
     // --- Camera / background ---
     this.cameras.main.setBackgroundColor("#1a1a2e");
 
-    // --- Build tilemap ---
+    // --- Build tilemap from generated world ---
     this.buildTilemap();
 
     // --- Disable Matter.js auto-stepping (we step manually in PhysicsSyncSystem) ---
@@ -54,9 +66,10 @@ export default class GameScene extends Phaser.Scene {
     // --- Body registry ---
     const bodyRegistry = new BodyRegistry();
 
-    // --- Spawn player from tilemap spawn point ---
-    const px = PLAYER_SPAWN.x * TILE_SIZE + TILE_SIZE / 2;
-    const py = PLAYER_SPAWN.y * TILE_SIZE + TILE_SIZE / 2;
+    // --- Spawn player at the safehouse center ---
+    const spawnTile = this.worldData.safehouse.minimapPosition;
+    const px = spawnTile.x * TILE_SIZE + TILE_SIZE / 2;
+    const py = spawnTile.y * TILE_SIZE + TILE_SIZE / 2;
 
     const playerBody = this.matter.add.rectangle(px, py, 24, 24, {
       friction: 0,
@@ -141,11 +154,11 @@ export default class GameScene extends Phaser.Scene {
   // -----------------------------------------------------------------------
 
   private buildTilemap(): void {
-    const tileData = createTestMap();
+    const { widthTiles, heightTiles, tiles } = this.worldData!.layout;
 
-    // Create tilemap from the 2D data array.
+    // Create tilemap from the generated 2D tile grid.
     const map = this.make.tilemap({
-      data: tileData,
+      data: tiles,
       tileWidth: TILE_SIZE,
       tileHeight: TILE_SIZE,
     });
@@ -181,8 +194,8 @@ export default class GameScene extends Phaser.Scene {
     this.matter.world.convertTilemapLayer(layer);
 
     // Camera bounds match map dimensions.
-    const mapWidth = TEST_MAP_WIDTH * TILE_SIZE;
-    const mapHeight = TEST_MAP_HEIGHT * TILE_SIZE;
+    const mapWidth = widthTiles * TILE_SIZE;
+    const mapHeight = heightTiles * TILE_SIZE;
     this.cameras.main.setBounds(0, 0, mapWidth, mapHeight);
   }
 }
