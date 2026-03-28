@@ -158,6 +158,34 @@ describe("safeEmit", () => {
 
     expect(errorSpy).toHaveBeenCalled();
     expect(good).toHaveBeenCalledTimes(1);
+    expect(good).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: "night" }),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("delivers to all listeners when multiple throw", () => {
+    const bus = createGameEventBus();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const survivor = vi.fn();
+
+    bus.on("phase-change", () => {
+      throw new Error("first bad");
+    });
+    bus.on("phase-change", () => {
+      throw new Error("second bad");
+    });
+    bus.on("phase-change", survivor);
+
+    safeEmit(bus, "phase-change", {
+      phase: "night",
+      previousPhase: "dusk",
+      dayNumber: 1,
+      timeRemainingInPhase: 90,
+    });
+
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+    expect(survivor).toHaveBeenCalledTimes(1);
     errorSpy.mockRestore();
   });
 });

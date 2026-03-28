@@ -264,6 +264,11 @@ describe("LightingSystem", () => {
     const setAlphaCall = renderTexture.setAlpha.mock.calls[0][0] as number;
     expect(setAlphaCall).toBeGreaterThan(0);
     expect(setAlphaCall).toBeLessThan(LIGHTING.NIGHT_OVERLAY_ALPHA);
+
+    // Verify fill() receives a packed tint integer with alpha=1
+    const fillCall = renderTexture.fill.mock.calls[0];
+    expect(fillCall[0]).toBeTypeOf("number");
+    expect(fillCall[1]).toBe(1);
   });
 
   it("creates overlay during dawn with interpolated alpha", () => {
