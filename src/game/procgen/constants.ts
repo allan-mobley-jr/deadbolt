@@ -30,3 +30,31 @@ export const WFC = {
   /** Road spacing interval for fallback grid (every N macro cells). */
   FALLBACK_ROAD_INTERVAL: 4,
 } as const;
+
+// ---------------------------------------------------------------------------
+// BSP building interior generator
+// ---------------------------------------------------------------------------
+
+const BSP_MIN_ROOM_SIZE = 3;
+
+export const BSP = {
+  /** Minimum room dimension in tiles (width or height). Includes walls. */
+  MIN_ROOM_SIZE: BSP_MIN_ROOM_SIZE,
+  /** Maximum BSP recursion depth. */
+  MAX_DEPTH: 4,
+  /**
+   * Minimum dimension for a partition to be splittable.
+   * Must fit two MIN_ROOM_SIZE rooms sharing one wall: 2 * MIN_ROOM_SIZE - 1.
+   */
+  MIN_SPLIT_SIZE: 2 * BSP_MIN_ROOM_SIZE - 1,
+  /** Lower bound of split ratio (position within the valid range). */
+  SPLIT_RATIO_MIN: 0.35,
+  /** Upper bound of split ratio. */
+  SPLIT_RATIO_MAX: 0.65,
+  /** Probability of choosing horizontal split when both orientations are valid. */
+  HORIZONTAL_SPLIT_BIAS: 0.5,
+  /** Probability of placing a window on an eligible exterior wall tile. */
+  WINDOW_PROBABILITY: 0.3,
+  /** Minimum Manhattan distance between windows on the same building. */
+  WINDOW_MIN_SPACING: 2,
+} as const;
