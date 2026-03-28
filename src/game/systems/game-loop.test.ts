@@ -28,6 +28,26 @@ describe("GameLoop", () => {
       loop.tick(1 / 30);
       expect(loop.physicsTicks).toBe(1);
     });
+
+    it("rejects fixedDt of zero", () => {
+      expect(() => new GameLoop([], 0)).toThrow(/fixedDt must be positive/);
+    });
+
+    it("rejects negative fixedDt", () => {
+      expect(() => new GameLoop([], -1 / 60)).toThrow(/fixedDt must be positive/);
+    });
+
+    it("rejects maxSteps of zero", () => {
+      expect(() => new GameLoop([], FIXED_DT, 0)).toThrow(
+        /maxSteps must be a positive integer/,
+      );
+    });
+
+    it("rejects non-integer maxSteps", () => {
+      expect(() => new GameLoop([], FIXED_DT, 2.5)).toThrow(
+        /maxSteps must be a positive integer/,
+      );
+    });
   });
 
   describe("single tick behavior", () => {
@@ -190,6 +210,21 @@ describe("GameLoop", () => {
       expect(loop.fps).toBe(60);
     });
 
+    it("rejects negative delta without corrupting state", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      loop.tick(-0.1);
+
+      expect(sys).not.toHaveBeenCalled();
+      expect(loop.fps).toBe(60);
+      expect(loop.alpha).toBe(0);
+
+      // Subsequent positive tick still works normally
+      loop.tick(FIXED_DT);
+      expect(sys).toHaveBeenCalledTimes(1);
+    });
+
     it("smooths out jittery frame times", () => {
       const loop = new GameLoop([]);
       // Alternate between fast and slow frames
@@ -247,6 +282,52 @@ describe("GameLoop", () => {
       loop.tick(FIXED_DT * 0.1);
 
       expect(sys).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("display rate scenarios", () => {
+    it("produces 2 physics steps per frame at 30 fps", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      // 30 fps → 33.33ms frame → ~2 × FIXED_DT
+      loop.tick(1 / 30);
+
+      expect(sys).toHaveBeenCalledTimes(2);
+      expect(loop.physicsTicks).toBe(2);
+    });
+
+    it("accumulates partial steps at 144 fps", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      // 144 fps → ~6.94ms frame → less than 1 FIXED_DT (16.67ms)
+      loop.tick(1 / 144);
+      expect(sys).not.toHaveBeenCalled();
+      expect(loop.physicsTicks).toBe(0);
+
+      // After ~3 frames at 144fps, enough time accumulates for 1 step
+      loop.tick(1 / 144);
+      loop.tick(1 / 144);
+      expect(sys).toHaveBeenCalledTimes(1);
+    });
+
+    it("maintains consistent total physics steps across display rates", () => {
+      // Simulate 1 second at 30 fps vs 144 fps — both should
+      // execute approximately 60 physics steps.
+      const sys30 = vi.fn<SystemFn>();
+      const loop30 = new GameLoop([sys30]);
+      for (let i = 0; i < 30; i++) loop30.tick(1 / 30);
+
+      const sys144 = vi.fn<SystemFn>();
+      const loop144 = new GameLoop([sys144]);
+      for (let i = 0; i < 144; i++) loop144.tick(1 / 144);
+
+      // Both should be ~60 steps (minor floating-point variance allowed)
+      expect(sys30.mock.calls.length).toBeGreaterThanOrEqual(59);
+      expect(sys30.mock.calls.length).toBeLessThanOrEqual(61);
+      expect(sys144.mock.calls.length).toBeGreaterThanOrEqual(59);
+      expect(sys144.mock.calls.length).toBeLessThanOrEqual(61);
     });
   });
 });

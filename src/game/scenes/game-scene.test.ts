@@ -154,5 +154,47 @@ describe("GameScene", () => {
 
       expect(fpsText.setText).not.toHaveBeenCalled();
     });
+
+    it("initializes without keyboard when keyboard is null", () => {
+      scene.input = {
+        keyboard: null,
+      } as unknown as Phaser.Input.InputPlugin;
+
+      expect(() => scene.create()).not.toThrow();
+    });
+  });
+
+  describe("crash guard", () => {
+    it("stops calling game loop after a system throws", () => {
+      scene.create();
+
+      // Replace tick with one that throws on first call
+      const gameLoop = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      let tickCalls = 0;
+      gameLoop.tick = () => {
+        tickCalls++;
+        throw new Error("system crash");
+      };
+
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      // First call — triggers crash, logs error
+      scene.update(0, 16.67);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[GameScene] Game loop crashed:",
+        expect.any(Error),
+      );
+
+      // Subsequent calls — should be no-ops (crashed flag set)
+      scene.update(16.67, 16.67);
+      scene.update(33.34, 16.67);
+      expect(tickCalls).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
   });
 });

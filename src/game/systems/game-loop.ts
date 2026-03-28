@@ -39,6 +39,14 @@ export class GameLoop {
     fixedDt: number = FIXED_DT,
     maxSteps: number = MAX_STEPS_PER_FRAME,
   ) {
+    if (fixedDt <= 0) {
+      throw new Error(`[GameLoop] fixedDt must be positive, got ${fixedDt}`);
+    }
+    if (maxSteps < 1 || !Number.isInteger(maxSteps)) {
+      throw new Error(
+        `[GameLoop] maxSteps must be a positive integer, got ${maxSteps}`,
+      );
+    }
     this.systems = systems;
     this.fixedDt = fixedDt;
     this.maxSteps = maxSteps;
@@ -52,8 +60,13 @@ export class GameLoop {
    *   `gameLoop.tick(delta / 1000)`.
    */
   tick(dtSeconds: number): void {
+    // Clamp non-positive deltas (e.g. browser timer glitches on tab resume)
+    if (dtSeconds <= 0) {
+      return;
+    }
+
     // --- FPS (exponential moving average) ---
-    if (dtSeconds > 0) {
+    {
       const instant = 1 / dtSeconds;
       this._fps += GameLoop.SMOOTHING * (instant - this._fps);
     }

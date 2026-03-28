@@ -10,6 +10,7 @@ export default class GameScene extends Phaser.Scene {
   private gameLoop!: GameLoop;
   private fpsText!: Phaser.GameObjects.Text;
   private showDebug = false;
+  private crashed = false;
 
   constructor() {
     super({ key: "GameScene" });
@@ -47,15 +48,25 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(Number.MAX_SAFE_INTEGER)
       .setVisible(false);
 
-    this.input.keyboard!.on("keydown-F3", () => {
-      this.showDebug = !this.showDebug;
-      this.fpsText.setVisible(this.showDebug);
-    });
+    if (this.input.keyboard) {
+      this.input.keyboard.on("keydown-F3", () => {
+        this.showDebug = !this.showDebug;
+        this.fpsText.setVisible(this.showDebug);
+      });
+    }
   }
 
   update(_time: number, delta: number): void {
-    // Phaser provides delta in milliseconds; GameLoop expects seconds.
-    this.gameLoop.tick(delta / 1000);
+    if (this.crashed) return;
+
+    try {
+      // Phaser provides delta in milliseconds; GameLoop expects seconds.
+      this.gameLoop.tick(delta / 1000);
+    } catch (err) {
+      this.crashed = true;
+      console.error("[GameScene] Game loop crashed:", err);
+      return;
+    }
 
     if (this.showDebug) {
       const { fps, physicsTicks, alpha } = this.gameLoop.stats;
