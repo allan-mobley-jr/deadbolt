@@ -131,4 +131,17 @@ describe("game singleton", () => {
     expect(newGame).toBeDefined();
     expect(newGame).not.toBe(game);
   });
+
+  it("calls destroy(true) to remove canvas from DOM", () => {
+    const game = createGame("test");
+    const spy = vi.spyOn(game, "destroy");
+    destroyGame();
+    expect(spy).toHaveBeenCalledWith(true);
+  });
+
+  it("creates a game even when parent element does not exist in DOM", () => {
+    // No DOM element with id "nonexistent" — createGame should still succeed
+    expect(() => createGame("nonexistent")).not.toThrow();
+    expect(getGame()).not.toBeNull();
+  });
 });
