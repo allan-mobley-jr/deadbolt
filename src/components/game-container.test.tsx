@@ -33,7 +33,8 @@ class TestErrorBoundary extends React.Component<
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.useRealTimers();
+  vi.resetAllMocks();
 });
 
 test("renders a div with id game-container", () => {
@@ -92,6 +93,59 @@ test("throws to error boundary when createGame fails", async () => {
   );
 
   consoleSpy.mockRestore();
+});
+
+test("throws to error boundary when bridge polling exhausts retries", async () => {
+  // mockGetActiveBus returns undefined after resetAllMocks — bus never becomes available.
+  // Use fake timers to deterministically advance through 300+ rAF callbacks.
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Advance timers enough to flush the dynamic import microtask + 300 rAF
+  // retries. Each rAF fires on the next frame (~16ms). 320 × 20ms gives
+  // generous headroom.
+  for (let i = 0; i < 320; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  // After 300 retries, setError is called → re-render → throw → boundary.
+  expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
+  expect(screen.getByTestId("boundary-error").textContent).toContain(
+    "Event bus not available after timeout",
+  );
+
+  consoleSpy.mockRestore();
+});
+
+test("does not set error state if unmounted during bridge polling", async () => {
+  vi.useFakeTimers();
+
+  const { unmount } = render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Advance past import resolution + a few rAF polls.
+  for (let i = 0; i < 10; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  // Unmount mid-polling — sets cancelled=true.
+  unmount();
+
+  // Continue advancing — cancelled guard should prevent setError.
+  for (let i = 0; i < 400; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
 });
 
 test("does not set error state if createGame fails after unmount", async () => {

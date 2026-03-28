@@ -32,10 +32,12 @@ export default function GameContainer() {
           } else if (retries++ < MAX_BRIDGE_RETRIES) {
             requestAnimationFrame(tryConnect);
           } else {
-            console.error(
-              "[GameContainer] Event bus not available after timeout. " +
+            const e = new Error(
+              "Event bus not available after timeout. " +
                 "The game scene may have failed to initialize.",
             );
+            console.error("[GameContainer]", e);
+            setError(e);
           }
         };
         tryConnect();
