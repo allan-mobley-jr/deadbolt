@@ -49,3 +49,35 @@ export interface Health {
   current: number;
   max: number;
 }
+
+// ---------------------------------------------------------------------------
+// Object placement components (issue #15)
+// ---------------------------------------------------------------------------
+
+import type { ObjectCategory } from '@/types/procgen';
+
+/** Marks an entity as interactable by the player. */
+export interface Interactable {
+  /** What kind of interaction is available. */
+  interactionType: 'pickup' | 'open' | 'push' | 'search';
+  /** Whether the entity is currently highlighted (player in range). */
+  highlighted: boolean;
+}
+
+/** Properties specific to placed world objects. */
+export interface ObjectProperties {
+  /** Object type key (matches ObjectDefinition.type). */
+  objectType: string;
+  /** Object category for gameplay classification. */
+  category: ObjectCategory;
+  /** Structural hit points (0 = fragile, 1 = indestructible). */
+  durability: number;
+  /** Fire spread susceptibility (0 = fireproof, 1 = instant ignition). */
+  flammability: number;
+  /** Electrical conductivity (0 = insulator, 1 = perfect conductor). */
+  conductivity: number;
+  /** Loot value tier (0-10). */
+  lootValue: number;
+  /** Whether this object can only be pushed/dragged, not carried. */
+  immovable: boolean;
+}

@@ -130,3 +130,58 @@ export interface RoomConnection {
   roomIndexB: number;
   doorPosition: TileCoord;
 }
+
+// ---------------------------------------------------------------------------
+// Safehouse & pathfinding results
+// ---------------------------------------------------------------------------
+
+/** Score breakdown for a single safehouse candidate. */
+export interface SafehouseScoreBreakdown {
+  entryPointScore: number;
+  lootProximityScore: number;
+  buildingSizeScore: number;
+  objectDensityScore: number;
+  totalScore: number;
+}
+
+/** Result of the safehouse selection algorithm. */
+export interface SafehouseResult {
+  /** The selected building. */
+  building: Building;
+  /** Index of the building in CityLayout.buildings. */
+  buildingIndex: number;
+  /** Score breakdown for debugging / tuning. */
+  scoreBreakdown: SafehouseScoreBreakdown;
+  /** Entry points to defend. */
+  entryPointsToDefend: EntryPoint[];
+  /** Center position for minimap marker. */
+  minimapPosition: TileCoord;
+  /** True if no building met the minimum area threshold (fallback used). */
+  usedFallback: boolean;
+}
+
+/** Result of a pathfinding query. */
+export interface PathResult {
+  /** Ordered tile coordinates from start to end (empty if no path). */
+  path: TileCoord[];
+  /** Whether a valid path was found. */
+  found: boolean;
+  /** Path length in tiles. */
+  length: number;
+}
+
+/** A zombie spawn zone. */
+export interface SpawnZone {
+  /** Unique identifier. */
+  id: string;
+  /** Category of spawn location. */
+  type: 'map_edge' | 'far_building';
+  /** Center point of the zone. */
+  position: TileCoord;
+  /** Radius in tiles for random spawn offset. */
+  radius: number;
+  /** Distance from safehouse center in tiles (Euclidean). */
+  distanceToSafehouse: number;
+  /** Walkable positions within the zone where zombies can actually appear. */
+  spawnPoints: TileCoord[];
+}

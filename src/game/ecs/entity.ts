@@ -5,6 +5,8 @@ import type {
   PlayerControlled,
   PhysicsBody,
   Health,
+  Interactable,
+  ObjectProperties,
 } from "./components";
 
 /**
@@ -25,4 +27,6 @@ export interface Entity {
   playerControlled?: PlayerControlled;
   physicsBody?: PhysicsBody;
   health?: Health;
+  interactable?: Interactable;
+  objectProperties?: ObjectProperties;
 }
