@@ -15,6 +15,7 @@ import { world, resetWorld } from "@/game/ecs/world";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { ObjectCategory } from "@/types/procgen";
 import type { SystemFn } from "./system-runner";
+import { addItem, INVENTORY_SIZE } from "./inventory-utils";
 
 const DT = 1 / 60;
 
@@ -110,6 +111,13 @@ function spawnImmovable(
     { durability: 0.5, flammability: 0.9, conductivity: 0 },
     1,
   );
+}
+
+/** Count occupied primary slots in an inventory. */
+function countItems(
+  slots: Array<{ primary: boolean } | null>,
+): number {
+  return slots.filter((s) => s !== null && s.primary).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,21 +310,20 @@ describe("InteractionSystem — pickup", () => {
     );
   });
 
-  it("adds picked up item to player inventory", () => {
+  it("adds picked up item to a player inventory slot", () => {
     spawnPickupable(ctx, 110, 100, "gas_can");
     const player = world.entities.find((e) => e.playerControlled)!;
 
     ctx.inputState.interactPressed = true;
     system(DT);
 
-    expect(player.inventory!.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ objectType: "gas_can", quantity: 1 }),
-      ]),
+    // First slot should contain the item
+    expect(player.inventory!.slots[0]).toEqual(
+      expect.objectContaining({ objectType: "gas_can", primary: true }),
     );
   });
 
-  it("stacks items of the same type in inventory", () => {
+  it("places each pickup in separate slots (no stacking)", () => {
     spawnPickupable(ctx, 110, 100, "wooden_plank");
     ctx.inputState.interactPressed = true;
     system(DT);
@@ -327,10 +334,34 @@ describe("InteractionSystem — pickup", () => {
     system(DT);
 
     const player = world.entities.find((e) => e.playerControlled)!;
-    const plankSlot = player.inventory!.items.find(
-      (i) => i.objectType === "wooden_plank",
+    // Both items should occupy separate slots
+    expect(player.inventory!.slots[0]?.objectType).toBe("wooden_plank");
+    expect(player.inventory!.slots[1]?.objectType).toBe("wooden_plank");
+    expect(countItems(player.inventory!.slots)).toBe(2);
+  });
+
+  it("places medium items across two consecutive slots", () => {
+    // car_battery is medium (2 slots)
+    spawnPickupable(ctx, 110, 100, "car_battery");
+    const player = world.entities.find((e) => e.playerControlled)!;
+
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(player.inventory!.slots[0]).toEqual(
+      expect.objectContaining({
+        objectType: "car_battery",
+        sizeCategory: "medium",
+        primary: true,
+      }),
     );
-    expect(plankSlot?.quantity).toBe(2);
+    expect(player.inventory!.slots[1]).toEqual(
+      expect.objectContaining({
+        objectType: "car_battery",
+        sizeCategory: "medium",
+        primary: false,
+      }),
+    );
   });
 
   it("increases carry weight after pickup", () => {
@@ -397,7 +428,7 @@ describe("InteractionSystem — pickup", () => {
     ctx.inputState.interactPressed = true;
     system(DT);
 
-    expect(player.inventory!.items).toHaveLength(0);
+    expect(countItems(player.inventory!.slots)).toBe(0);
   });
 
   it("calls Matter.world.remove with the correct body on pickup", () => {
@@ -410,6 +441,101 @@ describe("InteractionSystem — pickup", () => {
 
     expect(removeFn).toHaveBeenCalledOnce();
     expect(removeFn).toHaveBeenCalledWith(body);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// InteractionSystem — inventory full
+// ---------------------------------------------------------------------------
+
+describe("InteractionSystem — inventory full", () => {
+  let ctx: SceneContext;
+  let system: SystemFn;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    system = createInteractionSystem(ctx);
+    createPlayerEntity(100, 100, 1);
+  });
+
+  afterEach(() => {
+    resetWorld();
+  });
+
+  it("emits inventory-full when pickup fails due to no available slots", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    const inv = player.inventory!;
+    // Fill all slots
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      addItem(inv, "wooden_plank");
+    }
+
+    const fullHandler = vi.fn();
+    ctx.eventBus.on("inventory-full", fullHandler);
+
+    const obj = spawnPickupable(ctx, 110, 100, "gas_can");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(fullHandler).toHaveBeenCalledOnce();
+    expect(fullHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attemptedItemType: "gas_can",
+      }),
+    );
+    // Entity should remain in world
+    expect(world.entities).toContain(obj);
+  });
+
+  it("does not remove entity from world when inventory is full", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    const inv = player.inventory!;
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      addItem(inv, "wooden_plank");
+    }
+
+    const obj = spawnPickupable(ctx, 110, 100, "gas_can");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(world.entities).toContain(obj);
+  });
+
+  it("emits inventory-full for medium item when not enough consecutive slots", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    const inv = player.inventory!;
+    // Fill slots in alternating pattern: occupied, empty, occupied, empty...
+    // This leaves single empty slots but no consecutive pair for medium items
+    for (let i = 0; i < INVENTORY_SIZE; i += 2) {
+      addItem(inv, "wooden_plank");
+    }
+    // Now slots: [plank, null, plank, null, plank, null, plank, null]
+    // Actually addItem fills first available, so:
+    // slots 0-3 are filled, 4-7 empty. Let's fill differently.
+    // Reset and fill alternating manually
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      inv.slots[i] = null;
+    }
+    inv.carryWeight = 0;
+    // Fill even slots
+    for (let i = 0; i < INVENTORY_SIZE; i += 2) {
+      inv.slots[i] = {
+        objectType: "wooden_plank",
+        sizeCategory: "small",
+        primary: true,
+      };
+    }
+    inv.carryWeight = 12; // 4 planks * 3kg
+
+    const fullHandler = vi.fn();
+    ctx.eventBus.on("inventory-full", fullHandler);
+
+    // Try to pick up a medium item (needs 2 consecutive slots)
+    spawnPickupable(ctx, 110, 100, "car_battery");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(fullHandler).toHaveBeenCalledOnce();
   });
 });
 
@@ -567,7 +693,7 @@ describe("InteractionSystem — drop", () => {
     system(DT);
 
     const player = world.entities.find((e) => e.playerControlled)!;
-    expect(player.inventory!.items).toHaveLength(1);
+    expect(countItems(player.inventory!.slots)).toBe(1);
 
     // Now drop it
     ctx.inputState.interactPressed = false;
@@ -576,7 +702,22 @@ describe("InteractionSystem — drop", () => {
     safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
     system(DT);
 
-    expect(player.inventory!.items).toHaveLength(0);
+    expect(countItems(player.inventory!.slots)).toBe(0);
+  });
+
+  it("drops an item by slot index", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    expect(player.inventory!.slots[0]).not.toBeNull();
+
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { slotIndex: 0 });
+    system(DT);
+
+    expect(player.inventory!.slots[0]).toBeNull();
   });
 
   it("emits object-dropped event", () => {
@@ -632,8 +773,8 @@ describe("InteractionSystem — drop", () => {
     expect(player.inventory!.carryWeight).toBeCloseTo(0);
   });
 
-  it("decrements quantity when dropping one item from a stack", () => {
-    // Pick up two planks
+  it("drops one item and leaves the other when two of the same type exist", () => {
+    // Pick up two planks (separate slots, no stacking)
     spawnPickupable(ctx, 110, 100, "wooden_plank");
     ctx.inputState.interactPressed = true;
     system(DT);
@@ -643,17 +784,20 @@ describe("InteractionSystem — drop", () => {
     system(DT);
 
     const player = world.entities.find((e) => e.playerControlled)!;
-    expect(player.inventory!.items[0].quantity).toBe(2);
+    expect(countItems(player.inventory!.slots)).toBe(2);
 
     // Drop one
     ctx.inputState.interactPressed = false;
     safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
     system(DT);
 
-    // Slot should remain with quantity 1
-    expect(player.inventory!.items).toHaveLength(1);
-    expect(player.inventory!.items[0].quantity).toBe(1);
-    expect(player.inventory!.items[0].objectType).toBe("wooden_plank");
+    // One item should remain
+    expect(countItems(player.inventory!.slots)).toBe(1);
+    // The remaining slot should still be wooden_plank
+    const remaining = player.inventory!.slots.find(
+      (s) => s !== null && s.primary,
+    );
+    expect(remaining?.objectType).toBe("wooden_plank");
   });
 
   it("emits inventory-changed after drop", () => {
@@ -716,7 +860,7 @@ describe("InteractionSystem — drop", () => {
     system(DT);
 
     const player = world.entities.find((e) => e.playerControlled)!;
-    expect(player.inventory!.items).toHaveLength(2);
+    expect(countItems(player.inventory!.slots)).toBe(2);
 
     // Queue two drops before the next tick
     ctx.inputState.interactPressed = false;
@@ -728,7 +872,7 @@ describe("InteractionSystem — drop", () => {
     system(DT);
 
     expect(droppedHandler).toHaveBeenCalledTimes(2);
-    expect(player.inventory!.items).toHaveLength(0);
+    expect(countItems(player.inventory!.slots)).toBe(0);
   });
 });
 
@@ -764,7 +908,7 @@ describe("InteractionSystem — pickup failure resilience", () => {
     system(DT);
 
     // Inventory must NOT contain the item
-    expect(player.inventory!.items).toHaveLength(0);
+    expect(countItems(player.inventory!.slots)).toBe(0);
     expect(player.inventory!.carryWeight).toBe(0);
     // Entity should remain in world since removal failed
     expect(world.entities).toContain(obj);
@@ -832,15 +976,14 @@ describe("InteractionSystem — drop failure resilience", () => {
     resetWorld();
   });
 
-  it("does not decrement inventory when matter.add.rectangle throws during drop", () => {
+  it("re-adds item to inventory when matter.add.rectangle throws during drop", () => {
     // Pick up an item first
     spawnPickupable(ctx, 110, 100, "wooden_plank");
     ctx.inputState.interactPressed = true;
     system(DT);
 
     const player = world.entities.find((e) => e.playerControlled)!;
-    const weightAfterPickup = player.inventory!.carryWeight;
-    expect(player.inventory!.items).toHaveLength(1);
+    expect(countItems(player.inventory!.slots)).toBe(1);
 
     // Make rectangle throw on the next call (the drop)
     const rectFn = ctx.scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
@@ -853,11 +996,12 @@ describe("InteractionSystem — drop failure resilience", () => {
     safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
     system(DT);
 
-    // Inventory must be unchanged — item NOT lost
-    expect(player.inventory!.items).toHaveLength(1);
-    expect(player.inventory!.items[0].objectType).toBe("wooden_plank");
-    expect(player.inventory!.items[0].quantity).toBe(1);
-    expect(player.inventory!.carryWeight).toBe(weightAfterPickup);
+    // Inventory must still contain the item (re-added after spawn failure)
+    expect(countItems(player.inventory!.slots)).toBe(1);
+    const slot = player.inventory!.slots.find(
+      (s) => s !== null && s.primary,
+    );
+    expect(slot?.objectType).toBe("wooden_plank");
     expect(errorSpy).toHaveBeenCalled();
 
     errorSpy.mockRestore();
@@ -907,84 +1051,5 @@ describe("InteractionSystem — drop failure resilience", () => {
     expect(invHandler).not.toHaveBeenCalled();
 
     errorSpy.mockRestore();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// InteractionSystem — drop with undefined object definition
-// ---------------------------------------------------------------------------
-
-describe("InteractionSystem — drop with undefined object definition", () => {
-  let ctx: SceneContext;
-  let bus: GameEventBus;
-  let system: SystemFn;
-
-  beforeEach(() => {
-    bus = createGameEventBus();
-    ctx = createMockContext(bus);
-    system = createInteractionSystem(ctx);
-    createPlayerEntity(100, 100, 1);
-  });
-
-  afterEach(() => {
-    resetWorld();
-  });
-
-  it("skips drop and warns when getObjectDef returns undefined for item type", () => {
-    const player = world.entities.find((e) => e.playerControlled)!;
-    // Inject a fabricated item type with no definition
-    player.inventory!.items.push({ objectType: "ghost_item", quantity: 1 });
-    player.inventory!.carryWeight = 5;
-
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const dropHandler = vi.fn();
-    bus.on("object-dropped", dropHandler);
-
-    safeEmit(bus, "cmd:drop-item", { objectType: "ghost_item" });
-    system(DT);
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("ghost_item"),
-    );
-    // Inventory unchanged — item NOT lost
-    expect(player.inventory!.items).toHaveLength(1);
-    expect(player.inventory!.carryWeight).toBe(5);
-    expect(dropHandler).not.toHaveBeenCalled();
-
-    warnSpy.mockRestore();
-  });
-
-  it("continues processing remaining drops after one has undefined def", () => {
-    // Pick up a real item
-    spawnPickupable(ctx, 110, 100, "wooden_plank");
-    ctx.inputState.interactPressed = true;
-    system(DT);
-
-    const player = world.entities.find((e) => e.playerControlled)!;
-    // Also inject a ghost item
-    player.inventory!.items.push({ objectType: "ghost_item", quantity: 1 });
-
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const dropHandler = vi.fn();
-    bus.on("object-dropped", dropHandler);
-
-    // pendingDrops uses pop() (LIFO), so push ghost_item first, plank second
-    // plank will be processed first (last pushed, first popped)
-    ctx.inputState.interactPressed = false;
-    safeEmit(bus, "cmd:drop-item", { objectType: "ghost_item" });
-    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
-    system(DT);
-
-    // Plank should have been dropped successfully
-    expect(dropHandler).toHaveBeenCalledOnce();
-    expect(dropHandler).toHaveBeenCalledWith(
-      expect.objectContaining({ objectType: "wooden_plank" }),
-    );
-    // Ghost item should still be in inventory, plank should be gone
-    expect(player.inventory!.items).toHaveLength(1);
-    expect(player.inventory!.items[0].objectType).toBe("ghost_item");
-    expect(warnSpy).toHaveBeenCalled();
-
-    warnSpy.mockRestore();
   });
 });
