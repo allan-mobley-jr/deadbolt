@@ -165,7 +165,7 @@ export function scoreBuilding(
  * If no building qualifies, the largest building with entry points is
  * selected as a fallback and `usedFallback` is set to true.
  *
- * @throws if the city has no buildings.
+ * @throws if the city has no buildings, or if no building has entry points.
  */
 export function selectSafehouse(cityLayout: CityLayout): SafehouseResult {
   const { buildings } = cityLayout;
@@ -178,21 +178,22 @@ export function selectSafehouse(cityLayout: CityLayout): SafehouseResult {
   let bestIndex = -1;
   let bestBreakdown: SafehouseScoreBreakdown | null = null;
 
-  let largestArea = -1;
-  let largestIndex = 0;
+  let largestAreaWithEntry = -1;
+  let largestIndexWithEntry = -1;
 
   for (let i = 0; i < buildings.length; i++) {
     const building = buildings[i];
     const area = building.width * building.height;
 
-    // Track largest building as fallback
-    if (area > largestArea) {
-      largestArea = area;
-      largestIndex = i;
+    // Track largest building with entry points as fallback
+    if (building.entryPoints.length > 0 && area > largestAreaWithEntry) {
+      largestAreaWithEntry = area;
+      largestIndexWithEntry = i;
     }
 
-    // Skip buildings below minimum area
+    // Skip buildings below minimum area or with no entry points (sealed)
     if (area < MIN_SAFEHOUSE_AREA) continue;
+    if (building.entryPoints.length === 0) continue;
 
     const breakdown = scoreBuilding(building, cityLayout);
 
@@ -203,11 +204,16 @@ export function selectSafehouse(cityLayout: CityLayout): SafehouseResult {
     }
   }
 
-  // Fallback: no building met minimum area → use largest
+  // Fallback: no building met minimum area → use largest with entry points
   let usedFallback = false;
   if (bestIndex === -1) {
-    bestIndex = largestIndex;
-    bestBreakdown = scoreBuilding(buildings[largestIndex], cityLayout);
+    if (largestIndexWithEntry === -1) {
+      throw new Error(
+        'Cannot select safehouse: no building has entry points',
+      );
+    }
+    bestIndex = largestIndexWithEntry;
+    bestBreakdown = scoreBuilding(buildings[largestIndexWithEntry], cityLayout);
     usedFallback = true;
   }
 

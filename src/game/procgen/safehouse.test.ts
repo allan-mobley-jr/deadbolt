@@ -377,13 +377,19 @@ describe('selectSafehouse', () => {
     expect(result.building.id).toBe('big');
   });
 
-  it('falls back to largest building when none meet minimum area', () => {
-    const small1 = makeBuilding({ id: 's1', width: 3, height: 3 });
+  it('falls back to largest building with entry points when none meet minimum area', () => {
+    const small1 = makeBuilding({
+      id: 's1',
+      width: 3,
+      height: 3,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
     const small2 = makeBuilding({
       id: 's2',
       width: 4,
       height: 4,
       origin: { x: 10, y: 10 },
+      entryPoints: [makeEntryPoint(11, 10)],
     }); // 16 tiles, still under 25
 
     const layout = makeLayout([small1, small2]);
@@ -393,6 +399,21 @@ describe('selectSafehouse', () => {
     expect(result.building.id).toBe('s2');
     expect(result.usedFallback).toBe(true);
     expect(result.scoreBreakdown).toBeDefined();
+  });
+
+  it('throws when all buildings are sealed (no entry points)', () => {
+    const sealed1 = makeBuilding({ id: 'sealed1', width: 5, height: 5 });
+    const sealed2 = makeBuilding({
+      id: 'sealed2',
+      width: 6,
+      height: 6,
+      origin: { x: 10, y: 10 },
+    });
+
+    const layout = makeLayout([sealed1, sealed2]);
+    expect(() => selectSafehouse(layout)).toThrow(
+      'no building has entry points',
+    );
   });
 
   it('throws when city has no buildings', () => {
@@ -425,6 +446,7 @@ describe('selectSafehouse', () => {
       origin: { x: 10, y: 20 },
       width: 6,
       height: 4,
+      entryPoints: [makeEntryPoint(10, 20)],
     });
 
     const layout = makeLayout([b]);
