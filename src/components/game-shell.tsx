@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { InteractionPrompt } from "@/components/interaction-prompt";
 
 const GameContainer = dynamic(
   () => import("@/components/game-container"),
@@ -18,8 +19,9 @@ const GameContainer = dynamic(
 
 export default function GameShell() {
   return (
-    <div className="h-screen w-screen">
+    <div className="relative h-screen w-screen">
       <GameContainer />
+      <InteractionPrompt />
     </div>
   );
 }
