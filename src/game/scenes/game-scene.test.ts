@@ -179,6 +179,16 @@ describe("GameScene", () => {
       },
     } as unknown as Phaser.Cameras.Scene2D.CameraManager;
 
+    const mockRenderTexture = {
+      setScrollFactor: vi.fn().mockReturnThis(),
+      setDepth: vi.fn().mockReturnThis(),
+      setVisible: vi.fn().mockReturnThis(),
+      setAlpha: vi.fn().mockReturnThis(),
+      fill: vi.fn().mockReturnThis(),
+      erase: vi.fn().mockReturnThis(),
+      destroy: vi.fn(),
+    };
+
     scene.add = {
       text: vi.fn().mockImplementation(() => {
         textCallCount++;
@@ -193,6 +203,7 @@ describe("GameScene", () => {
         lineTo: vi.fn(),
         strokePath: vi.fn(),
       })),
+      renderTexture: vi.fn().mockReturnValue(mockRenderTexture),
     } as unknown as Phaser.GameObjects.GameObjectFactory;
 
     scene.make = {
@@ -203,6 +214,19 @@ describe("GameScene", () => {
       width: 1280,
       height: 720,
     } as unknown as Phaser.Scale.ScaleManager;
+
+    scene.textures = {
+      exists: vi.fn().mockReturnValue(false),
+      createCanvas: vi.fn().mockReturnValue({
+        context: {
+          createRadialGradient: vi.fn().mockReturnValue({
+            addColorStop: vi.fn(),
+          }),
+          fillRect: vi.fn(),
+        },
+        refresh: vi.fn(),
+      }),
+    } as unknown as Phaser.Textures.TextureManager;
 
     scene.input = {
       keyboard: {

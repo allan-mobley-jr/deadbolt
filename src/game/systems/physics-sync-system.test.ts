@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPhysicsSyncSystem } from "./physics-sync-system";
-import { createInputState } from "./scene-context";
+import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
+import { createGameEventBus } from "@/game/events/event-bus";
 import { world, resetWorld } from "@/game/ecs/world";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 
@@ -39,6 +40,8 @@ function createMockContext(): {
       bodyRegistry,
       inputState: createInputState(),
       getAlpha: () => 0,
+      clockState: createClockState(),
+      eventBus: createGameEventBus(),
     },
     worldStep,
   };

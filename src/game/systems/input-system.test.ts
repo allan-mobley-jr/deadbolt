@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createInputSystem } from "./input-system";
-import { createInputState } from "./scene-context";
+import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
+import { createGameEventBus } from "@/game/events/event-bus";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,6 +52,8 @@ function createMockContext(
       bodyRegistry: new BodyRegistry(),
       inputState,
       getAlpha: () => 0,
+      clockState: createClockState(),
+      eventBus: createGameEventBus(),
     },
     keys,
   };
