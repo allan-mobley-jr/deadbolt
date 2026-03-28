@@ -162,45 +162,61 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
 
       if (!op.immovable && inter.interactionType === "pickup") {
         // --- Pickup ---
+        // Remove from world FIRST (fail-fast before mutating inventory).
+        // If removal throws, inventory stays untouched — no item duplication.
         const def = getObjectDef(op.objectType);
         const mass = def?.physics.mass ?? 1;
+        const objectType = op.objectType;
+        let pickupSucceeded = false;
 
-        // Add to inventory
-        const existing = inv.items.find(
-          (i) => i.objectType === op.objectType,
-        );
-        if (existing) {
-          existing.quantity += 1;
-        } else {
-          inv.items.push({ objectType: op.objectType, quantity: 1 });
-        }
-        inv.carryWeight += mass;
-
-        // Remove from world — ECS + physics registry + Matter body
-        const bodyId = nearestEntity.physicsBody?.bodyId;
-        if (bodyId !== undefined) {
-          const body = ctx.bodyRegistry.get(bodyId);
-          if (body) {
-            ctx.scene.matter.world.remove(body);
+        try {
+          const bodyId = nearestEntity.physicsBody?.bodyId;
+          if (bodyId !== undefined) {
+            const body = ctx.bodyRegistry.get(bodyId);
+            if (body) {
+              ctx.scene.matter.world.remove(body);
+            }
+            ctx.bodyRegistry.unregister(bodyId);
           }
-          ctx.bodyRegistry.unregister(bodyId);
+          world.remove(nearestEntity);
+          pickupSucceeded = true;
+        } catch (err) {
+          console.error(
+            `[InteractionSystem] Pickup failed for ${objectType}:`,
+            err,
+          );
         }
-        world.remove(nearestEntity);
 
-        // Emit events
-        safeEmit(ctx.eventBus, "item-picked-up", {
-          itemType: op.objectType,
-          quantity: 1,
-        });
-        safeEmit(ctx.eventBus, "inventory-changed", {
-          slots: buildSlots(inv.items),
-          carryWeight: inv.carryWeight,
-          maxCarryWeight: inv.maxCarryWeight,
-        });
+        // Prevent stale reference in drag/drop sections below
+        nearestEntity = null;
 
-        // Clear prompt since entity is gone
-        safeEmit(ctx.eventBus, "interaction-prompt-clear", {});
-        promptedEntity = null;
+        if (pickupSucceeded) {
+          // Add to inventory (only after world removal succeeded)
+          const existing = inv.items.find(
+            (i) => i.objectType === objectType,
+          );
+          if (existing) {
+            existing.quantity += 1;
+          } else {
+            inv.items.push({ objectType, quantity: 1 });
+          }
+          inv.carryWeight += mass;
+
+          // Emit events
+          safeEmit(ctx.eventBus, "item-picked-up", {
+            itemType: objectType,
+            quantity: 1,
+          });
+          safeEmit(ctx.eventBus, "inventory-changed", {
+            slots: buildSlots(inv.items),
+            carryWeight: inv.carryWeight,
+            maxCarryWeight: inv.maxCarryWeight,
+          });
+
+          // Clear prompt since entity is gone
+          safeEmit(ctx.eventBus, "interaction-prompt-clear", {});
+          promptedEntity = null;
+        }
       } else {
         // --- Examine (for immovable or non-pickup objects) ---
         const def = getObjectDef(op.objectType);
@@ -264,17 +280,14 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
       if (itemIndex === -1) continue;
 
       const def = getObjectDef(objectType);
-      if (!def) continue;
+      if (!def) {
+        console.warn(
+          `[InteractionSystem] Unknown object type for drop: ${objectType}`,
+        );
+        continue;
+      }
 
       const mass = def.physics.mass;
-
-      // Reduce inventory
-      const item = inv.items[itemIndex];
-      item.quantity -= 1;
-      if (item.quantity <= 0) {
-        inv.items.splice(itemIndex, 1);
-      }
-      inv.carryWeight = Math.max(0, inv.carryWeight - mass);
 
       // Compute drop position in front of player (based on aim direction)
       const aimDx = ctx.inputState.aimX - px;
@@ -287,38 +300,52 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         dropY = py + (aimDy / aimDist) * DROP_OFFSET;
       }
 
-      // Create physics body for dropped object.
-      // Immovable objects use high mass + friction (not isStatic) so
-      // push/drag forces still work on them.
-      const bodySize = def.immovable ? 32 : 16;
-      const newBody = ctx.scene.matter.add.rectangle(
-        dropX,
-        dropY,
-        bodySize,
-        bodySize,
-        {
-          isStatic: false,
-          friction: def.immovable ? 0.95 : 0.8,
-          frictionAir: def.immovable ? 0.3 : 0.1,
-          restitution: 0.2,
-          mass: def.immovable ? def.physics.mass * 10 : def.physics.mass,
-        },
-      );
-      newBody.inertia = Infinity;
-      newBody.inverseInertia = 0;
-      ctx.bodyRegistry.register(newBody);
+      // Create world entity FIRST — if this fails, inventory stays intact.
+      // This prevents item loss in a permadeath roguelike.
+      try {
+        const bodySize = def.immovable ? 32 : 16;
+        const newBody = ctx.scene.matter.add.rectangle(
+          dropX,
+          dropY,
+          bodySize,
+          bodySize,
+          {
+            isStatic: false,
+            friction: def.immovable ? 0.95 : 0.8,
+            frictionAir: def.immovable ? 0.3 : 0.1,
+            restitution: 0.2,
+            mass: def.immovable ? def.physics.mass * 10 : def.physics.mass,
+          },
+        );
+        newBody.inertia = Infinity;
+        newBody.inverseInertia = 0;
+        ctx.bodyRegistry.register(newBody);
 
-      // Spawn ECS entity
-      createObjectEntity(
-        dropX,
-        dropY,
-        newBody.id,
-        objectType,
-        def.category,
-        def.immovable,
-        def.physics,
-        def.lootValue,
-      );
+        createObjectEntity(
+          dropX,
+          dropY,
+          newBody.id,
+          objectType,
+          def.category,
+          def.immovable,
+          def.physics,
+          def.lootValue,
+        );
+      } catch (err) {
+        console.error(
+          `[InteractionSystem] Failed to spawn dropped object ${objectType}:`,
+          err,
+        );
+        continue; // Do NOT decrement inventory
+      }
+
+      // Reduce inventory only after world entity was created successfully
+      const item = inv.items[itemIndex];
+      item.quantity -= 1;
+      if (item.quantity <= 0) {
+        inv.items.splice(itemIndex, 1);
+      }
+      inv.carryWeight = Math.max(0, inv.carryWeight - mass);
 
       // Emit events
       safeEmit(ctx.eventBus, "object-dropped", {

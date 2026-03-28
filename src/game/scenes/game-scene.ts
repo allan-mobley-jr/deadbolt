@@ -235,7 +235,12 @@ export default class GameScene extends Phaser.Scene {
     for (const building of buildings) {
       for (const placed of building.objects) {
         const def = getObjectDef(placed.objectType);
-        if (!def) continue;
+        if (!def) {
+          console.warn(
+            `[GameScene] Unknown object type "${placed.objectType}" at tile (${placed.position.x}, ${placed.position.y}) — skipping`,
+          );
+          continue;
+        }
 
         // Convert tile coords to pixel center
         const px = placed.position.x * TILE_SIZE + TILE_SIZE / 2;
