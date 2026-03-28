@@ -1,16 +1,15 @@
-import Phaser from 'phaser';
-import { generateSeed } from '@/lib/rng';
-import { RUN_DEFAULTS } from '@/types/run';
-import type { RunConfig } from '@/types/run';
-import type { WorldData, GenerationProgress } from '@/types/world';
-import { generateWorld } from '@/game/procgen/world-generator';
+import Phaser from "phaser";
+import { generateSeed } from "@/lib/rng";
+import { RUN_DEFAULTS } from "@/types/run";
+import type { WorldData, GenerationProgress } from "@/types/world";
+import { generateWorld } from "@/game/procgen/world-generator";
 
 // ---------------------------------------------------------------------------
 // Layout constants
 // ---------------------------------------------------------------------------
 
 /** Background colour (matches the game's dark aesthetic). */
-const BG_COLOR = '#0a0a0a';
+const BG_COLOR = "#0a0a0a";
 
 /** Progress bar dimensions. */
 const BAR_WIDTH = 400;
@@ -20,25 +19,25 @@ const BAR_FILL_COLOR = 0x3366ff;
 
 /** Text styling. */
 const STATUS_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontFamily: 'monospace',
-  fontSize: '18px',
-  color: '#ffffff',
-  align: 'center',
+  fontFamily: "monospace",
+  fontSize: "18px",
+  color: "#ffffff",
+  align: "center",
 };
 
 const SEED_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontFamily: 'monospace',
-  fontSize: '14px',
-  color: '#666666',
-  align: 'center',
+  fontFamily: "monospace",
+  fontSize: "14px",
+  color: "#666666",
+  align: "center",
 };
 
 const TITLE_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontFamily: 'monospace',
-  fontSize: '32px',
-  color: '#ffffff',
-  align: 'center',
-  fontStyle: 'bold',
+  fontFamily: "monospace",
+  fontSize: "32px",
+  color: "#ffffff",
+  align: "center",
+  fontStyle: "bold",
 };
 
 /**
@@ -52,11 +51,10 @@ export default class LoadingScene extends Phaser.Scene {
   private generator: Generator<GenerationProgress, WorldData, void> | null =
     null;
   private statusText!: Phaser.GameObjects.Text;
-  private seedText!: Phaser.GameObjects.Text;
   private barGraphics!: Phaser.GameObjects.Graphics;
 
   constructor() {
-    super({ key: 'LoadingScene' });
+    super({ key: "LoadingScene" });
   }
 
   create(): void {
@@ -70,12 +68,12 @@ export default class LoadingScene extends Phaser.Scene {
 
       // --- Title ---
       this.add
-        .text(centerX, centerY - 80, 'DEADBOLT', TITLE_STYLE)
+        .text(centerX, centerY - 80, "DEADBOLT", TITLE_STYLE)
         .setOrigin(0.5);
 
       // --- Status message ---
       this.statusText = this.add
-        .text(centerX, centerY, 'Initializing...', STATUS_STYLE)
+        .text(centerX, centerY, "Initializing...", STATUS_STYLE)
         .setOrigin(0.5);
 
       // --- Progress bar ---
@@ -84,21 +82,15 @@ export default class LoadingScene extends Phaser.Scene {
 
       // --- Seed ---
       const seed = generateSeed();
-      this.seedText = this.add
+      this.add
         .text(centerX, centerY + 80, `Seed: ${seed}`, SEED_STYLE)
         .setOrigin(0.5);
 
-      // --- Build run config and start generation ---
-      const config: RunConfig = {
-        seed,
-        difficulty: RUN_DEFAULTS.difficulty,
-        targetMinutes: RUN_DEFAULTS.targetMinutes,
-      };
-
-      this.generator = generateWorld(config);
+      // --- Start generation ---
+      this.generator = generateWorld({ ...RUN_DEFAULTS, seed });
     } catch (err) {
-      console.error('[LoadingScene] Failed to initialise:', err);
-      this.game.events.emit('generation-error', err);
+      console.error("[LoadingScene] Failed to initialise:", err);
+      this.game.events.emit("generation-error", err);
     }
   }
 
@@ -118,14 +110,14 @@ export default class LoadingScene extends Phaser.Scene {
         const worldData = result.value;
         this.generator = null;
         this.drawProgressBar(1);
-        this.scene.start('GameScene', worldData);
+        this.scene.start("GameScene", worldData);
       }
     } catch (err) {
       this.generator = null;
-      console.error('[LoadingScene] World generation failed:', err);
-      this.statusText.setText('Generation failed. Refresh to retry.');
+      console.error("[LoadingScene] World generation failed:", err);
+      this.statusText.setText("Generation failed. Refresh to retry.");
       this.drawProgressBar(0);
-      this.game.events.emit('generation-error', err);
+      this.game.events.emit("generation-error", err);
     }
   }
 
@@ -135,25 +127,20 @@ export default class LoadingScene extends Phaser.Scene {
 
   private drawProgressBar(fraction: number): void {
     const { width, height } = this.scale;
-    const centerX = width / 2;
+    const barX = width / 2 - BAR_WIDTH / 2;
     const barY = height / 2 + 40;
 
     this.barGraphics.clear();
 
     // Background track
     this.barGraphics.fillStyle(BAR_BG_COLOR);
-    this.barGraphics.fillRect(
-      centerX - BAR_WIDTH / 2,
-      barY,
-      BAR_WIDTH,
-      BAR_HEIGHT,
-    );
+    this.barGraphics.fillRect(barX, barY, BAR_WIDTH, BAR_HEIGHT);
 
     // Fill
     if (fraction > 0) {
       this.barGraphics.fillStyle(BAR_FILL_COLOR);
       this.barGraphics.fillRect(
-        centerX - BAR_WIDTH / 2,
+        barX,
         barY,
         BAR_WIDTH * Math.min(1, fraction),
         BAR_HEIGHT,

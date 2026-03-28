@@ -22,8 +22,7 @@
 
 import { RNG } from '@/lib/rng';
 import type { RunConfig } from '@/types/run';
-import type { WorldData, GenerationProgress } from '@/types/world';
-import { GenerationStage } from '@/types/world';
+import { GenerationStage, type WorldData, type GenerationProgress } from '@/types/world';
 import { generateCityLayout } from './wfc';
 import { generateAllInteriors } from './bsp';
 import { selectSafehouse } from './safehouse';
