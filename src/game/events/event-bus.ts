@@ -56,3 +56,26 @@ export type GameEventBus = EventEmitter<GameEventMap>;
 export function createGameEventBus(): GameEventBus {
   return new EventEmitter<GameEventMap>();
 }
+
+/**
+ * Emit an event on the bus, catching and logging any exceptions thrown
+ * by listeners. This prevents a buggy subscriber from crashing the
+ * fixed-timestep game loop (which would permanently freeze the game).
+ *
+ * Generic over the event name so callers get full type checking on the
+ * payload without needing per-event overloads. The inner cast is needed
+ * because eventemitter3's emit signature uses an intersection type that
+ * does not resolve cleanly with indexed generics.
+ */
+export function safeEmit<K extends keyof GameEventMap>(
+  bus: GameEventBus,
+  event: K,
+  payload: GameEventMap[K][0],
+): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (bus as EventEmitter<GameEventMap>).emit(event, payload as any);
+  } catch (err) {
+    console.error(`[EventBus] Listener threw on "${String(event)}":`, err);
+  }
+}

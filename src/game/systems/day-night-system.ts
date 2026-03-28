@@ -10,6 +10,7 @@
 
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
+import { safeEmit } from "@/game/events/event-bus";
 import {
   DAY_NIGHT,
   getPhaseDuration,
@@ -59,7 +60,7 @@ export function createDayNightSystem(ctx: SceneContext): SystemFn {
       clockState.timeRemainingInPhase = Math.max(0, newDuration - phaseElapsed);
 
       // Emit phase-change event.
-      eventBus.emit("phase-change", {
+      safeEmit(eventBus, "phase-change", {
         phase: nextPhase,
         previousPhase,
         dayNumber: clockState.dayNumber,
@@ -77,7 +78,7 @@ export function createDayNightSystem(ctx: SceneContext): SystemFn {
     ticksSinceLastEmit += 1;
     if (ticksSinceLastEmit >= DAY_NIGHT.TICK_EVENT_INTERVAL) {
       ticksSinceLastEmit = 0;
-      eventBus.emit("clock-tick", {
+      safeEmit(eventBus, "clock-tick", {
         phase: clockState.phase,
         dayNumber: clockState.dayNumber,
         timeRemainingInPhase: clockState.timeRemainingInPhase,

@@ -97,7 +97,7 @@ export const LIGHTING = {
  * Dusk and dawn have fixed durations.
  */
 export function getPhaseDuration(phase: DayPhase, dayNumber: number): number {
-  const idx = Math.min(dayNumber - 1, DAY_NIGHT.ESCALATION.length - 1);
+  const idx = Math.max(0, Math.min(dayNumber - 1, DAY_NIGHT.ESCALATION.length - 1));
   const entry = DAY_NIGHT.ESCALATION[idx];
   switch (phase) {
     case "day":

@@ -115,6 +115,13 @@ describe("getPhaseDuration", () => {
     expect(getPhaseDuration("day", 10)).toBe(120);
     expect(getPhaseDuration("night", 100)).toBe(180);
   });
+
+  it("clamps to first entry for dayNumber 0 or negative", () => {
+    // Defensive: dayNumber < 1 should not crash
+    expect(getPhaseDuration("day", 0)).toBe(300);
+    expect(getPhaseDuration("day", -1)).toBe(300);
+    expect(getPhaseDuration("night", 0)).toBe(90);
+  });
 });
 
 describe("getNextPhase", () => {

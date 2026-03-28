@@ -27,17 +27,13 @@ function createMockRenderTexture() {
 }
 
 function createMockCanvas() {
-  const ctx2d = {
-    createRadialGradient: vi.fn().mockReturnValue({
-      addColorStop: vi.fn(),
-    }),
-    fillRect: vi.fn(),
-  };
-  ctx2d.createRadialGradient = vi.fn().mockReturnValue({
-    addColorStop: vi.fn(),
-  });
   return {
-    context: ctx2d,
+    context: {
+      createRadialGradient: vi.fn().mockReturnValue({
+        addColorStop: vi.fn(),
+      }),
+      fillRect: vi.fn(),
+    },
     refresh: vi.fn(),
   };
 }
@@ -122,6 +118,37 @@ describe("getOverlayParams", () => {
   it("dawn at progress=1 returns day alpha", () => {
     const { alpha } = getOverlayParams("dawn", 1);
     expect(alpha).toBeCloseTo(LIGHTING.DAY_OVERLAY_ALPHA, 5);
+  });
+
+  // Tint value assertions
+  it("day phase returns black tint", () => {
+    const { tint } = getOverlayParams("day", 0);
+    expect(tint).toBe(0x000000);
+  });
+
+  it("night phase returns NIGHT_TINT", () => {
+    const { tint } = getOverlayParams("night", 0.5);
+    expect(tint).toBe(LIGHTING.NIGHT_TINT);
+  });
+
+  it("dusk at progress=0 returns DUSK_TINT", () => {
+    const { tint } = getOverlayParams("dusk", 0);
+    expect(tint).toBe(LIGHTING.DUSK_TINT);
+  });
+
+  it("dusk at progress=1 returns NIGHT_TINT", () => {
+    const { tint } = getOverlayParams("dusk", 1);
+    expect(tint).toBe(LIGHTING.NIGHT_TINT);
+  });
+
+  it("dawn at progress=0 returns NIGHT_TINT", () => {
+    const { tint } = getOverlayParams("dawn", 0);
+    expect(tint).toBe(LIGHTING.NIGHT_TINT);
+  });
+
+  it("dawn at progress=1 returns DAWN_TINT", () => {
+    const { tint } = getOverlayParams("dawn", 1);
+    expect(tint).toBe(LIGHTING.DAWN_TINT);
   });
 });
 
@@ -314,5 +341,16 @@ describe("LightingSystem", () => {
     system(DT);
 
     expect(renderTexture.erase).toHaveBeenCalled();
+  });
+
+  it("handles zero phaseDuration without throwing", () => {
+    const { ctx } = createMockContext({
+      phase: "dusk",
+      timeRemainingInPhase: 0,
+      phaseDuration: 0,
+    });
+
+    const system = createLightingSystem(ctx);
+    expect(() => system(DT)).not.toThrow();
   });
 });

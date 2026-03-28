@@ -17,8 +17,7 @@
 import type Phaser from "phaser";
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
-import { LIGHTING } from "./day-night-constants";
-import type { DayPhase } from "./day-night-constants";
+import { LIGHTING, type DayPhase } from "./day-night-constants";
 import { playerEntities } from "@/game/ecs/queries";
 
 // ---------------------------------------------------------------------------
@@ -112,14 +111,20 @@ const VISIBILITY_TEXTURE_KEY = "__daynight_visibility";
  * edges, sized to `VISIBILITY_RADIUS * 2`. When "erased" from the
  * RenderTexture it punches a soft hole in the darkness.
  */
-function getVisibilityTexture(scene: Phaser.Scene): string {
+function getVisibilityTexture(scene: Phaser.Scene): string | null {
   if (scene.textures.exists(VISIBILITY_TEXTURE_KEY)) {
     return VISIBILITY_TEXTURE_KEY;
   }
 
   const diameter = (LIGHTING.VISIBILITY_RADIUS + LIGHTING.VISIBILITY_EDGE_SOFTNESS) * 2;
   const canvas = scene.textures.createCanvas(VISIBILITY_TEXTURE_KEY, diameter, diameter);
-  if (!canvas) return VISIBILITY_TEXTURE_KEY;
+  if (!canvas) {
+    console.error(
+      "[LightingSystem] Failed to create visibility gradient canvas texture. " +
+        "Player visibility circle will be disabled.",
+    );
+    return null;
+  }
 
   const ctx2d = canvas.context;
   const cx = diameter / 2;
@@ -152,7 +157,8 @@ function getVisibilityTexture(scene: Phaser.Scene): string {
  */
 export function createLightingSystem(ctx: SceneContext): SystemFn {
   let overlay: Phaser.GameObjects.RenderTexture | null = null;
-  let visibilityTextureKey: string | null = null;
+  /** undefined = not attempted, null = attempted and failed, string = ready. */
+  let visibilityTextureKey: string | null | undefined = undefined;
 
   /** Tracked viewport dimensions so we can resize the overlay. */
   let lastWidth = 0;
@@ -179,7 +185,15 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
     // Create or resize the overlay RenderTexture.
     if (!overlay || lastWidth !== viewWidth || lastHeight !== viewHeight) {
       if (overlay) overlay.destroy();
-      overlay = scene.add.renderTexture(0, 0, viewWidth, viewHeight);
+      const created = scene.add.renderTexture(0, 0, viewWidth, viewHeight);
+      if (!created) {
+        console.error(
+          "[LightingSystem] Failed to create darkness overlay. " +
+            "Lighting effects will be disabled this frame.",
+        );
+        return;
+      }
+      overlay = created;
       overlay.setScrollFactor(0);
       overlay.setDepth(LIGHTING.OVERLAY_DEPTH);
       lastWidth = viewWidth;
@@ -190,36 +204,30 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
 
     // Fill the overlay with the tint at full opacity — the alpha is
     // controlled on the game object itself.
-    overlay.fill(
-      (tint >> 16) & 0xff,
-      (tint >> 8) & 0xff,
-      tint & 0xff,
-      255,
-    );
+    const [r, g, b] = unpackRgb(tint);
+    overlay.fill(r, g, b, 255);
     overlay.setAlpha(targetAlpha);
 
-    // During phases with reduced visibility, erase a circle at the player.
-    const showVisibility = phase === "night" || phase === "dusk" || phase === "dawn";
-    if (showVisibility) {
-      // Ensure the visibility gradient texture exists.
-      if (!visibilityTextureKey) {
-        visibilityTextureKey = getVisibilityTexture(scene);
-      }
+    // Erase a soft circle at the player position to create a visibility
+    // hole in the darkness. We only reach this point when targetAlpha > 0,
+    // which means the phase is dusk, night, or dawn (never day).
 
-      const player = playerEntities.entities[0];
-      if (player) {
-        // Player screen-space position.
-        const worldPos = player.position!;
-        const screenX = worldPos.x - cam.scrollX;
-        const screenY = worldPos.y - cam.scrollY;
+    // Ensure the visibility gradient texture exists (only attempt once).
+    if (visibilityTextureKey === undefined) {
+      visibilityTextureKey = getVisibilityTexture(scene);
+    }
 
-        const diameter = (LIGHTING.VISIBILITY_RADIUS + LIGHTING.VISIBILITY_EDGE_SOFTNESS) * 2;
-        overlay.erase(
-          visibilityTextureKey,
-          screenX - diameter / 2,
-          screenY - diameter / 2,
-        );
-      }
+    const player = playerEntities.entities[0];
+    if (player?.position && visibilityTextureKey) {
+      const screenX = player.position.x - cam.scrollX;
+      const screenY = player.position.y - cam.scrollY;
+
+      const diameter = (LIGHTING.VISIBILITY_RADIUS + LIGHTING.VISIBILITY_EDGE_SOFTNESS) * 2;
+      overlay.erase(
+        visibilityTextureKey,
+        screenX - diameter / 2,
+        screenY - diameter / 2,
+      );
     }
   };
 }
