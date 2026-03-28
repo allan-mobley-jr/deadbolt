@@ -241,14 +241,16 @@ export default class GameScene extends Phaser.Scene {
         const px = placed.position.x * TILE_SIZE + TILE_SIZE / 2;
         const py = placed.position.y * TILE_SIZE + TILE_SIZE / 2;
 
-        // Create physics body sized by immovability
+        // Create physics body sized by immovability.
+        // Immovable objects use dynamic bodies with high mass and friction
+        // so push/drag forces actually move them (isStatic ignores forces).
         const bodySize = def.immovable ? 32 : 16;
         const body = this.matter.add.rectangle(px, py, bodySize, bodySize, {
-          isStatic: def.immovable,
-          friction: 0.8,
-          frictionAir: 0.1,
+          isStatic: false,
+          friction: def.immovable ? 0.95 : 0.8,
+          frictionAir: def.immovable ? 0.3 : 0.1,
           restitution: 0.2,
-          mass: def.physics.mass,
+          mass: def.immovable ? def.physics.mass * 10 : def.physics.mass,
         });
         body.inertia = Infinity;
         body.inverseInertia = 0;

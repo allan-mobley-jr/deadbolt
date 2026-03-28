@@ -287,7 +287,9 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         dropY = py + (aimDy / aimDist) * DROP_OFFSET;
       }
 
-      // Create physics body for dropped object
+      // Create physics body for dropped object.
+      // Immovable objects use high mass + friction (not isStatic) so
+      // push/drag forces still work on them.
       const bodySize = def.immovable ? 32 : 16;
       const newBody = ctx.scene.matter.add.rectangle(
         dropX,
@@ -295,10 +297,11 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         bodySize,
         bodySize,
         {
-          isStatic: def.immovable,
-          friction: 0.8,
-          frictionAir: 0.1,
+          isStatic: false,
+          friction: def.immovable ? 0.95 : 0.8,
+          frictionAir: def.immovable ? 0.3 : 0.1,
           restitution: 0.2,
+          mass: def.immovable ? def.physics.mass * 10 : def.physics.mass,
         },
       );
       newBody.inertia = Infinity;
