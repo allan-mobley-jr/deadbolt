@@ -102,6 +102,48 @@ export interface PlayerDiedEvent {
   cause: string;
 }
 
+/** Emitted when an interactable object enters the player's range. */
+export interface InteractionPromptEvent {
+  objectType: string;
+  displayName: string;
+  interactionType: "pickup" | "open" | "push" | "search";
+  immovable: boolean;
+  worldX: number;
+  worldY: number;
+}
+
+/** Emitted when no interactable object is in range. */
+export interface InteractionPromptClearEvent {
+  /* intentionally empty */
+}
+
+/** Emitted when the player examines an object. */
+export interface ObjectExaminedEvent {
+  objectType: string;
+  displayName: string;
+  category: string;
+  properties: {
+    durability: number;
+    flammability: number;
+    conductivity: number;
+    lootValue: number;
+    immovable: boolean;
+  };
+}
+
+/** Emitted when an item is dropped from inventory. */
+export interface ObjectDroppedEvent {
+  objectType: string;
+  position: { x: number; y: number };
+}
+
+/** Emitted when dragging an object generates noise. */
+export interface NoiseGeneratedEvent {
+  position: { x: number; y: number };
+  radius: number;
+  source: string;
+}
+
 // ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
@@ -120,6 +162,11 @@ export interface ResumeCommandEvent {
 export interface SettingsChangedEvent {
   key: string;
   value: unknown;
+}
+
+/** Emitted by UI to drop an item from inventory. */
+export interface DropItemCommandEvent {
+  objectType: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,10 +193,18 @@ export interface GameEventMap {
   "barricade-broken": [event: BarricadeBrokenEvent];
   "item-picked-up": [event: ItemPickedUpEvent];
 
+  // Interaction
+  "interaction-prompt": [event: InteractionPromptEvent];
+  "interaction-prompt-clear": [event: InteractionPromptClearEvent];
+  "object-examined": [event: ObjectExaminedEvent];
+  "object-dropped": [event: ObjectDroppedEvent];
+  "noise-generated": [event: NoiseGeneratedEvent];
+
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
   "cmd:resume": [event: ResumeCommandEvent];
   "cmd:settings-changed": [event: SettingsChangedEvent];
+  "cmd:drop-item": [event: DropItemCommandEvent];
 }
 
 // ---------------------------------------------------------------------------

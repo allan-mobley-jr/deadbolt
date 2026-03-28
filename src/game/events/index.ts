@@ -16,6 +16,11 @@ export type {
   BarricadeBrokenEvent,
   ItemPickedUpEvent,
   PlayerDiedEvent,
+  InteractionPromptEvent,
+  InteractionPromptClearEvent,
+  ObjectExaminedEvent,
+  ObjectDroppedEvent,
+  NoiseGeneratedEvent,
 } from "./event-bus";
 
 // Event payloads — UI → Game commands
@@ -23,4 +28,5 @@ export type {
   PauseCommandEvent,
   ResumeCommandEvent,
   SettingsChangedEvent,
+  DropItemCommandEvent,
 } from "./event-bus";
