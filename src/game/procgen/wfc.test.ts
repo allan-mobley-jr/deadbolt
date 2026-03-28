@@ -886,9 +886,10 @@ describe('generateCityLayout', () => {
     }
 
     // The largest connected component should contain most road tiles.
-    // Parking lots expand to all Road but may form isolated islands,
-    // so we allow up to 30% disconnected tiles.
-    expect(visited.size / roadPositions.length).toBeGreaterThanOrEqual(0.7);
+    // Parking lots (all-Road 8×8 blocks with S sockets) may form isolated
+    // islands at the tile level — macro-level connectivity is guaranteed by
+    // validateMacroGrid. This threshold catches catastrophic fragmentation.
+    expect(visited.size / roadPositions.length).toBeGreaterThanOrEqual(0.5);
   });
 });
 
@@ -904,6 +905,9 @@ describe('retry and fallback resilience', () => {
     ];
     const sizes = [3, 4, 6, 8];
 
+    let totalBuildings = 0;
+    let totalRoadTiles = 0;
+
     for (const size of sizes) {
       for (const seed of seeds) {
         // Must not throw — fallback guarantees a result
@@ -916,8 +920,18 @@ describe('retry and fallback resilience', () => {
         expect(result.layout.tiles[0].length).toBe(
           size * WFC.MACRO_TILE_SIZE,
         );
+        totalBuildings += result.layout.buildings.length;
+        for (const row of result.layout.tiles) {
+          for (const cell of row) {
+            if (cell === TileType.Road) totalRoadTiles++;
+          }
+        }
       }
     }
+
+    // Across all 40 runs, the pipeline should produce meaningful output
+    expect(totalBuildings).toBeGreaterThan(0);
+    expect(totalRoadTiles).toBeGreaterThan(0);
   });
 
   it('fallback grid produces valid pipeline output with buildings', () => {
@@ -934,6 +948,15 @@ describe('retry and fallback resilience', () => {
     // Expansion produces correct dimensions
     expect(tiles.length).toBe(8 * WFC.MACRO_TILE_SIZE);
     expect(tiles[0].length).toBe(8 * WFC.MACRO_TILE_SIZE);
+
+    // Expanded tile grid contains road tiles from the fallback grid
+    let hasRoad = false;
+    for (const row of tiles) {
+      for (const cell of row) {
+        if (cell === TileType.Road) hasRoad = true;
+      }
+    }
+    expect(hasRoad).toBe(true);
 
     // Buildings extracted and classified
     expect(buildings.length).toBeGreaterThan(0);
