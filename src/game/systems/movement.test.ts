@@ -74,6 +74,20 @@ describe('movement system', () => {
     expect(entity.velocity!.y).toBeCloseTo(PLAYER_SPEED * INV_SQRT2, 5);
   });
 
+  it('normalises left+up diagonal with correct sign', () => {
+    const { entity, inputState, runMovement } = setup();
+    inputState.left = true;
+    inputState.up = true;
+    runMovement();
+
+    const magnitude = Math.sqrt(
+      entity.velocity!.x ** 2 + entity.velocity!.y ** 2,
+    );
+    expect(magnitude).toBeCloseTo(PLAYER_SPEED, 5);
+    expect(entity.velocity!.x).toBeCloseTo(-PLAYER_SPEED * INV_SQRT2, 5);
+    expect(entity.velocity!.y).toBeCloseTo(-PLAYER_SPEED * INV_SQRT2, 5);
+  });
+
   it('cancels velocity when opposing keys are pressed', () => {
     const { entity, inputState, runMovement } = setup();
     inputState.left = true;
