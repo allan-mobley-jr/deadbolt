@@ -62,6 +62,8 @@ export class GameLoop {
   tick(dtSeconds: number): void {
     // Clamp non-positive deltas (e.g. browser timer glitches on tab resume)
     if (dtSeconds <= 0) {
+      // No simulation advance this frame, so report 0 physics ticks.
+      this._physicsTicks = 0;
       return;
     }
 

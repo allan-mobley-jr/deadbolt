@@ -166,15 +166,10 @@ describe("GameLoop", () => {
       const loop = new GameLoop([sys]);
 
       loop.tick(FIXED_DT * 100);
-      expect(sys).toHaveBeenCalledTimes(MAX_STEPS_PER_FRAME);
-
-      sys.mockClear();
-
       loop.tick(FIXED_DT * 100);
-      expect(sys).toHaveBeenCalledTimes(MAX_STEPS_PER_FRAME);
 
       // Total across both frames should be exactly 2 × MAX_STEPS_PER_FRAME
-      expect(MAX_STEPS_PER_FRAME * 2).toBe(10);
+      expect(sys).toHaveBeenCalledTimes(MAX_STEPS_PER_FRAME * 2);
     });
 
     it("accumulator after spiral guard equals remainder of capped value", () => {
@@ -270,6 +265,31 @@ describe("GameLoop", () => {
       expect(() => loop.tick(0)).not.toThrow();
       // FPS should remain unchanged (no division by zero)
       expect(loop.fps).toBe(60);
+    });
+
+    it("resets physicsTicks to 0 on zero-delta after a positive tick", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      loop.tick(FIXED_DT);
+      expect(loop.physicsTicks).toBe(1);
+
+      loop.tick(0);
+      expect(loop.physicsTicks).toBe(0);
+      // FPS should remain unchanged (no division by zero)
+      expect(Number.isFinite(loop.fps)).toBe(true);
+    });
+
+    it("resets physicsTicks to 0 on negative delta after a positive tick", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      loop.tick(FIXED_DT);
+      expect(loop.physicsTicks).toBe(1);
+
+      loop.tick(-0.01);
+      expect(loop.physicsTicks).toBe(0);
+      expect(sys).toHaveBeenCalledTimes(1); // Only the first tick called it
     });
 
     it("rejects negative delta without corrupting state", () => {

@@ -20,6 +20,7 @@ describe("GameScene", () => {
   let keydownHandler: ((event: unknown) => void) | undefined;
 
   beforeEach(() => {
+    keydownHandler = undefined;
     scene = new GameScene();
     setBackgroundColor = vi.fn();
     titleText = createMockText();
