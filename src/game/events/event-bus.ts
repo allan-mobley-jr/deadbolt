@@ -11,6 +11,7 @@
 
 import EventEmitter from "eventemitter3";
 import type { DayPhase } from "@/game/systems/day-night-constants";
+import type { SizeCategory } from "@/game/procgen/object-defs";
 
 // ---------------------------------------------------------------------------
 // Event payload types — Game → UI
@@ -44,8 +45,10 @@ export interface PlayerHealthChangedEvent {
 /** A single inventory slot for display purposes. */
 export interface InventorySlot {
   itemType: string;
-  quantity: number;
   slotIndex: number;
+  sizeCategory: SizeCategory;
+  /** True for the primary slot of a multi-slot item. */
+  primary: boolean;
 }
 
 /** Emitted when the player's inventory contents change. */
@@ -129,6 +132,20 @@ export interface ObjectExaminedEvent {
   };
 }
 
+/** Emitted when the player's active quick-select slot changes. */
+export interface ActiveSlotChangedEvent {
+  activeSlot: number;
+  /** The item type in the active slot, or null if empty. */
+  itemType: string | null;
+}
+
+/** Emitted when a pickup attempt fails because inventory is full. */
+export interface InventoryFullEvent {
+  /** The item type that could not be picked up. */
+  attemptedItemType: string;
+  displayName: string;
+}
+
 /** Emitted when an item is dropped from inventory. */
 export interface ObjectDroppedEvent {
   objectType: string;
@@ -164,7 +181,10 @@ export interface SettingsChangedEvent {
 
 /** Emitted by UI to drop an item from inventory. */
 export interface DropItemCommandEvent {
-  objectType: string;
+  /** Object type to drop (first matching item removed). */
+  objectType?: string;
+  /** Slot index to drop from (takes priority over objectType). */
+  slotIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +210,8 @@ export interface GameEventMap {
   "barricade-placed": [event: BarricadePlacedEvent];
   "barricade-broken": [event: BarricadeBrokenEvent];
   "item-picked-up": [event: ItemPickedUpEvent];
+  "active-slot-changed": [event: ActiveSlotChangedEvent];
+  "inventory-full": [event: InventoryFullEvent];
 
   // Interaction
   "interaction-prompt": [event: InteractionPromptEvent];
