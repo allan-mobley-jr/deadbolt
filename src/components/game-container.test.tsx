@@ -92,7 +92,7 @@ test("throws to error boundary when createGame fails", async () => {
   consoleSpy.mockRestore();
 });
 
-test("does not set error state if import fails after unmount", async () => {
+test("does not set error state if createGame fails after unmount", async () => {
   // Make createGame throw — but the component will unmount first
   mockCreateGame.mockImplementation(() => {
     throw new Error("late failure");
