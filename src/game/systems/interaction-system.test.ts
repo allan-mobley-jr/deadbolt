@@ -17,14 +17,18 @@ import type { SystemFn } from "./system-runner";
 
 const DT = 1 / 60;
 
+/** Deterministic counter for body IDs to avoid non-deterministic collisions. */
+let nextBodyId = 100;
+
 // ---------------------------------------------------------------------------
 // Mock helpers
 // ---------------------------------------------------------------------------
 
 /** Minimal Matter.js body-like object for testing. */
-function createMockBody(id: number, x = 0, y = 0): MatterJS.BodyType {
+function createMockBody(id?: number, x = 0, y = 0): MatterJS.BodyType {
+  const bodyId = id ?? nextBodyId++;
   return {
-    id,
+    id: bodyId,
     position: { x, y },
     velocity: { x: 0, y: 0 },
     force: { x: 0, y: 0 },
@@ -45,7 +49,7 @@ function createMockContext(bus?: GameEventBus): SceneContext {
         },
         add: {
           rectangle: vi.fn(() => {
-            const body = createMockBody(Math.floor(Math.random() * 10000));
+            const body = createMockBody();
             bodyRegistry.register(body);
             return body;
           }),
@@ -72,7 +76,7 @@ function spawnPickupable(
   y: number,
   objectType = "wooden_plank",
 ) {
-  const body = createMockBody(Math.floor(Math.random() * 10000) + 100);
+  const body = createMockBody();
   ctx.bodyRegistry.register(body);
   return createObjectEntity(
     x,
@@ -93,7 +97,7 @@ function spawnImmovable(
   y: number,
   objectType = "bookshelf",
 ) {
-  const body = createMockBody(Math.floor(Math.random() * 10000) + 100);
+  const body = createMockBody();
   ctx.bodyRegistry.register(body);
   return createObjectEntity(
     x,
@@ -233,6 +237,30 @@ describe("InteractionSystem — proximity", () => {
 
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it("emits new prompt when nearest object changes", () => {
+    const handler = vi.fn();
+    ctx.eventBus.on("interaction-prompt", handler);
+
+    const farObj = spawnPickupable(ctx, 140, 100, "metal_sheet");
+    const nearObj = spawnPickupable(ctx, 110, 100, "wooden_plank");
+
+    system(DT);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ objectType: "wooden_plank" }),
+    );
+
+    // Move player closer to the far object
+    const player = world.entities.find((e) => e.playerControlled)!;
+    player.position!.x = 135;
+    system(DT);
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenLastCalledWith(
+      expect.objectContaining({ objectType: "metal_sheet" }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -370,6 +398,18 @@ describe("InteractionSystem — pickup", () => {
 
     expect(player.inventory!.items).toHaveLength(0);
   });
+
+  it("calls Matter.world.remove with the correct body on pickup", () => {
+    const obj = spawnPickupable(ctx, 110, 100);
+    const body = ctx.bodyRegistry.get(obj.physicsBody.bodyId)!;
+    const removeFn = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(removeFn).toHaveBeenCalledOnce();
+    expect(removeFn).toHaveBeenCalledWith(body);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -463,6 +503,22 @@ describe("InteractionSystem — immovable objects", () => {
     system(DT);
 
     // No force should be applied — drag is for immovable only
+    expect(body.force.x).toBe(0);
+    expect(body.force.y).toBe(0);
+  });
+
+  it("does not apply force when pointer overlaps object position", () => {
+    const obj = spawnImmovable(ctx, 120, 100);
+    const body = ctx.bodyRegistry.get(obj.physicsBody.bodyId)!;
+
+    // Pointer exactly on the object
+    ctx.inputState.pointerDown = true;
+    ctx.inputState.pointerWorldX = 120;
+    ctx.inputState.pointerWorldY = 100;
+
+    system(DT);
+
+    // Force should remain zero (dist <= 1 guard)
     expect(body.force.x).toBe(0);
     expect(body.force.y).toBe(0);
   });
@@ -573,6 +629,50 @@ describe("InteractionSystem — drop", () => {
 
     expect(player.inventory!.carryWeight).toBeLessThan(weightAfterPickup);
     expect(player.inventory!.carryWeight).toBeCloseTo(0);
+  });
+
+  it("decrements quantity when dropping one item from a stack", () => {
+    // Pick up two planks
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    expect(player.inventory!.items[0].quantity).toBe(2);
+
+    // Drop one
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    // Slot should remain with quantity 1
+    expect(player.inventory!.items).toHaveLength(1);
+    expect(player.inventory!.items[0].quantity).toBe(1);
+    expect(player.inventory!.items[0].objectType).toBe("wooden_plank");
+  });
+
+  it("emits inventory-changed after drop", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const handler = vi.fn();
+    bus.on("inventory-changed", handler);
+
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        carryWeight: 0,
+      }),
+    );
   });
 
   it("ignores drop command for item not in inventory", () => {
