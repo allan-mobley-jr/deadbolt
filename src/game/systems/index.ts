@@ -25,3 +25,4 @@ export { createRenderSyncSystem } from "./render-sync-system";
 export { createDayNightSystem } from "./day-night-system";
 export { createLightingSystem } from "./lighting-system";
 export { createCommandSystem } from "./command-system";
+export { createInteractionSystem } from "./interaction-system";
