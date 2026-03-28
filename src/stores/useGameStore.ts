@@ -59,9 +59,9 @@ export interface GameStoreActions {
   /** Mark a new wave as started. */
   setWaveStarted: (waveNumber: number, zombieCount: number) => void;
   /** Mark the current wave as ended. */
-  setWaveEnded: (zombiesKilled: number) => void;
-  /** Increment the total kill counter by one. */
-  incrementKills: () => void;
+  setWaveEnded: () => void;
+  /** Set the total kill count (authoritative value from game events). */
+  setTotalKills: (totalKills: number) => void;
   /** Set the paused state (used by bridge for UI → game commands). */
   setPaused: (paused: boolean) => void;
   /** Reset to initial state between game sessions. */
@@ -101,8 +101,7 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()(
 
     setWaveEnded: () => set({ waveActive: false }),
 
-    incrementKills: () =>
-      set((state) => ({ totalKills: state.totalKills + 1 })),
+    setTotalKills: (totalKills) => set({ totalKills }),
 
     setPaused: (paused) => set({ paused }),
 

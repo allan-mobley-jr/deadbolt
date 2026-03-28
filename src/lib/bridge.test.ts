@@ -132,19 +132,23 @@ describe("bridge", () => {
       bridge.disconnect();
     });
 
-    it("increments kills on zombie-killed", () => {
+    it("sets authoritative totalKills on zombie-killed", () => {
       const bridge = connectBridge(bus);
 
       safeEmit(bus, "zombie-killed", {
         position: { x: 100, y: 200 },
-        totalKills: 1,
-      });
-      safeEmit(bus, "zombie-killed", {
-        position: { x: 150, y: 250 },
-        totalKills: 2,
+        totalKills: 5,
       });
 
-      expect(useGameStore.getState().totalKills).toBe(2);
+      expect(useGameStore.getState().totalKills).toBe(5);
+
+      // Authoritative — overwrites, does not accumulate
+      safeEmit(bus, "zombie-killed", {
+        position: { x: 150, y: 250 },
+        totalKills: 6,
+      });
+
+      expect(useGameStore.getState().totalKills).toBe(6);
 
       bridge.disconnect();
     });

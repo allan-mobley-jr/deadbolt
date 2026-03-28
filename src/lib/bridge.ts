@@ -88,12 +88,12 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     useGameStore.getState().setWaveStarted(e.waveNumber, e.zombieCount);
   });
 
-  onBus("wave-ended", (e) => {
-    useGameStore.getState().setWaveEnded(e.zombiesKilled);
+  onBus("wave-ended", () => {
+    useGameStore.getState().setWaveEnded();
   });
 
-  onBus("zombie-killed", () => {
-    useGameStore.getState().incrementKills();
+  onBus("zombie-killed", (e) => {
+    useGameStore.getState().setTotalKills(e.totalKills);
   });
 
   onBus("player-died", () => {
@@ -154,7 +154,11 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
   return {
     disconnect() {
       for (const cleanup of cleanups) {
-        cleanup();
+        try {
+          cleanup();
+        } catch (err) {
+          console.error("[Bridge] Cleanup failed during disconnect:", err);
+        }
       }
       cleanups.length = 0;
     },

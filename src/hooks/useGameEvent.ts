@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * React hook for subscribing to game events directly.
  *
@@ -9,10 +11,8 @@
  * unnecessary re-subscriptions.
  */
 
-"use client";
-
 import { useEffect } from "react";
-import type { GameEventBus, GameEventMap } from "@/game/events/event-bus";
+import type { GameEventBus, GameEventMap } from "@/game/events";
 
 /**
  * Subscribe to a typed game event for the lifetime of the component.

@@ -43,17 +43,21 @@ describe("useGameStore", () => {
 
     it("marks wave as inactive on setWaveEnded", () => {
       useGameStore.getState().setWaveStarted(1, 10);
-      useGameStore.getState().setWaveEnded(10);
+      useGameStore.getState().setWaveEnded();
       expect(useGameStore.getState().waveActive).toBe(false);
     });
   });
 
-  describe("incrementKills", () => {
-    it("increments totalKills by one", () => {
-      useGameStore.getState().incrementKills();
-      useGameStore.getState().incrementKills();
-      useGameStore.getState().incrementKills();
-      expect(useGameStore.getState().totalKills).toBe(3);
+  describe("setTotalKills", () => {
+    it("sets totalKills to the authoritative value", () => {
+      useGameStore.getState().setTotalKills(5);
+      expect(useGameStore.getState().totalKills).toBe(5);
+    });
+
+    it("overwrites previous value", () => {
+      useGameStore.getState().setTotalKills(3);
+      useGameStore.getState().setTotalKills(7);
+      expect(useGameStore.getState().totalKills).toBe(7);
     });
   });
 
@@ -74,7 +78,7 @@ describe("useGameStore", () => {
     it("returns all fields to initial values", () => {
       useGameStore.getState().updateClock("night", 5, 50, 180, 1500);
       useGameStore.getState().setWaveStarted(4, 30);
-      useGameStore.getState().incrementKills();
+      useGameStore.getState().setTotalKills(42);
       useGameStore.getState().setPaused(true);
 
       useGameStore.getState().reset();
