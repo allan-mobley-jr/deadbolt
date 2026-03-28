@@ -4,10 +4,12 @@ import { render, cleanup, screen } from "@testing-library/react";
 
 const mockCreateGame = vi.fn();
 const mockDestroyGame = vi.fn();
+const mockGetActiveBus = vi.fn().mockReturnValue(null);
 
 vi.mock("@/game/PhaserGame", () => ({
   createGame: mockCreateGame,
   destroyGame: mockDestroyGame,
+  getActiveBus: mockGetActiveBus,
 }));
 
 import GameContainer from "@/components/game-container";
