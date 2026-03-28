@@ -41,9 +41,9 @@ export interface PhysicsBody {
 /**
  * Entity health pool with current and maximum values.
  *
- * Invariant: `0 <= current <= max`. Systems that modify health (damage,
- * healing) must maintain this invariant — no runtime enforcement is provided
- * at the component level.
+ * Intended constraint: `0 <= current <= max`. Systems that modify health
+ * (damage, healing) should maintain this constraint — no runtime enforcement
+ * is provided at the component level, so data may temporarily violate it.
  */
 export interface Health {
   current: number;

@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, it, expect, afterEach } from "vitest";
 import {
@@ -572,20 +572,15 @@ describe("post-reset query accuracy", () => {
 
 describe("import boundary", () => {
   it("ECS source files contain no phaser or react imports", () => {
-    const ecsFiles = [
-      "components.ts",
-      "entity.ts",
-      "world.ts",
-      "queries.ts",
-      "archetypes.ts",
-      "index.ts",
-    ];
+    const ecsDir = resolve(__dirname);
+    const ecsFiles = readdirSync(ecsDir).filter(
+      (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"),
+    );
+
+    expect(ecsFiles.length).toBeGreaterThan(0);
 
     for (const file of ecsFiles) {
-      const content = readFileSync(
-        resolve(__dirname, file),
-        "utf-8",
-      );
+      const content = readFileSync(resolve(ecsDir, file), "utf-8");
       expect(content).not.toMatch(/from\s+["']react/);
       expect(content).not.toMatch(/from\s+["']phaser/);
       expect(content).not.toMatch(/import\s+["']react/);
