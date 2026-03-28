@@ -17,6 +17,14 @@ export interface InputState {
   moveY: number;
   aimX: number;
   aimY: number;
+  /** True only on the tick the E key transitions from up to down. */
+  interactPressed: boolean;
+  /** True while the primary mouse button is held down. */
+  pointerDown: boolean;
+  /** World-space X of the pointer (valid when pointerDown is true). */
+  pointerWorldX: number;
+  /** World-space Y of the pointer (valid when pointerDown is true). */
+  pointerWorldY: number;
 }
 
 /**
@@ -65,7 +73,16 @@ export interface SceneContext {
 
 /** Create a zeroed-out input state. */
 export function createInputState(): InputState {
-  return { moveX: 0, moveY: 0, aimX: 0, aimY: 0 };
+  return {
+    moveX: 0,
+    moveY: 0,
+    aimX: 0,
+    aimY: 0,
+    interactPressed: false,
+    pointerDown: false,
+    pointerWorldX: 0,
+    pointerWorldY: 0,
+  };
 }
 
 /** Create a clock state initialised to the start of day 1. */

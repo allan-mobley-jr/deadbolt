@@ -20,8 +20,11 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
   let keys: KeyMap | null = null;
 
   if (kb) {
-    keys = kb.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT") as KeyMap;
+    keys = kb.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,E") as KeyMap;
   }
+
+  /** Track previous E key state for edge detection. */
+  let prevInteractDown = false;
 
   return (_dt: number): void => {
     const { inputState, scene } = ctx;
@@ -47,6 +50,11 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
     inputState.moveX = mx;
     inputState.moveY = my;
 
+    // ---- Interact key (E) — edge-triggered (rising edge only) ----
+    const interactDown = keys?.E?.isDown ?? false;
+    inputState.interactPressed = interactDown && !prevInteractDown;
+    prevInteractDown = interactDown;
+
     // ---- Aim (mouse) ----
     const pointer = scene.input.activePointer;
     if (pointer && scene.cameras.main) {
@@ -56,6 +64,13 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
       );
       inputState.aimX = worldPoint.x;
       inputState.aimY = worldPoint.y;
+
+      // ---- Pointer / drag state ----
+      inputState.pointerDown = pointer.isDown;
+      inputState.pointerWorldX = worldPoint.x;
+      inputState.pointerWorldY = worldPoint.y;
+    } else {
+      inputState.pointerDown = false;
     }
   };
 }
