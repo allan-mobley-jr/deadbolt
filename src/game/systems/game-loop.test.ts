@@ -144,6 +144,51 @@ describe("GameLoop", () => {
 
       expect(sys).toHaveBeenCalledTimes(3);
     });
+
+    it("does not carry over excess accumulator time to the next frame", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      // Massive spike: 20× FIXED_DT, capped to MAX_STEPS_PER_FRAME
+      loop.tick(FIXED_DT * 20);
+      expect(sys).toHaveBeenCalledTimes(MAX_STEPS_PER_FRAME);
+
+      sys.mockClear();
+
+      // Next normal frame should behave as if no excess leaked through
+      loop.tick(FIXED_DT);
+      expect(sys).toHaveBeenCalledTimes(1);
+      expect(loop.physicsTicks).toBe(1);
+    });
+
+    it("two consecutive spiral-guard frames do not compound accumulated time", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      loop.tick(FIXED_DT * 100);
+      expect(sys).toHaveBeenCalledTimes(MAX_STEPS_PER_FRAME);
+
+      sys.mockClear();
+
+      loop.tick(FIXED_DT * 100);
+      expect(sys).toHaveBeenCalledTimes(MAX_STEPS_PER_FRAME);
+
+      // Total across both frames should be exactly 2 × MAX_STEPS_PER_FRAME
+      expect(MAX_STEPS_PER_FRAME * 2).toBe(10);
+    });
+
+    it("accumulator after spiral guard equals remainder of capped value", () => {
+      const loop = new GameLoop([]);
+
+      // Spike triggers guard; cap = FIXED_DT * MAX_STEPS_PER_FRAME
+      // which is an exact multiple of FIXED_DT, so remainder ≈ 0
+      loop.tick(FIXED_DT * 20);
+      expect(loop.alpha).toBeCloseTo(0, 10);
+
+      // A subsequent partial frame should accumulate correctly from ~0
+      loop.tick(FIXED_DT * 0.3);
+      expect(loop.alpha).toBeCloseTo(0.3, 5);
+    });
   });
 
   describe("interpolation alpha", () => {
@@ -185,6 +230,23 @@ describe("GameLoop", () => {
       const loop = new GameLoop([]);
       expect(loop.alpha).toBe(0);
     });
+
+    it("is approximately 0 after a spiral-guard frame", () => {
+      const loop = new GameLoop([]);
+      loop.tick(FIXED_DT * 10);
+      // Cap is an exact multiple of FIXED_DT → fully consumed
+      expect(loop.alpha).toBeCloseTo(0, 10);
+    });
+
+    it("is approximately 0 after spiral guard with any oversized delta", () => {
+      const deltas = [FIXED_DT * 6, FIXED_DT * 50, FIXED_DT * 1000, 5.0];
+
+      for (const dt of deltas) {
+        const fresh = new GameLoop([]);
+        fresh.tick(dt);
+        expect(fresh.alpha).toBeCloseTo(0, 10);
+      }
+    });
   });
 
   describe("FPS calculation", () => {
@@ -225,6 +287,39 @@ describe("GameLoop", () => {
       expect(sys).toHaveBeenCalledTimes(1);
     });
 
+    it("converges toward 240 fps at sustained 240 Hz", () => {
+      const loop = new GameLoop([]);
+      for (let i = 0; i < 500; i++) {
+        loop.tick(1 / 240);
+      }
+      expect(loop.fps).toBeCloseTo(240, 0);
+    });
+
+    it("converges toward 15 fps at sustained 15 Hz", () => {
+      const loop = new GameLoop([]);
+      for (let i = 0; i < 500; i++) {
+        loop.tick(1 / 15);
+      }
+      expect(loop.fps).toBeCloseTo(15, 0);
+    });
+
+    it("FPS remains finite after rapid transitions between extreme rates", () => {
+      const loop = new GameLoop([]);
+
+      // Alternate between 240 Hz and 15 Hz in blocks
+      for (let cycle = 0; cycle < 3; cycle++) {
+        for (let i = 0; i < 100; i++) loop.tick(1 / 240);
+        expect(Number.isFinite(loop.fps)).toBe(true);
+
+        for (let i = 0; i < 100; i++) loop.tick(1 / 15);
+        expect(Number.isFinite(loop.fps)).toBe(true);
+      }
+
+      // After final 15 Hz block, should converge near 15
+      expect(loop.fps).toBeGreaterThan(10);
+      expect(loop.fps).toBeLessThan(25);
+    });
+
     it("smooths out jittery frame times", () => {
       const loop = new GameLoop([]);
       // Alternate between fast and slow frames
@@ -234,6 +329,46 @@ describe("GameLoop", () => {
       // EMA tracks arithmetic mean of instantaneous fps: (90+30)/2 = 60
       expect(loop.fps).toBeGreaterThan(55);
       expect(loop.fps).toBeLessThan(65);
+    });
+  });
+
+  describe("edge case: near-zero positive delta", () => {
+    it("handles Number.EPSILON delta without corrupting state", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      loop.tick(Number.EPSILON);
+
+      expect(sys).not.toHaveBeenCalled(); // Not enough for a physics step
+      expect(loop.physicsTicks).toBe(0);
+      expect(Number.isFinite(loop.fps)).toBe(true);
+      expect(loop.alpha).toBeGreaterThanOrEqual(0);
+      expect(loop.alpha).toBeLessThan(1);
+    });
+
+    it("handles 1e-15 delta without NaN in FPS", () => {
+      const loop = new GameLoop([]);
+
+      loop.tick(1e-15);
+
+      // 1/1e-15 = 1e15 — very large but finite; EMA will spike
+      expect(Number.isFinite(loop.fps)).toBe(true);
+      expect(Number.isNaN(loop.fps)).toBe(false);
+      expect(Number.isFinite(loop.alpha)).toBe(true);
+    });
+
+    it("many tiny deltas eventually accumulate to a physics step", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      // FIXED_DT / 1000 ≈ 16.67 µs — small but reasonable
+      const tiny = FIXED_DT / 1000;
+      for (let i = 0; i < 1000; i++) {
+        loop.tick(tiny);
+      }
+
+      // 1000 × (FIXED_DT/1000) = FIXED_DT → exactly 1 physics step
+      expect(sys).toHaveBeenCalledTimes(1);
     });
   });
 

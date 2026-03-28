@@ -88,6 +88,34 @@ describe("GameScene", () => {
       }
       // No throw = success
     });
+
+    it("converts Phaser ms delta to seconds before calling gameLoop.tick", () => {
+      scene.create();
+      const gameLoop = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      const tickSpy = vi.spyOn(gameLoop, "tick");
+
+      scene.update(0, 16.67);
+
+      expect(tickSpy).toHaveBeenCalledTimes(1);
+      expect(tickSpy).toHaveBeenCalledWith(
+        expect.closeTo(0.01667, 4),
+      );
+    });
+
+    it("does not pass raw milliseconds to gameLoop.tick", () => {
+      scene.create();
+      const gameLoop = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      const tickSpy = vi.spyOn(gameLoop, "tick");
+
+      // 500ms simulating a tab-return spike
+      scene.update(0, 500);
+
+      expect(tickSpy).toHaveBeenCalledWith(0.5);
+    });
   });
 
   describe("FPS debug overlay", () => {
@@ -161,6 +189,45 @@ describe("GameScene", () => {
       } as unknown as Phaser.Input.InputPlugin;
 
       expect(() => scene.create()).not.toThrow();
+    });
+  });
+
+  describe("update before create", () => {
+    it("catches crash when update() is called before create()", () => {
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      // update() before create() — gameLoop is uninitialized
+      scene.update(0, 16.67);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[GameScene] Game loop crashed:",
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it("scene remains permanently halted after update-before-create crash", () => {
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      // Trigger crash: update before create
+      scene.update(0, 16.67);
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      consoleSpy.mockClear();
+
+      // Now create properly — but crashed flag is already set
+      scene.create();
+
+      // Subsequent updates should be no-ops (crashed = true)
+      scene.update(16.67, 16.67);
+      scene.update(33.34, 16.67);
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
   });
 

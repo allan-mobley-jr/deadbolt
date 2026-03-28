@@ -50,6 +50,32 @@ describe("runSystems", () => {
     expect(() => runSystems([failing], 1 / 60)).toThrow("system failure");
   });
 
+  it("does not execute systems after one that throws", () => {
+    const before = vi.fn<SystemFn>();
+    const failing: SystemFn = () => {
+      throw new Error("boom");
+    };
+    const after = vi.fn<SystemFn>();
+
+    expect(() => runSystems([before, failing, after], 1 / 60)).toThrow("boom");
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("executes all systems before the failing one", () => {
+    const a = vi.fn<SystemFn>();
+    const b = vi.fn<SystemFn>();
+    const failing: SystemFn = () => {
+      throw new Error("crash");
+    };
+    const d = vi.fn<SystemFn>();
+
+    expect(() => runSystems([a, b, failing, d], 1 / 60)).toThrow("crash");
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+    expect(d).not.toHaveBeenCalled();
+  });
+
   it("calls each system exactly once per invocation", () => {
     const sys = vi.fn<SystemFn>();
 
