@@ -22,8 +22,10 @@ export interface PlayerStoreState {
   /** Whether the player is alive. */
   alive: boolean;
 
-  /** Inventory slots with item type and quantity. */
+  /** Inventory slots with item type and size. */
   inventory: InventorySlot[];
+  /** Index of the active quick-select slot (0-4), or -1 for none. */
+  activeSlot: number;
   /** Current carry weight. */
   carryWeight: number;
   /** Maximum carry weight. */
@@ -43,6 +45,8 @@ export interface PlayerStoreActions {
     carryWeight: number,
     maxCarryWeight: number,
   ) => void;
+  /** Update the active quick-select slot. */
+  updateActiveSlot: (activeSlot: number) => void;
   /** Mark the player as dead. */
   setDead: () => void;
   /** Reset to initial state between game sessions. */
@@ -58,6 +62,7 @@ const initialState: PlayerStoreState = {
   maxHealth: 100,
   alive: true,
   inventory: [],
+  activeSlot: -1,
   carryWeight: 0,
   maxCarryWeight: 50,
 };
@@ -74,6 +79,8 @@ export const usePlayerStore = create<PlayerStoreState & PlayerStoreActions>()(
 
     updateInventory: (slots, carryWeight, maxCarryWeight) =>
       set({ inventory: slots, carryWeight, maxCarryWeight }),
+
+    updateActiveSlot: (activeSlot) => set({ activeSlot }),
 
     setDead: () => set({ alive: false }),
 

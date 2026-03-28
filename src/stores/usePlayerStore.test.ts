@@ -12,6 +12,7 @@ describe("usePlayerStore", () => {
     expect(state.maxHealth).toBe(100);
     expect(state.alive).toBe(true);
     expect(state.inventory).toEqual([]);
+    expect(state.activeSlot).toBe(-1);
     expect(state.carryWeight).toBe(0);
     expect(state.maxCarryWeight).toBe(50);
   });
@@ -28,8 +29,8 @@ describe("usePlayerStore", () => {
   describe("updateInventory", () => {
     it("updates inventory slots and weight", () => {
       const slots = [
-        { itemType: "wood", quantity: 5, slotIndex: 0 },
-        { itemType: "nails", quantity: 12, slotIndex: 1 },
+        { itemType: "wood", slotIndex: 0, sizeCategory: "small" as const, primary: true },
+        { itemType: "nails", slotIndex: 1, sizeCategory: "small" as const, primary: true },
       ];
       usePlayerStore.getState().updateInventory(slots, 15, 50);
 
@@ -37,6 +38,13 @@ describe("usePlayerStore", () => {
       expect(state.inventory).toEqual(slots);
       expect(state.carryWeight).toBe(15);
       expect(state.maxCarryWeight).toBe(50);
+    });
+  });
+
+  describe("updateActiveSlot", () => {
+    it("updates the active slot index", () => {
+      usePlayerStore.getState().updateActiveSlot(3);
+      expect(usePlayerStore.getState().activeSlot).toBe(3);
     });
   });
 
@@ -51,8 +59,9 @@ describe("usePlayerStore", () => {
     it("returns all fields to initial values", () => {
       usePlayerStore.getState().updateHealth(25, 100);
       usePlayerStore.getState().setDead();
+      usePlayerStore.getState().updateActiveSlot(2);
       usePlayerStore.getState().updateInventory(
-        [{ itemType: "wood", quantity: 3, slotIndex: 0 }],
+        [{ itemType: "wood", slotIndex: 0, sizeCategory: "small" as const, primary: true }],
         10,
         50,
       );
@@ -63,6 +72,7 @@ describe("usePlayerStore", () => {
       expect(state.health).toBe(100);
       expect(state.alive).toBe(true);
       expect(state.inventory).toEqual([]);
+      expect(state.activeSlot).toBe(-1);
       expect(state.carryWeight).toBe(0);
     });
   });
