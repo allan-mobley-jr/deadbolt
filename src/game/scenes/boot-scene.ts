@@ -26,8 +26,8 @@ export default class BootScene extends Phaser.Scene {
       // Generate the player texture (a coloured square).
       this.createPlayerTexture();
 
-      // All assets ready — start the game.
-      this.scene.start("GameScene");
+      // All assets ready — proceed to loading / world generation.
+      this.scene.start("LoadingScene");
     } catch (err) {
       console.error("[BootScene] Failed to generate assets:", err);
       this.game.events.emit("boot-error", err);

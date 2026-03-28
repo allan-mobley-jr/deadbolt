@@ -51,9 +51,9 @@ describe("BootScene", () => {
     expect((scene as unknown as { key: string }).key).toBe("BootScene");
   });
 
-  it("transitions to GameScene on create", () => {
+  it("transitions to LoadingScene on create", () => {
     scene.create();
-    expect(scene.scene.start).toHaveBeenCalledWith("GameScene");
+    expect(scene.scene.start).toHaveBeenCalledWith("LoadingScene");
   });
 
   it("generates the tileset texture during create", () => {

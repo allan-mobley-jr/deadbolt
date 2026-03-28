@@ -7,6 +7,7 @@ import {
   getGame,
 } from "@/game/PhaserGame";
 import BootScene from "@/game/scenes/boot-scene";
+import LoadingScene from "@/game/scenes/loading-scene";
 import GameScene from "@/game/scenes/game-scene";
 
 describe("buildGameConfig", () => {
@@ -31,9 +32,9 @@ describe("buildGameConfig", () => {
     expect(config.parent).toBe("my-container");
   });
 
-  it("includes BootScene and GameScene in scene list", () => {
+  it("includes BootScene, LoadingScene, and GameScene in scene list", () => {
     const config = buildGameConfig("test");
-    expect(config.scene).toEqual([BootScene, GameScene]);
+    expect(config.scene).toEqual([BootScene, LoadingScene, GameScene]);
   });
 
   it("targets 60 fps", () => {
