@@ -60,59 +60,72 @@ export default class LoadingScene extends Phaser.Scene {
   }
 
   create(): void {
-    const { width, height } = this.scale;
-    const centerX = width / 2;
-    const centerY = height / 2;
+    try {
+      const { width, height } = this.scale;
+      const centerX = width / 2;
+      const centerY = height / 2;
 
-    // --- Background ---
-    this.cameras.main.setBackgroundColor(BG_COLOR);
+      // --- Background ---
+      this.cameras.main.setBackgroundColor(BG_COLOR);
 
-    // --- Title ---
-    this.add
-      .text(centerX, centerY - 80, 'DEADBOLT', TITLE_STYLE)
-      .setOrigin(0.5);
+      // --- Title ---
+      this.add
+        .text(centerX, centerY - 80, 'DEADBOLT', TITLE_STYLE)
+        .setOrigin(0.5);
 
-    // --- Status message ---
-    this.statusText = this.add
-      .text(centerX, centerY, 'Initializing...', STATUS_STYLE)
-      .setOrigin(0.5);
+      // --- Status message ---
+      this.statusText = this.add
+        .text(centerX, centerY, 'Initializing...', STATUS_STYLE)
+        .setOrigin(0.5);
 
-    // --- Progress bar ---
-    this.barGraphics = this.add.graphics();
-    this.drawProgressBar(0);
+      // --- Progress bar ---
+      this.barGraphics = this.add.graphics();
+      this.drawProgressBar(0);
 
-    // --- Seed ---
-    const seed = generateSeed();
-    this.seedText = this.add
-      .text(centerX, centerY + 80, `Seed: ${seed}`, SEED_STYLE)
-      .setOrigin(0.5);
+      // --- Seed ---
+      const seed = generateSeed();
+      this.seedText = this.add
+        .text(centerX, centerY + 80, `Seed: ${seed}`, SEED_STYLE)
+        .setOrigin(0.5);
 
-    // --- Build run config and start generation ---
-    const config: RunConfig = {
-      seed,
-      difficulty: RUN_DEFAULTS.difficulty,
-      targetMinutes: RUN_DEFAULTS.targetMinutes,
-    };
+      // --- Build run config and start generation ---
+      const config: RunConfig = {
+        seed,
+        difficulty: RUN_DEFAULTS.difficulty,
+        targetMinutes: RUN_DEFAULTS.targetMinutes,
+      };
 
-    this.generator = generateWorld(config);
+      this.generator = generateWorld(config);
+    } catch (err) {
+      console.error('[LoadingScene] Failed to initialise:', err);
+      this.game.events.emit('generation-error', err);
+    }
   }
 
   update(): void {
     if (!this.generator) return;
 
-    const result = this.generator.next();
+    try {
+      const result = this.generator.next();
 
-    if (!result.done) {
-      // Update UI with progress
-      const progress = result.value;
-      this.statusText.setText(progress.message);
-      this.drawProgressBar(progress.progress);
-    } else {
-      // Generation complete — transition to GameScene with world data
-      const worldData = result.value;
+      if (!result.done) {
+        // Update UI with progress
+        const progress = result.value;
+        this.statusText.setText(progress.message);
+        this.drawProgressBar(progress.progress);
+      } else {
+        // Generation complete — transition to GameScene with world data
+        const worldData = result.value;
+        this.generator = null;
+        this.drawProgressBar(1);
+        this.scene.start('GameScene', worldData);
+      }
+    } catch (err) {
       this.generator = null;
-      this.drawProgressBar(1);
-      this.scene.start('GameScene', worldData);
+      console.error('[LoadingScene] World generation failed:', err);
+      this.statusText.setText('Generation failed. Refresh to retry.');
+      this.drawProgressBar(0);
+      this.game.events.emit('generation-error', err);
     }
   }
 

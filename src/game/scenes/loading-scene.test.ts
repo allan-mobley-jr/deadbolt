@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import LoadingScene from '@/game/scenes/loading-scene';
+import { generateWorld } from '@/game/procgen/world-generator';
+import { generateSeed } from '@/lib/rng';
+import { GenerationStage } from '@/types/world';
 
 // ---------------------------------------------------------------------------
 // Mock the world generator to avoid running the full procgen pipeline
@@ -83,6 +86,12 @@ function createMockScene() {
   scene.scene = {
     start: vi.fn(),
   } as unknown as Phaser.Scenes.ScenePlugin;
+
+  scene.game = {
+    events: {
+      emit: vi.fn(),
+    },
+  } as unknown as Phaser.Game;
 
   return { scene, textInstances, mockGraphics };
 }
@@ -212,5 +221,68 @@ describe('LoadingScene', () => {
 
   it('is safe to call update before create (no generator)', () => {
     expect(() => scene.update()).not.toThrow();
+  });
+
+  // -------------------------------------------------------------------------
+  // Error handling
+  // -------------------------------------------------------------------------
+
+  describe('error handling', () => {
+    it('displays error message when generator throws mid-stage', () => {
+      vi.mocked(generateWorld).mockImplementation(function* () {
+        yield { stage: GenerationStage.CityLayout, message: 'Generating city layout...', progress: 0 };
+        throw new Error('BSP failed: no rooms generated');
+      });
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      scene.create();
+
+      scene.update(); // first yield OK
+      scene.update(); // should catch the throw
+
+      const statusText = textInstances[1];
+      expect(statusText.setText).toHaveBeenCalledWith('Generation failed. Refresh to retry.');
+      expect(scene.scene.start).not.toHaveBeenCalled();
+      expect(scene.game.events.emit).toHaveBeenCalledWith(
+        'generation-error',
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('stops the generator after an error occurs', () => {
+      vi.mocked(generateWorld).mockImplementation(function* () {
+        throw new Error('Immediate failure');
+      });
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      scene.create();
+
+      scene.update(); // catches error
+
+      // Subsequent updates should be no-ops (generator nulled)
+      scene.update();
+      scene.update();
+      expect(scene.scene.start).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('emits generation-error event when create() fails', () => {
+      vi.mocked(generateSeed).mockImplementation(() => {
+        throw new Error('Crypto unavailable');
+      });
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      scene.create();
+
+      expect(scene.game.events.emit).toHaveBeenCalledWith(
+        'generation-error',
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
+
+      // Restore the mock for other tests
+      vi.mocked(generateSeed).mockReturnValue('test-seed-abc');
+    });
   });
 });
