@@ -4,6 +4,7 @@ import {
   computeSpeedMultiplier,
   INTERACTION_RANGE,
   MIN_SPEED_MULTIPLIER,
+  DROP_OFFSET,
 } from "./interaction-system";
 import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
@@ -683,5 +684,307 @@ describe("InteractionSystem — drop", () => {
     system(DT);
 
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("drops at player y + DROP_OFFSET when aim overlaps player position", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    // Aim exactly at the player position so aimDist <= 1
+    ctx.inputState.interactPressed = false;
+    ctx.inputState.aimX = 100;
+    ctx.inputState.aimY = 100;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    const rectFn = ctx.scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+    // Last call should be the drop call
+    const lastCall = rectFn.mock.calls[rectFn.mock.calls.length - 1];
+    expect(lastCall[0]).toBe(100); // dropX = px
+    expect(lastCall[1]).toBe(100 + DROP_OFFSET); // dropY = py + DROP_OFFSET
+  });
+
+  it("processes two queued drops in the same tick", () => {
+    // Pick up two different items
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    spawnPickupable(ctx, 110, 100, "gas_can");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    expect(player.inventory!.items).toHaveLength(2);
+
+    // Queue two drops before the next tick
+    ctx.inputState.interactPressed = false;
+    const droppedHandler = vi.fn();
+    bus.on("object-dropped", droppedHandler);
+
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    safeEmit(bus, "cmd:drop-item", { objectType: "gas_can" });
+    system(DT);
+
+    expect(droppedHandler).toHaveBeenCalledTimes(2);
+    expect(player.inventory!.items).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// InteractionSystem — pickup failure resilience
+// ---------------------------------------------------------------------------
+
+describe("InteractionSystem — pickup failure resilience", () => {
+  let ctx: SceneContext;
+  let system: SystemFn;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    system = createInteractionSystem(ctx);
+    createPlayerEntity(100, 100, 1);
+  });
+
+  afterEach(() => {
+    resetWorld();
+  });
+
+  it("does not add item to inventory when Matter.world.remove throws", () => {
+    const obj = spawnPickupable(ctx, 110, 100, "wooden_plank");
+    const player = world.entities.find((e) => e.playerControlled)!;
+    const removeFn = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    removeFn.mockImplementationOnce(() => {
+      throw new Error("physics engine error");
+    });
+
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    // Inventory must NOT contain the item
+    expect(player.inventory!.items).toHaveLength(0);
+    expect(player.inventory!.carryWeight).toBe(0);
+    // Entity should remain in world since removal failed
+    expect(world.entities).toContain(obj);
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("does not emit item-picked-up when Matter.world.remove throws", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    const removeFn = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const pickupHandler = vi.fn();
+    ctx.eventBus.on("item-picked-up", pickupHandler);
+
+    removeFn.mockImplementationOnce(() => {
+      throw new Error("physics engine error");
+    });
+
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(pickupHandler).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("does not emit inventory-changed when pickup fails", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    const removeFn = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const invHandler = vi.fn();
+    ctx.eventBus.on("inventory-changed", invHandler);
+
+    removeFn.mockImplementationOnce(() => {
+      throw new Error("physics engine error");
+    });
+
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(invHandler).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// InteractionSystem — drop failure resilience
+// ---------------------------------------------------------------------------
+
+describe("InteractionSystem — drop failure resilience", () => {
+  let ctx: SceneContext;
+  let bus: GameEventBus;
+  let system: SystemFn;
+
+  beforeEach(() => {
+    bus = createGameEventBus();
+    ctx = createMockContext(bus);
+    system = createInteractionSystem(ctx);
+    createPlayerEntity(100, 100, 1);
+  });
+
+  afterEach(() => {
+    resetWorld();
+  });
+
+  it("does not decrement inventory when matter.add.rectangle throws during drop", () => {
+    // Pick up an item first
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    const weightAfterPickup = player.inventory!.carryWeight;
+    expect(player.inventory!.items).toHaveLength(1);
+
+    // Make rectangle throw on the next call (the drop)
+    const rectFn = ctx.scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    rectFn.mockImplementationOnce(() => {
+      throw new Error("body creation failed");
+    });
+
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    // Inventory must be unchanged — item NOT lost
+    expect(player.inventory!.items).toHaveLength(1);
+    expect(player.inventory!.items[0].objectType).toBe("wooden_plank");
+    expect(player.inventory!.items[0].quantity).toBe(1);
+    expect(player.inventory!.carryWeight).toBe(weightAfterPickup);
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("does not emit object-dropped when matter.add.rectangle throws", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const rectFn = ctx.scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    rectFn.mockImplementationOnce(() => {
+      throw new Error("body creation failed");
+    });
+
+    const dropHandler = vi.fn();
+    bus.on("object-dropped", dropHandler);
+
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    expect(dropHandler).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("does not emit inventory-changed when matter.add.rectangle throws during drop", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const rectFn = ctx.scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    rectFn.mockImplementationOnce(() => {
+      throw new Error("body creation failed");
+    });
+
+    const invHandler = vi.fn();
+    bus.on("inventory-changed", invHandler);
+
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    expect(invHandler).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// InteractionSystem — drop with undefined object definition
+// ---------------------------------------------------------------------------
+
+describe("InteractionSystem — drop with undefined object definition", () => {
+  let ctx: SceneContext;
+  let bus: GameEventBus;
+  let system: SystemFn;
+
+  beforeEach(() => {
+    bus = createGameEventBus();
+    ctx = createMockContext(bus);
+    system = createInteractionSystem(ctx);
+    createPlayerEntity(100, 100, 1);
+  });
+
+  afterEach(() => {
+    resetWorld();
+  });
+
+  it("skips drop and warns when getObjectDef returns undefined for item type", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    // Inject a fabricated item type with no definition
+    player.inventory!.items.push({ objectType: "ghost_item", quantity: 1 });
+    player.inventory!.carryWeight = 5;
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const dropHandler = vi.fn();
+    bus.on("object-dropped", dropHandler);
+
+    safeEmit(bus, "cmd:drop-item", { objectType: "ghost_item" });
+    system(DT);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("ghost_item"),
+    );
+    // Inventory unchanged — item NOT lost
+    expect(player.inventory!.items).toHaveLength(1);
+    expect(player.inventory!.carryWeight).toBe(5);
+    expect(dropHandler).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("continues processing remaining drops after one has undefined def", () => {
+    // Pick up a real item
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    // Also inject a ghost item
+    player.inventory!.items.push({ objectType: "ghost_item", quantity: 1 });
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const dropHandler = vi.fn();
+    bus.on("object-dropped", dropHandler);
+
+    // pendingDrops uses pop() (LIFO), so push ghost_item first, plank second
+    // plank will be processed first (last pushed, first popped)
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "ghost_item" });
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    // Plank should have been dropped successfully
+    expect(dropHandler).toHaveBeenCalledOnce();
+    expect(dropHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ objectType: "wooden_plank" }),
+    );
+    // Ghost item should still be in inventory, plank should be gone
+    expect(player.inventory!.items).toHaveLength(1);
+    expect(player.inventory!.items[0].objectType).toBe("ghost_item");
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });
