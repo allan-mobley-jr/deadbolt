@@ -20,11 +20,14 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
   let keys: KeyMap | null = null;
 
   if (kb) {
-    keys = kb.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,E") as KeyMap;
+    keys = kb.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,E,ONE,TWO,THREE,FOUR,FIVE") as KeyMap;
   }
 
   /** Track previous E key state for edge detection. */
   let prevInteractDown = false;
+
+  /** Track previous number key states for edge detection. */
+  const prevNumDown = [false, false, false, false, false];
 
   return (_dt: number): void => {
     const { inputState, scene } = ctx;
@@ -54,6 +57,19 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
     const interactDown = keys?.E?.isDown ?? false;
     inputState.interactPressed = interactDown && !prevInteractDown;
     prevInteractDown = interactDown;
+
+    // ---- Quick-select (number keys 1-5) — edge-triggered ----
+    const numKeys = ["ONE", "TWO", "THREE", "FOUR", "FIVE"] as const;
+    inputState.quickSelectPressed = -1;
+    if (keys) {
+      for (let i = 0; i < numKeys.length; i++) {
+        const down = keys[numKeys[i]]?.isDown ?? false;
+        if (down && !prevNumDown[i]) {
+          inputState.quickSelectPressed = i;
+        }
+        prevNumDown[i] = down;
+      }
+    }
 
     // ---- Aim (mouse) ----
     const pointer = scene.input.activePointer;

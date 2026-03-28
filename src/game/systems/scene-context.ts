@@ -19,6 +19,8 @@ export interface InputState {
   aimY: number;
   /** True only on the tick the E key transitions from up to down. */
   interactPressed: boolean;
+  /** Quick-select key index pressed this tick (0-4 for keys 1-5), or -1 if none. */
+  quickSelectPressed: number;
   /** True while the primary mouse button is held down. */
   pointerDown: boolean;
   /** World-space X of the pointer (valid when pointerDown is true). */
@@ -79,6 +81,7 @@ export function createInputState(): InputState {
     aimX: 0,
     aimY: 0,
     interactPressed: false,
+    quickSelectPressed: -1,
     pointerDown: false,
     pointerWorldX: 0,
     pointerWorldY: 0,
