@@ -23,7 +23,7 @@ export const DECELERATION = 2400;
  * Move `current` toward `target` by at most `maxDelta` per call.
  * Returns the new value, never overshooting `target`.
  */
-function approach(current: number, target: number, maxDelta: number): number {
+export function approach(current: number, target: number, maxDelta: number): number {
   if (current < target) return Math.min(current + maxDelta, target);
   if (current > target) return Math.max(current - maxDelta, target);
   return target;

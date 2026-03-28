@@ -161,6 +161,156 @@ describe("RenderSyncSystem", () => {
     expect(cam.startFollow).toHaveBeenCalledTimes(1);
   });
 
+  // -------------------------------------------------------------------------
+  // Interpolation boundary values
+  // -------------------------------------------------------------------------
+
+  it("positions sprite at previous position when alpha is 0", () => {
+    const { ctx, addRectangle } = createMockContext(0);
+    const mockRect = createMockRect();
+    addRectangle.mockReturnValue(mockRect);
+    const system = createRenderSyncSystem(ctx);
+
+    world.add({
+      position: { x: 200, y: 300 },
+      previousPosition: { x: 100, y: 200 },
+      renderable: { spriteKey: "zombie" },
+    });
+
+    system(DT);
+
+    expect(mockRect.x).toBe(100);
+    expect(mockRect.y).toBe(200);
+  });
+
+  it("positions sprite at current position when alpha is 1", () => {
+    const { ctx, addRectangle } = createMockContext(1);
+    const mockRect = createMockRect();
+    addRectangle.mockReturnValue(mockRect);
+    const system = createRenderSyncSystem(ctx);
+
+    world.add({
+      position: { x: 200, y: 300 },
+      previousPosition: { x: 100, y: 200 },
+      renderable: { spriteKey: "zombie" },
+    });
+
+    system(DT);
+
+    expect(mockRect.x).toBe(200);
+    expect(mockRect.y).toBe(300);
+  });
+
+  // -------------------------------------------------------------------------
+  // Aim indicator
+  // -------------------------------------------------------------------------
+
+  it("lazily creates a Graphics object for the aim indicator", () => {
+    const { ctx, addRectangle } = createMockContext(0);
+    const mockRect = createMockRect(100, 100);
+    addRectangle.mockReturnValue(mockRect);
+    const system = createRenderSyncSystem(ctx);
+
+    world.add({
+      position: { x: 100, y: 100 },
+      velocity: { vx: 0, vy: 0 },
+      renderable: { spriteKey: "player" },
+      playerControlled: { active: true },
+    });
+
+    ctx.inputState.aimX = 200;
+    ctx.inputState.aimY = 100;
+
+    system(DT);
+
+    const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+    expect(addGraphics).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws the aim line toward the mouse position", () => {
+    const { ctx, addRectangle } = createMockContext(0);
+    // Sprite will be at (100, 100) due to alpha=0 and prev=current
+    const mockRect = createMockRect(100, 100);
+    addRectangle.mockReturnValue(mockRect);
+    const system = createRenderSyncSystem(ctx);
+
+    world.add({
+      position: { x: 100, y: 100 },
+      previousPosition: { x: 100, y: 100 },
+      velocity: { vx: 0, vy: 0 },
+      renderable: { spriteKey: "player" },
+      playerControlled: { active: true },
+    });
+
+    // Aim directly to the right
+    ctx.inputState.aimX = 300;
+    ctx.inputState.aimY = 100;
+
+    system(DT);
+
+    const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+    const gfxMock = addGraphics.mock.results[0]!.value;
+
+    expect(gfxMock.clear).toHaveBeenCalled();
+    expect(gfxMock.lineStyle).toHaveBeenCalledWith(2, 0xffffff, 0.7);
+    expect(gfxMock.beginPath).toHaveBeenCalled();
+    expect(gfxMock.moveTo).toHaveBeenCalledWith(100, 100);
+    // AIM_LINE_LENGTH = 32, direction (1, 0) → lineTo(132, 100)
+    expect(gfxMock.lineTo).toHaveBeenCalledWith(132, 100);
+    expect(gfxMock.strokePath).toHaveBeenCalled();
+  });
+
+  it("does not draw the aim line when aim position equals player position", () => {
+    const { ctx, addRectangle } = createMockContext(0);
+    const mockRect = createMockRect(100, 100);
+    addRectangle.mockReturnValue(mockRect);
+    const system = createRenderSyncSystem(ctx);
+
+    world.add({
+      position: { x: 100, y: 100 },
+      previousPosition: { x: 100, y: 100 },
+      velocity: { vx: 0, vy: 0 },
+      renderable: { spriteKey: "player" },
+      playerControlled: { active: true },
+    });
+
+    // Aim at the same position as player
+    ctx.inputState.aimX = 100;
+    ctx.inputState.aimY = 100;
+
+    system(DT);
+
+    const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+    const gfxMock = addGraphics.mock.results[0]!.value;
+
+    // clear() is always called, but beginPath should NOT be called (dist === 0)
+    expect(gfxMock.clear).toHaveBeenCalled();
+    expect(gfxMock.beginPath).not.toHaveBeenCalled();
+  });
+
+  it("reuses the same Graphics object across ticks", () => {
+    const { ctx, addRectangle } = createMockContext(0);
+    const mockRect = createMockRect(100, 100);
+    addRectangle.mockReturnValue(mockRect);
+    const system = createRenderSyncSystem(ctx);
+
+    world.add({
+      position: { x: 100, y: 100 },
+      velocity: { vx: 0, vy: 0 },
+      renderable: { spriteKey: "player" },
+      playerControlled: { active: true },
+    });
+
+    ctx.inputState.aimX = 200;
+    ctx.inputState.aimY = 100;
+
+    system(DT);
+    system(DT);
+
+    const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+    expect(addGraphics).toHaveBeenCalledTimes(1);
+  });
+
   it("only wires camera follow once", () => {
     const { ctx } = createMockContext();
     const system = createRenderSyncSystem(ctx);

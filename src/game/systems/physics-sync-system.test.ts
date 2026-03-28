@@ -141,6 +141,47 @@ describe("PhysicsSyncSystem", () => {
     expect(() => system(DT)).not.toThrow();
   });
 
+  it("sets body.speed to the magnitude of the step velocity", () => {
+    const body = createMockBody(1, 100, 100);
+    ctx.bodyRegistry.register(body);
+    const entity = createPlayerEntity(100, 100, 1);
+    entity.velocity.vx = 200;
+    entity.velocity.vy = -100;
+
+    system(DT);
+
+    const stepVx = 200 * DT;
+    const stepVy = -100 * DT;
+    const expectedSpeed = Math.sqrt(stepVx * stepVx + stepVy * stepVy);
+    expect(body.speed).toBeCloseTo(expectedSpeed, 5);
+  });
+
+  it("resets body.angularVelocity to zero after writing velocity", () => {
+    const body = createMockBody(1, 100, 100);
+    // Simulate a residual spin from Matter.js
+    (body as { angularVelocity: number }).angularVelocity = 5;
+    ctx.bodyRegistry.register(body);
+    const entity = createPlayerEntity(100, 100, 1);
+    entity.velocity.vx = 100;
+
+    system(DT);
+
+    expect(body.angularVelocity).toBe(0);
+  });
+
+  it("sets body.speed to zero when ECS velocity is zero", () => {
+    const body = createMockBody(1, 100, 100);
+    // Stale speed value
+    (body as { speed: number }).speed = 99;
+    ctx.bodyRegistry.register(body);
+    createPlayerEntity(100, 100, 1);
+    // velocity defaults to {vx: 0, vy: 0}
+
+    system(DT);
+
+    expect(body.speed).toBe(0);
+  });
+
   it("does not write velocity for entities without velocity component", () => {
     // A barricade has physicsBody but no velocity
     const body = createMockBody(2, 300, 300);
