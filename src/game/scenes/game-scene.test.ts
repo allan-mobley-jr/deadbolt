@@ -290,6 +290,7 @@ describe("GameScene", () => {
       const makeTilemap = scene.make.tilemap as ReturnType<typeof vi.fn>;
       expect(makeTilemap).toHaveBeenCalledWith(
         expect.objectContaining({
+          data: mockWorldData.layout.tiles,
           tileWidth: TILE_SIZE,
           tileHeight: TILE_SIZE,
         }),
