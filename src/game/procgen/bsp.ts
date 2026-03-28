@@ -391,7 +391,7 @@ function placeInteriorDoors(
 
   // Create entry points for both adjacent rooms.
   // Each side is checked: the room lookup uses the tile one step into the
-  // interior, and the facing direction points toward that room.
+  // interior, and the facing direction points outward from that room.
   const sides: Array<{ dx: number; dy: number; facing: Direction }> =
     node.splitHorizontal
       ? [

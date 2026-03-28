@@ -35,16 +35,18 @@ export const WFC = {
 // BSP building interior generator
 // ---------------------------------------------------------------------------
 
+const BSP_MIN_ROOM_SIZE = 3;
+
 export const BSP = {
   /** Minimum room dimension in tiles (width or height). Includes walls. */
-  MIN_ROOM_SIZE: 3,
+  MIN_ROOM_SIZE: BSP_MIN_ROOM_SIZE,
   /** Maximum BSP recursion depth. */
   MAX_DEPTH: 4,
   /**
    * Minimum dimension for a partition to be splittable.
-   * Must fit two MIN_ROOM_SIZE rooms sharing one wall: 2 * 3 - 1 = 5.
+   * Must fit two MIN_ROOM_SIZE rooms sharing one wall: 2 * MIN_ROOM_SIZE - 1.
    */
-  MIN_SPLIT_SIZE: 5,
+  MIN_SPLIT_SIZE: 2 * BSP_MIN_ROOM_SIZE - 1,
   /** Lower bound of split ratio (position within the valid range). */
   SPLIT_RATIO_MIN: 0.35,
   /** Upper bound of split ratio. */
