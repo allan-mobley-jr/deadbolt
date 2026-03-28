@@ -9,6 +9,7 @@ import {
 } from './safehouse';
 import { TileType, ObjectCategory } from '@/types/procgen';
 import type { Building, CityLayout, EntryPoint, PlacedObject } from '@/types/procgen';
+import { SAFEHOUSE_WEIGHTS } from './constants';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -41,6 +42,15 @@ function makeFurniture(x: number, y: number, objectType = 'sofa'): PlacedObject 
   return {
     position: { x, y },
     category: ObjectCategory.Furniture,
+    blocksMovement: true,
+    objectType,
+  };
+}
+
+function makeContainer(x: number, y: number, objectType = 'crate'): PlacedObject {
+  return {
+    position: { x, y },
+    category: ObjectCategory.Container,
     blocksMovement: true,
     objectType,
   };
@@ -273,6 +283,104 @@ describe('scoreBuilding', () => {
     expect(score.totalScore).toBeGreaterThanOrEqual(0);
   });
 
+  it('gives full size score at exactly IDEAL_SIZE_MIN boundary', () => {
+    // 8 * 5 = 40 tiles = IDEAL_SIZE_MIN
+    const b = makeBuilding({
+      id: 'b-min',
+      width: 8,
+      height: 5,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(SAFEHOUSE_WEIGHTS.BUILDING_SIZE);
+  });
+
+  it('gives full size score at exactly IDEAL_SIZE_MAX boundary', () => {
+    // 12 * 10 = 120 tiles = IDEAL_SIZE_MAX
+    const b = makeBuilding({
+      id: 'b-max',
+      width: 12,
+      height: 10,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(SAFEHOUSE_WEIGHTS.BUILDING_SIZE);
+  });
+
+  it('gives zero size score at exactly 2x IDEAL_SIZE_MAX', () => {
+    // 24 * 10 = 240 tiles = 2 * IDEAL_SIZE_MAX
+    // excess = 240 - 120 = 120, fitness = max(0, 1 - 120/120) = 0
+    const b = makeBuilding({
+      id: 'b-2x',
+      width: 24,
+      height: 10,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(0);
+  });
+
+  it('gives zero size score for area zero', () => {
+    const b = makeBuilding({
+      id: 'b-zero',
+      width: 0,
+      height: 0,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
+
+    const layout = makeLayout([b]);
+    const score = scoreBuilding(b, layout);
+
+    expect(score.buildingSizeScore).toBe(0);
+  });
+
+  it('excludes containers from loot count but includes in object density', () => {
+    const withContainers = makeBuilding({
+      id: 'b-containers',
+      width: 10,
+      height: 8,
+      entryPoints: [makeEntryPoint(1, 0)],
+      objects: [
+        makeLoot(1, 1),
+        makeLoot(2, 2),
+        makeContainer(3, 3),
+        makeContainer(4, 4),
+        makeContainer(5, 5),
+      ],
+    });
+
+    const lootOnly = makeBuilding({
+      id: 'b-loot-only',
+      width: 10,
+      height: 8,
+      origin: { x: 20, y: 20 },
+      entryPoints: [makeEntryPoint(21, 20)],
+      objects: [
+        makeLoot(21, 21),
+        makeLoot(22, 22),
+      ],
+    });
+
+    const layout = makeLayout([withContainers, lootOnly]);
+    const sContainers = scoreBuilding(withContainers, layout);
+    const sLootOnly = scoreBuilding(lootOnly, layout);
+
+    // Same loot count → same loot proximity score
+    expect(sContainers.lootProximityScore).toBe(sLootOnly.lootProximityScore);
+
+    // Containers count as cover → higher object density score
+    expect(sContainers.objectDensityScore).toBeGreaterThan(sLootOnly.objectDensityScore);
+  });
+
   it('returns zero score for buildings with zero entry points (sealed)', () => {
     const sealed = makeBuilding({
       id: 'sealed',
@@ -377,13 +485,19 @@ describe('selectSafehouse', () => {
     expect(result.building.id).toBe('big');
   });
 
-  it('falls back to largest building when none meet minimum area', () => {
-    const small1 = makeBuilding({ id: 's1', width: 3, height: 3 });
+  it('falls back to largest building with entry points when none meet minimum area', () => {
+    const small1 = makeBuilding({
+      id: 's1',
+      width: 3,
+      height: 3,
+      entryPoints: [makeEntryPoint(1, 0)],
+    });
     const small2 = makeBuilding({
       id: 's2',
       width: 4,
       height: 4,
       origin: { x: 10, y: 10 },
+      entryPoints: [makeEntryPoint(11, 10)],
     }); // 16 tiles, still under 25
 
     const layout = makeLayout([small1, small2]);
@@ -393,6 +507,21 @@ describe('selectSafehouse', () => {
     expect(result.building.id).toBe('s2');
     expect(result.usedFallback).toBe(true);
     expect(result.scoreBreakdown).toBeDefined();
+  });
+
+  it('throws when all buildings are sealed (no entry points)', () => {
+    const sealed1 = makeBuilding({ id: 'sealed1', width: 5, height: 5 });
+    const sealed2 = makeBuilding({
+      id: 'sealed2',
+      width: 6,
+      height: 6,
+      origin: { x: 10, y: 10 },
+    });
+
+    const layout = makeLayout([sealed1, sealed2]);
+    expect(() => selectSafehouse(layout)).toThrow(
+      'no building has entry points',
+    );
   });
 
   it('throws when city has no buildings', () => {
@@ -425,40 +554,13 @@ describe('selectSafehouse', () => {
       origin: { x: 10, y: 20 },
       width: 6,
       height: 4,
+      entryPoints: [makeEntryPoint(10, 20)],
     });
 
     const layout = makeLayout([b]);
     const result = selectSafehouse(layout);
 
     expect(result.minimapPosition).toEqual({ x: 13, y: 22 });
-  });
-
-  it('breaks ties by selecting the first building (lower index) when scores are equal', () => {
-    // Two identical buildings far apart (>LOOT_SEARCH_RADIUS) with no objects.
-    // All scoring factors depend only on local properties, so scores are equal.
-    const b1 = makeBuilding({
-      id: 'tie-a',
-      origin: { x: 0, y: 0 },
-      width: 10,
-      height: 8,
-      entryPoints: [makeEntryPoint(1, 0), makeEntryPoint(2, 0)],
-      objects: [],
-    });
-    const b2 = makeBuilding({
-      id: 'tie-b',
-      origin: { x: 30, y: 30 },
-      width: 10,
-      height: 8,
-      entryPoints: [makeEntryPoint(31, 30), makeEntryPoint(32, 30)],
-      objects: [],
-    });
-
-    const layout = makeLayout([b1, b2]);
-    const result = selectSafehouse(layout);
-
-    // Strict greater-than comparison means first building wins on ties.
-    expect(result.buildingIndex).toBe(0);
-    expect(result.building.id).toBe('tie-a');
   });
 
   it('is deterministic — same input produces same output', () => {

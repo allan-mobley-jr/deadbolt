@@ -92,7 +92,10 @@ export function applyObjectBlocking(
 // PathfindingGrid class
 // ---------------------------------------------------------------------------
 
-const NO_PATH: PathResult = { path: [], found: false, length: 0 };
+/** Return a fresh no-path result each call to prevent shared-mutation bugs. */
+function noPath(): PathResult {
+  return { path: [], found: false, length: 0 };
+}
 
 export class PathfindingGrid {
   private grid: PF.Grid;
@@ -161,12 +164,12 @@ export class PathfindingGrid {
    * mutates grid node state during traversal.
    */
   findPath(start: TileCoord, end: TileCoord): PathResult {
-    if (!this.canPathBetween(start, end)) return NO_PATH;
+    if (!this.canPathBetween(start, end)) return noPath();
 
     const cloned = this.grid.clone();
     const rawPath = this.finder.findPath(start.x, start.y, end.x, end.y, cloned);
 
-    if (rawPath.length === 0) return NO_PATH;
+    if (rawPath.length === 0) return noPath();
 
     const path: TileCoord[] = rawPath.map(([x, y]) => ({ x, y }));
     return { path, found: true, length: path.length };
@@ -179,12 +182,12 @@ export class PathfindingGrid {
    * mutates node state) and one for smooth-path line-of-sight checks.
    */
   findSmoothedPath(start: TileCoord, end: TileCoord): PathResult {
-    if (!this.canPathBetween(start, end)) return NO_PATH;
+    if (!this.canPathBetween(start, end)) return noPath();
 
     const searchClone = this.grid.clone();
     const rawPath = this.finder.findPath(start.x, start.y, end.x, end.y, searchClone);
 
-    if (rawPath.length === 0) return NO_PATH;
+    if (rawPath.length === 0) return noPath();
 
     // Fresh clone for smoothing — the search clone has mutated node state.
     const smoothClone = this.grid.clone();

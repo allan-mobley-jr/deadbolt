@@ -406,6 +406,31 @@ describe('PathfindingGrid', () => {
 
       expect(grid.findSmoothedPath({ x: 0, y: 0 }, { x: 2, y: 0 }).found).toBe(false);
     });
+
+    it('produces fewer waypoints than raw A* on open grid', () => {
+      // 7x7 open grid — diagonal traversal
+      const layout = createLayout(
+        Array.from({ length: 7 }, () =>
+          Array.from({ length: 7 }, () => R),
+        ),
+      );
+
+      const grid = PathfindingGrid.fromCityLayout(layout);
+      const raw = grid.findPath({ x: 0, y: 0 }, { x: 6, y: 6 });
+      const smoothed = grid.findSmoothedPath({ x: 0, y: 0 }, { x: 6, y: 6 });
+
+      expect(raw.found).toBe(true);
+      expect(smoothed.found).toBe(true);
+
+      // Smoothing should reduce waypoints on an open diagonal path
+      expect(smoothed.path.length).toBeLessThan(raw.path.length);
+
+      // Both should share start and end
+      expect(smoothed.path[0]).toEqual(raw.path[0]);
+      expect(smoothed.path[smoothed.path.length - 1]).toEqual(
+        raw.path[raw.path.length - 1],
+      );
+    });
   });
 
   describe('hasPath', () => {
@@ -483,6 +508,18 @@ describe('PathfindingGrid', () => {
       const result = grid.findPath({ x: 1, y: 0 }, { x: 1, y: 0 });
       expect(result.found).toBe(true);
       expect(result.path.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('returns distinct objects for separate no-path results', () => {
+      const grid = PathfindingGrid.fromCityLayout(
+        createLayout([[R, W, R]]),
+      );
+
+      const r1 = grid.findPath({ x: 0, y: 0 }, { x: 2, y: 0 });
+      const r2 = grid.findPath({ x: 0, y: 0 }, { x: 2, y: 0 });
+
+      expect(r1).not.toBe(r2);
+      expect(r1.path).not.toBe(r2.path);
     });
 
     it('treats Empty tiles as non-walkable in the grid', () => {

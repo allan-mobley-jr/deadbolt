@@ -17,9 +17,9 @@ import type {
   TileCoord,
   SpawnZone,
 } from '@/types/procgen';
-import { TileType } from '@/types/procgen';
 import { SPAWN_ZONE } from './constants';
 import { tileDistance, getBuildingCenter } from './geometry';
+import { isWalkableTileType } from './pathfinding-grid';
 
 // Re-export for consumers that imported tileDistance from here.
 export { tileDistance } from './geometry';
@@ -49,11 +49,7 @@ export function findWalkableSpawnPoints(
       if (tileDistance(center, { x, y }) > radius) continue;
 
       const tile = cityLayout.tiles[y]?.[x];
-      if (
-        tile !== undefined &&
-        tile !== TileType.Wall &&
-        tile !== TileType.Empty // spawn on roads/sidewalks/floors, not void
-      ) {
+      if (tile !== undefined && isWalkableTileType(tile)) {
         points.push({ x, y });
       }
     }
