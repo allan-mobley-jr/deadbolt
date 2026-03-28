@@ -113,14 +113,45 @@ describe('splitPartition', () => {
     const rect = { x: 0, y: 0, width: 15, height: 15 };
     const a = splitPartition(rect, 0, makeRng('det'));
     const b = splitPartition(rect, 0, makeRng('det'));
-    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a).toEqual(b);
   });
 
   it('produces different results with different seeds', () => {
     const rect = { x: 0, y: 0, width: 15, height: 15 };
     const a = splitPartition(rect, 0, makeRng('seed-a'));
     const b = splitPartition(rect, 0, makeRng('seed-b'));
-    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+    expect(a).not.toEqual(b);
+  });
+
+  it('all leaves satisfy MIN_ROOM_SIZE across 50 seeds and varied sizes', () => {
+    const sizes = [
+      { w: 5, h: 5 },
+      { w: 5, h: 10 },
+      { w: 10, h: 5 },
+      { w: 7, h: 7 },
+      { w: 10, h: 10 },
+      { w: 15, h: 15 },
+      { w: 20, h: 20 },
+    ];
+
+    for (let s = 0; s < 50; s++) {
+      for (const { w, h } of sizes) {
+        const rect = { x: 0, y: 0, width: w, height: h };
+        const tree = splitPartition(rect, 0, makeRng(`split-${s}`));
+        const leaves = collectLeaves(tree);
+
+        for (const leaf of leaves) {
+          expect(
+            leaf.rect.width,
+            `seed=split-${s} size=${w}x${h}: leaf width ${leaf.rect.width} < MIN_ROOM_SIZE`,
+          ).toBeGreaterThanOrEqual(BSP.MIN_ROOM_SIZE);
+          expect(
+            leaf.rect.height,
+            `seed=split-${s} size=${w}x${h}: leaf height ${leaf.rect.height} < MIN_ROOM_SIZE`,
+          ).toBeGreaterThanOrEqual(BSP.MIN_ROOM_SIZE);
+        }
+      }
+    }
   });
 
   it('can split a rect that is exactly MIN_SPLIT_SIZE', () => {
@@ -222,11 +253,124 @@ describe('assignRoomTypes', () => {
     expect(types[0]).toBe('store_front');
   });
 
+  it('commercial tie-breaking: first room wins store_front when areas are equal', () => {
+    const makeLeafLocal = (x: number, y: number, w: number, h: number): BSPLeaf => ({
+      kind: 'leaf',
+      rect: { x, y, width: w, height: h },
+    });
+    // All three leaves have identical dimensions (5x5 = area 25)
+    const leaves = [
+      makeLeafLocal(0, 0, 5, 5),
+      makeLeafLocal(5, 0, 5, 5),
+      makeLeafLocal(0, 5, 5, 5),
+    ];
+    const types = assignRoomTypes(leaves, 'commercial', makeRng());
+    // Strict greater-than comparison means index 0 wins the tie
+    expect(types[0]).toBe('store_front');
+  });
+
   it('single-room buildings get sensible defaults', () => {
     const leaf = [makeLeaf(0, 0, 5, 5)];
     expect(assignRoomTypes(leaf, 'residential', makeRng())).toEqual(['living_room']);
     expect(assignRoomTypes(leaf, 'commercial', makeRng())).toEqual(['store_front']);
     expect(assignRoomTypes(leaf, 'industrial', makeRng())).toEqual(['storage']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BSP invariants
+// ---------------------------------------------------------------------------
+
+describe('BSP invariants', () => {
+  it('union of leaf rects covers the entire building rect without gaps', () => {
+    const seeds = Array.from({ length: 20 }, (_, i) => `cover-${i}`);
+    const sizes = [
+      { w: 5, h: 5 },
+      { w: 7, h: 10 },
+      { w: 10, h: 7 },
+      { w: 10, h: 10 },
+      { w: 15, h: 15 },
+      { w: 20, h: 20 },
+    ];
+
+    for (const seed of seeds) {
+      for (const { w, h } of sizes) {
+        const rect = { x: 0, y: 0, width: w, height: h };
+        const tree = splitPartition(rect, 0, makeRng(seed));
+        const leaves = collectLeaves(tree);
+
+        // Build set of uncovered tiles
+        const uncovered = new Set<string>();
+        for (let y = rect.y; y < rect.y + rect.height; y++) {
+          for (let x = rect.x; x < rect.x + rect.width; x++) {
+            uncovered.add(`${x},${y}`);
+          }
+        }
+
+        // Remove tiles covered by leaves
+        for (const leaf of leaves) {
+          for (let y = leaf.rect.y; y < leaf.rect.y + leaf.rect.height; y++) {
+            for (let x = leaf.rect.x; x < leaf.rect.x + leaf.rect.width; x++) {
+              uncovered.delete(`${x},${y}`);
+            }
+          }
+        }
+
+        expect(
+          uncovered.size,
+          `seed=${seed} size=${w}x${h}: ${uncovered.size} tiles not covered by any leaf`,
+        ).toBe(0);
+
+        // Verify no leaf extends beyond the root rect
+        for (const leaf of leaves) {
+          expect(leaf.rect.x).toBeGreaterThanOrEqual(rect.x);
+          expect(leaf.rect.y).toBeGreaterThanOrEqual(rect.y);
+          expect(leaf.rect.x + leaf.rect.width).toBeLessThanOrEqual(rect.x + rect.width);
+          expect(leaf.rect.y + leaf.rect.height).toBeLessThanOrEqual(rect.y + rect.height);
+        }
+      }
+    }
+  });
+
+  it('each floor tile belongs to exactly one room interior', () => {
+    const seeds = ['floor-a', 'floor-b', 'floor-c', 'floor-d', 'floor-e'];
+    const sizes = [
+      { w: 8, h: 8 },
+      { w: 10, h: 10 },
+      { w: 15, h: 15 },
+      { w: 20, h: 20 },
+    ];
+
+    for (const seed of seeds) {
+      for (const { w, h } of sizes) {
+        const tiles = makeTileGrid(w + 10, h + 10);
+        const building = makeBuilding({ id: `b-${seed}-${w}x${h}`, width: w, height: h });
+        generateBuildingInterior(building, 'residential', tiles, makeRng(seed));
+
+        // For every floor tile, count how many rooms claim it as interior
+        for (let y = building.origin.y; y < building.origin.y + building.height; y++) {
+          for (let x = building.origin.x; x < building.origin.x + building.width; x++) {
+            if (tiles[y][x] === TileType.Floor) {
+              let ownerCount = 0;
+              for (const room of building.rooms) {
+                if (
+                  x > room.origin.x &&
+                  x < room.origin.x + room.width - 1 &&
+                  y > room.origin.y &&
+                  y < room.origin.y + room.height - 1
+                ) {
+                  ownerCount++;
+                }
+              }
+              expect(
+                ownerCount,
+                `seed=${seed} size=${w}x${h}: floor tile (${x},${y}) owned by ${ownerCount} rooms`,
+              ).toBe(1);
+            }
+          }
+        }
+      }
+    }
   });
 });
 
@@ -422,6 +566,23 @@ describe('window placement', () => {
     }
   });
 
+  it('large road-facing building has at least one window', () => {
+    const tiles = makeTileGrid(30, 30, TileType.Road);
+    const building = makeBuilding({
+      id: 'b-windows',
+      origin: { x: 5, y: 5 },
+      width: 20,
+      height: 20,
+    });
+    generateBuildingInterior(building, 'commercial', tiles, makeRng());
+
+    const windows = building.entryPoints.filter((ep) => ep.type === 'window');
+    expect(
+      windows.length,
+      'a large road-facing building should have at least one window',
+    ).toBeGreaterThanOrEqual(1);
+  });
+
   it('windows face road, sidewalk, or empty tiles', () => {
     const tiles = makeTileGrid(20, 20);
     const building = makeBuilding({ id: 'b1', width: 10, height: 10 });
@@ -568,6 +729,63 @@ describe('connectivity', () => {
     }
   });
 
+  it('at least 80% of seed-size combinations produce multi-room buildings', () => {
+    const seeds = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'];
+    const sizes = [
+      { w: 10, h: 10 },
+      { w: 15, h: 15 },
+      { w: 20, h: 20 },
+      { w: 8, h: 15 },
+      { w: 15, h: 8 },
+    ];
+
+    let multiRoom = 0;
+    let total = 0;
+
+    for (const seed of seeds) {
+      for (const { w, h } of sizes) {
+        const tiles = makeTileGrid(w + 10, h + 10);
+        const building = makeBuilding({ id: `b-${seed}-${w}x${h}`, width: w, height: h });
+        generateBuildingInterior(building, 'residential', tiles, makeRng(seed));
+        total++;
+        if (building.rooms.length > 1) multiRoom++;
+      }
+    }
+
+    // Guard against a regression that silently prevents splitting
+    expect(
+      multiRoom / total,
+      `only ${multiRoom}/${total} combinations produced multi-room buildings`,
+    ).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('connectivity holds for narrow buildings near MIN_SPLIT_SIZE', () => {
+    const narrowSizes = [
+      { w: 5, h: 5 },
+      { w: 5, h: 6 },
+      { w: 6, h: 5 },
+      { w: 6, h: 6 },
+      { w: 7, h: 5 },
+      { w: 5, h: 7 },
+    ];
+
+    for (let s = 0; s < 30; s++) {
+      for (const { w, h } of narrowSizes) {
+        const tiles = makeTileGrid(w + 10, h + 10);
+        const building = makeBuilding({ id: `narrow-${s}-${w}x${h}`, width: w, height: h });
+        generateBuildingInterior(building, 'residential', tiles, makeRng(`narrow-${s}`));
+
+        if (building.rooms.length <= 1) continue;
+
+        const { visited } = verifyConnectivity(building);
+        expect(
+          visited.size,
+          `seed=narrow-${s} size=${w}x${h}: not all ${building.rooms.length} rooms reachable`,
+        ).toBe(building.rooms.length);
+      }
+    }
+  });
+
   it('room graph is a tree (N-1 edges for N rooms) across multiple seeds', () => {
     const seeds = ['tree-1', 'tree-2', 'tree-3', 'tree-4', 'tree-5'];
 
@@ -608,7 +826,7 @@ describe('generateBuildingInterior', () => {
       expect(b1.rooms[i].height).toBe(b2.rooms[i].height);
       expect(b1.rooms[i].roomType).toBe(b2.rooms[i].roomType);
     }
-    expect(JSON.stringify(t1)).toBe(JSON.stringify(t2));
+    expect(t1).toEqual(t2);
   });
 
   it('produces different results with different seeds', () => {
@@ -710,6 +928,43 @@ describe('generateBuildingInterior', () => {
     });
 
     expect(exteriorDoors.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('exterior door is placed on road-facing wall when only one side has road', () => {
+    // Fill grid with empty, then put road only on the south side
+    const tiles = makeTileGrid(20, 20, TileType.Empty);
+    const building = makeBuilding({
+      id: 'b-south-road',
+      origin: { x: 2, y: 2 },
+      width: 8,
+      height: 8,
+    });
+    // Place road tiles along the row just south of the building (y = 10)
+    for (let x = 0; x < 20; x++) {
+      tiles[10][x] = TileType.Road;
+    }
+    generateBuildingInterior(building, 'residential', tiles, makeRng());
+
+    const exteriorDoors = building.entryPoints.filter((ep) => {
+      if (ep.type !== 'door') return false;
+      const { x, y } = ep.position;
+      return (
+        x === building.origin.x ||
+        x === building.origin.x + building.width - 1 ||
+        y === building.origin.y ||
+        y === building.origin.y + building.height - 1
+      );
+    });
+
+    expect(exteriorDoors.length).toBeGreaterThanOrEqual(1);
+    // The exterior door should be on the south wall (y = 9) facing road
+    const southDoor = exteriorDoors.find(
+      (ep) => ep.position.y === building.origin.y + building.height - 1,
+    );
+    expect(
+      southDoor,
+      'exterior door should be on the south wall facing road',
+    ).toBeDefined();
   });
 
   it('works with building offset from origin', () => {
@@ -881,6 +1136,25 @@ describe('edge cases', () => {
     for (const ep of building.entryPoints) {
       expect(ep.roomIndex).toBeGreaterThanOrEqual(0);
       expect(ep.roomIndex).toBeLessThan(building.rooms.length);
+    }
+  });
+
+  it('building at grid edge does not crash or write out of bounds', () => {
+    // Building at origin (0,0) with grid exactly matching building size
+    const tiles = makeTileGrid(6, 6, TileType.Empty);
+    const building = makeBuilding({ id: 'edge', origin: { x: 0, y: 0 }, width: 6, height: 6 });
+
+    expect(() =>
+      generateBuildingInterior(building, 'residential', tiles, makeRng()),
+    ).not.toThrow();
+
+    expect(building.rooms.length).toBeGreaterThanOrEqual(1);
+
+    // Verify all tiles within bounds are building tiles (not Empty)
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 6; x++) {
+        expect(tiles[y][x]).not.toBe(TileType.Empty);
+      }
     }
   });
 
