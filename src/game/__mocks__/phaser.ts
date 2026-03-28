@@ -12,6 +12,8 @@ class MockScene {
   cameras: unknown;
   add: unknown;
   scale: unknown;
+  input: unknown;
+  matter: unknown;
 
   constructor(config: string | { key: string }) {
     this.key = typeof config === "string" ? config : config.key;

@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import GameScene from "@/game/scenes/game-scene";
+import { resetWorld, world } from "@/game/ecs/world";
+
+// ---------------------------------------------------------------------------
+// Mock factories
+// ---------------------------------------------------------------------------
 
 /** Create a mock Phaser Text object that supports chaining. */
 function createMockText() {
@@ -12,31 +17,100 @@ function createMockText() {
   return text;
 }
 
+/** Create a mock Phaser Rectangle game object. */
+function createMockRect() {
+  return { x: 0, y: 0, destroy: vi.fn() };
+}
+
+/** Unique auto-incrementing body id. */
+let nextBodyId = 1;
+
+/** Create a mock Matter.js body. */
+function createMockBody(
+  x: number,
+  y: number,
+  opts?: { isStatic?: boolean },
+) {
+  const id = nextBodyId++;
+  return {
+    id,
+    position: { x, y },
+    velocity: { x: 0, y: 0 },
+    speed: 0,
+    angularVelocity: 0,
+    inertia: 0,
+    inverseInertia: 0,
+    isStatic: opts?.isStatic ?? false,
+  };
+}
+
+/** Create mock key objects for the keyboard. */
+function createMockKeys() {
+  const mkKey = () => ({ isDown: false });
+  return {
+    W: mkKey(),
+    A: mkKey(),
+    S: mkKey(),
+    D: mkKey(),
+    UP: mkKey(),
+    DOWN: mkKey(),
+    LEFT: mkKey(),
+    RIGHT: mkKey(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
+
 describe("GameScene", () => {
   let scene: GameScene;
   let setBackgroundColor: ReturnType<typeof vi.fn>;
-  let titleText: ReturnType<typeof createMockText>;
+  let setBounds: ReturnType<typeof vi.fn>;
+  // Title text was removed from the scene; variable kept for potential future UI text
   let fpsText: ReturnType<typeof createMockText>;
   let keydownHandler: ((event: unknown) => void) | undefined;
+  let mockKeys: ReturnType<typeof createMockKeys>;
+  let worldStep: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    nextBodyId = 1;
     keydownHandler = undefined;
     scene = new GameScene();
     setBackgroundColor = vi.fn();
-    titleText = createMockText();
+    setBounds = vi.fn();
     fpsText = createMockText();
+    mockKeys = createMockKeys();
+    worldStep = vi.fn();
 
     let textCallCount = 0;
+
     scene.cameras = {
-      main: { setBackgroundColor },
+      main: {
+        setBackgroundColor,
+        setBounds,
+        getWorldPoint: vi.fn((x: number, y: number) => ({ x, y })),
+        startFollow: vi.fn(),
+        width: 1280,
+        height: 720,
+      },
     } as unknown as Phaser.Cameras.Scene2D.CameraManager;
 
     scene.add = {
       text: vi.fn().mockImplementation(() => {
         textCallCount++;
-        // First call is the title text, second is the FPS overlay
-        return textCallCount === 1 ? titleText : fpsText;
+        // First call is the FPS overlay (floor + walls use rectangle)
+        return textCallCount === 1 ? fpsText : createMockText();
       }),
+      rectangle: vi.fn().mockImplementation(() => createMockRect()),
+      graphics: vi.fn().mockImplementation(() => ({
+        clear: vi.fn(),
+        lineStyle: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        strokePath: vi.fn(),
+      })),
     } as unknown as Phaser.GameObjects.GameObjectFactory;
 
     scene.scale = {
@@ -51,8 +125,27 @@ describe("GameScene", () => {
             keydownHandler = handler;
           }
         }),
+        addKeys: vi.fn().mockReturnValue(mockKeys),
       },
+      activePointer: { x: 640, y: 360 },
     } as unknown as Phaser.Input.InputPlugin;
+
+    scene.matter = {
+      world: {
+        autoUpdate: true,
+        step: worldStep,
+      },
+      add: {
+        rectangle: vi.fn().mockImplementation(
+          (x: number, y: number, _w: number, _h: number, opts?: Record<string, unknown>) =>
+            createMockBody(x, y, opts as { isStatic?: boolean }),
+        ),
+      },
+    } as unknown as Phaser.Physics.Matter.MatterPhysics;
+  });
+
+  afterEach(() => {
+    resetWorld();
   });
 
   it("registers with the key 'GameScene'", () => {
@@ -64,16 +157,55 @@ describe("GameScene", () => {
     expect(setBackgroundColor).toHaveBeenCalledWith("#1a1a2e");
   });
 
-  it("renders centered title text on create", () => {
+  it("sets camera bounds on create", () => {
     scene.create();
+    expect(setBounds).toHaveBeenCalledWith(0, 0, 2000, 2000);
+  });
 
-    expect(scene.add.text).toHaveBeenCalledWith(
-      640,
-      360,
-      "Deadbolt",
-      expect.objectContaining({ fontFamily: "monospace" }),
+  it("disables Matter.js auto-update", () => {
+    scene.create();
+    expect(scene.matter.world.autoUpdate).toBe(false);
+  });
+
+  it("spawns a player entity in the ECS world", () => {
+    scene.create();
+    const entities = world.entities;
+    const player = entities.find((e) => e.playerControlled !== undefined);
+    expect(player).toBeDefined();
+    expect(player!.position).toBeDefined();
+    expect(player!.velocity).toBeDefined();
+    expect(player!.renderable).toBeDefined();
+    expect(player!.physicsBody).toBeDefined();
+    expect(player!.health).toBeDefined();
+  });
+
+  it("creates walls as static Matter.js bodies", () => {
+    scene.create();
+    const addRect = scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+    // At least boundary walls + interior obstacles + player = many calls
+    expect(addRect.mock.calls.length).toBeGreaterThanOrEqual(5);
+    // Check that wall calls include isStatic
+    const wallCalls = addRect.mock.calls.filter(
+      (args: unknown[]) =>
+        args[4] && (args[4] as { isStatic?: boolean }).isStatic === true,
     );
-    expect(titleText.setOrigin).toHaveBeenCalledWith(0.5);
+    expect(wallCalls.length).toBeGreaterThanOrEqual(4); // at least boundary walls
+  });
+
+  it("resets the ECS world on create to support re-entry", () => {
+    // Add a dummy entity before create
+    world.add({ position: { x: 99, y: 99 } });
+    expect(world.entities.length).toBe(1);
+
+    scene.create();
+    // The dummy should be gone; only the player should remain
+    const player = world.entities.find((e) => e.playerControlled !== undefined);
+    expect(player).toBeDefined();
+    // No entity with position (99, 99)
+    const dummy = world.entities.find(
+      (e) => e.position?.x === 99 && e.position?.y === 99,
+    );
+    expect(dummy).toBeUndefined();
   });
 
   describe("game loop integration", () => {
@@ -87,7 +219,6 @@ describe("GameScene", () => {
       for (let i = 0; i < 100; i++) {
         scene.update(i * 16.67, 16.67);
       }
-      // No throw = success
     });
 
     it("converts Phaser ms delta to seconds before calling gameLoop.tick", () => {
@@ -100,44 +231,41 @@ describe("GameScene", () => {
       scene.update(0, 16.67);
 
       expect(tickSpy).toHaveBeenCalledTimes(1);
-      expect(tickSpy).toHaveBeenCalledWith(
-        expect.closeTo(0.01667, 4),
-      );
+      expect(tickSpy).toHaveBeenCalledWith(expect.closeTo(0.01667, 4));
     });
 
-    it("does not pass raw milliseconds to gameLoop.tick", () => {
+    it("calls render systems after gameLoop.tick", () => {
       scene.create();
-      const gameLoop = (
-        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
-      ).gameLoop;
-      const tickSpy = vi.spyOn(gameLoop, "tick");
+      const renderSystems = (
+        scene as unknown as { renderSystems: Array<(dt: number) => void> }
+      ).renderSystems;
+      expect(renderSystems.length).toBeGreaterThan(0);
 
-      // 500ms simulating a tab-return spike
-      scene.update(0, 500);
+      // Spy on first render system
+      const spy = vi.fn();
+      (scene as unknown as { renderSystems: Array<(dt: number) => void> })
+        .renderSystems[0] = spy;
 
-      expect(tickSpy).toHaveBeenCalledWith(0.5);
+      scene.update(0, 16.67);
+      expect(spy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("FPS debug overlay", () => {
     it("creates the FPS text on create and hides it by default", () => {
       scene.create();
-
-      // FPS text should be created (second text call)
-      expect(scene.add.text).toHaveBeenCalledTimes(2);
+      expect(scene.add.text).toHaveBeenCalled();
       expect(fpsText.setVisible).toHaveBeenCalledWith(false);
     });
 
     it("pins FPS text to camera and sets it on top", () => {
       scene.create();
-
       expect(fpsText.setScrollFactor).toHaveBeenCalledWith(0);
       expect(fpsText.setDepth).toHaveBeenCalledWith(Number.MAX_SAFE_INTEGER);
     });
 
     it("registers F3 keydown handler", () => {
       scene.create();
-
       expect(scene.input.keyboard!.on).toHaveBeenCalledWith(
         "keydown-F3",
         expect.any(Function),
@@ -148,13 +276,11 @@ describe("GameScene", () => {
       scene.create();
       fpsText.setVisible.mockClear();
 
-      // First toggle: show
       keydownHandler!({});
       expect(fpsText.setVisible).toHaveBeenCalledWith(true);
 
       fpsText.setVisible.mockClear();
 
-      // Second toggle: hide
       keydownHandler!({});
       expect(fpsText.setVisible).toHaveBeenCalledWith(false);
     });
@@ -162,10 +288,7 @@ describe("GameScene", () => {
     it("updates FPS text content when debug is visible", () => {
       scene.create();
 
-      // Enable debug
       keydownHandler!({});
-
-      // Run a frame
       scene.update(0, 16.67);
 
       expect(fpsText.setText).toHaveBeenCalled();
@@ -177,16 +300,14 @@ describe("GameScene", () => {
 
     it("does not update FPS text when debug is hidden", () => {
       scene.create();
-
-      // Debug is off by default — run a frame
       scene.update(0, 16.67);
-
       expect(fpsText.setText).not.toHaveBeenCalled();
     });
 
     it("initializes without keyboard when keyboard is null", () => {
       scene.input = {
         keyboard: null,
+        activePointer: { x: 0, y: 0 },
       } as unknown as Phaser.Input.InputPlugin;
 
       expect(() => scene.create()).not.toThrow();
@@ -199,7 +320,6 @@ describe("GameScene", () => {
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
-      // update() before create() — gameLoop is uninitialized
       scene.update(0, 16.67);
 
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -214,16 +334,13 @@ describe("GameScene", () => {
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
-      // Trigger crash: update before create
       scene.update(0, 16.67);
       expect(consoleSpy).toHaveBeenCalledTimes(1);
 
       consoleSpy.mockClear();
 
-      // Now create properly — but crashed flag is already set
       scene.create();
 
-      // Subsequent updates should be no-ops (crashed = true)
       scene.update(16.67, 16.67);
       scene.update(33.34, 16.67);
       expect(consoleSpy).not.toHaveBeenCalled();
@@ -236,7 +353,6 @@ describe("GameScene", () => {
     it("stops calling game loop after a system throws", () => {
       scene.create();
 
-      // Replace tick with one that throws on first call
       const gameLoop = (
         scene as unknown as { gameLoop: { tick: (dt: number) => void } }
       ).gameLoop;
@@ -250,14 +366,12 @@ describe("GameScene", () => {
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
-      // First call — triggers crash, logs error
       scene.update(0, 16.67);
       expect(consoleSpy).toHaveBeenCalledWith(
         "[GameScene] Game loop crashed:",
         expect.any(Error),
       );
 
-      // Subsequent calls — should be no-ops (crashed flag set)
       scene.update(16.67, 16.67);
       scene.update(33.34, 16.67);
       expect(tickCalls).toBe(1);
