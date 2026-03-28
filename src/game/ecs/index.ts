@@ -6,6 +6,7 @@ export type {
   PlayerControlled,
   PhysicsBody,
   Health,
+  InventorySlotData,
   Inventory,
   Interactable,
   ObjectProperties,

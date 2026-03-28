@@ -2,6 +2,7 @@ import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
 import type { ObjectCategory } from "@/types/procgen";
+import { createEmptyInventory } from "@/game/systems/inventory-utils";
 
 // ---------------------------------------------------------------------------
 // Archetype types — narrowed Entity types with required component sets.
@@ -57,7 +58,7 @@ export function createPlayerEntity(
     playerControlled: { active: true },
     physicsBody: { bodyId },
     health: { current: 100, max: 100 },
-    inventory: { items: [], carryWeight: 0, maxCarryWeight: 50 },
+    inventory: createEmptyInventory(50),
   });
 }
 
