@@ -12,9 +12,7 @@ import type { Entity } from "./entity";
  * Between runs (permadeath restart), call {@link resetWorld} to clear all
  * entities while preserving query subscriptions.
  */
-const world = new World<Entity>();
-
-export { world };
+export const world = new World<Entity>();
 
 /**
  * Remove all entities from the world. Intended for run boundaries
