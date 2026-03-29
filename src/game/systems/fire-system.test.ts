@@ -435,6 +435,21 @@ describe("FireSystem — AoE damage", () => {
     expect(player.health.current).toBeLessThan(initialHp);
   });
 
+  it("syncs combat previousHealth to prevent false i-frame triggers", () => {
+    const ctx = createMockContext();
+    const system = createFireSystem(ctx);
+
+    const source = spawnGasCan(ctx, 100, 100);
+    const player = spawnPlayer(ctx, 130, 100);
+    source.material.state = "burning";
+
+    tickN(ctx, system, FIRE.DAMAGE_TICK_INTERVAL + 1);
+
+    // After fire damage, previousHealth should match current health
+    // so the combat system does not detect a delta and grant i-frames
+    expect(player.combatState.previousHealth).toBe(player.health.current);
+  });
+
   it("respects player i-frames", () => {
     const ctx = createMockContext();
     const system = createFireSystem(ctx);
@@ -588,6 +603,61 @@ describe("FireSystem — barricade destruction", () => {
     const removeConstraint = ctx.scene.matter.world.removeConstraint as ReturnType<typeof vi.fn>;
     expect(removeConstraint).toHaveBeenCalledWith(mockConstraint);
     expect(ctx.constraintRegistry!.get(constraintId)).toBeUndefined();
+  });
+
+  it("updates pathfinding grid when barricade burns out", () => {
+    const mockPathfindingGrid = {
+      setWalkable: vi.fn().mockReturnValue(true),
+    };
+    const mockEntryPoints = [
+      { barricaded: true, position: { x: 3, y: 3 }, orientation: "horizontal" as const },
+    ];
+    const ctx = createMockContext({
+      pathfindingGrid: mockPathfindingGrid as unknown as NonNullable<SceneContext["pathfindingGrid"]>,
+      entryPoints: mockEntryPoints as unknown as NonNullable<SceneContext["entryPoints"]>,
+    });
+    const system = createFireSystem(ctx);
+
+    const bodyId = registerMockBody(ctx);
+    const barricade = createBarricadeEntity(
+      100, 100, bodyId,
+      "wooden_plank", 0, [], 60,
+    );
+    barricade.material.state = "burning";
+
+    const burnDuration =
+      FIRE.BASE_BURN_DURATION +
+      (1 - 0.9) * FIRE.FLAMMABILITY_DURATION_SCALE;
+    const burnTicks = Math.ceil(burnDuration / DT) + 1;
+    tickN(ctx, system, burnTicks);
+
+    // Pathfinding tile should be marked walkable (100px / 32 TILE_SIZE = tile 3)
+    expect(mockPathfindingGrid.setWalkable).toHaveBeenCalledWith(3, 3, true);
+    expect(mockEntryPoints[0].barricaded).toBe(false);
+  });
+
+  it("unregisters physics body from body registry on burnout", () => {
+    const ctx = createMockContext();
+    const system = createFireSystem(ctx);
+
+    const bodyId = registerMockBody(ctx);
+    const barricade = createBarricadeEntity(
+      100, 100, bodyId,
+      "wooden_plank", 0, [], 60,
+    );
+    barricade.material.state = "burning";
+
+    // Verify body is registered before burnout
+    expect(ctx.bodyRegistry.get(bodyId)).toBeDefined();
+
+    const burnDuration =
+      FIRE.BASE_BURN_DURATION +
+      (1 - 0.9) * FIRE.FLAMMABILITY_DURATION_SCALE;
+    const burnTicks = Math.ceil(burnDuration / DT) + 1;
+    tickN(ctx, system, burnTicks);
+
+    // Body should be unregistered after burnout
+    expect(ctx.bodyRegistry.get(bodyId)).toBeUndefined();
   });
 
   it("emits barricade-broken and fire-burnout events", () => {

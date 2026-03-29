@@ -134,6 +134,22 @@ function getVisualSize(key: string): number {
   return PLAYER_SIZE;
 }
 
+/** Blend a base colour toward the fire tint based on a pulse factor (0-1). */
+function blendWithFireTint(baseColor: number, elapsed: number): number {
+  const pulse =
+    0.6 + 0.4 * Math.sin(elapsed * FIRE.BURN_TINT_PULSE_RATE * Math.PI * 2);
+  const br = (baseColor >> 16) & 0xff;
+  const bg = (baseColor >> 8) & 0xff;
+  const bb = baseColor & 0xff;
+  const fr = (FIRE.BURN_TINT_COLOR >> 16) & 0xff;
+  const fg = (FIRE.BURN_TINT_COLOR >> 8) & 0xff;
+  const fb = FIRE.BURN_TINT_COLOR & 0xff;
+  const r = Math.round(br + (fr - br) * pulse);
+  const g = Math.round(bg + (fg - bg) * pulse);
+  const b = Math.round(bb + (fb - bb) * pulse);
+  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+}
+
 /** Pick a colour from a three-tier palette based on HP fraction. */
 function colorByHpTier(
   hpFraction: number,
@@ -313,20 +329,9 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       // Burning tint: pulsing orange-red overlay on non-barricade burning entities.
       // Barricade tints are handled separately in the barricade health section.
       if (entity.material?.state === "burning" && !entity.barricade) {
-        const pulse =
-          0.6 + 0.4 * Math.sin(totalElapsed * FIRE.BURN_TINT_PULSE_RATE * Math.PI * 2);
-        // Blend between base colour and fire tint based on pulse
-        const baseColor = spriteColour(entity.renderable.spriteKey);
-        const br = ((baseColor >> 16) & 0xff);
-        const bg = ((baseColor >> 8) & 0xff);
-        const bb = (baseColor & 0xff);
-        const fr = ((FIRE.BURN_TINT_COLOR >> 16) & 0xff);
-        const fg = ((FIRE.BURN_TINT_COLOR >> 8) & 0xff);
-        const fb = (FIRE.BURN_TINT_COLOR & 0xff);
-        const r = Math.round(br + (fr - br) * pulse);
-        const g = Math.round(bg + (fg - bg) * pulse);
-        const b = Math.round(bb + (fb - bb) * pulse);
-        sprite.setFillStyle(((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff));
+        sprite.setFillStyle(
+          blendWithFireTint(spriteColour(entity.renderable.spriteKey), totalElapsed),
+        );
       }
     }
 
@@ -429,19 +434,8 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         const sprite = sprites.get(entity);
         if (sprite) {
           if (entity.material?.state === "burning") {
-            const pulse =
-              0.6 + 0.4 * Math.sin(totalElapsed * FIRE.BURN_TINT_PULSE_RATE * Math.PI * 2);
             const baseTint = colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER);
-            const br = ((baseTint >> 16) & 0xff);
-            const bg = ((baseTint >> 8) & 0xff);
-            const bb = (baseTint & 0xff);
-            const fr = ((FIRE.BURN_TINT_COLOR >> 16) & 0xff);
-            const fg = ((FIRE.BURN_TINT_COLOR >> 8) & 0xff);
-            const fb = (FIRE.BURN_TINT_COLOR & 0xff);
-            const r = Math.round(br + (fr - br) * pulse);
-            const g = Math.round(bg + (fg - bg) * pulse);
-            const b = Math.round(bb + (fb - bb) * pulse);
-            sprite.setFillStyle(((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff));
+            sprite.setFillStyle(blendWithFireTint(baseTint, totalElapsed));
           } else {
             sprite.setFillStyle(
               colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER),

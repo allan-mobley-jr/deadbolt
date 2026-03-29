@@ -21,7 +21,6 @@ import type { Entity } from "@/game/ecs/entity";
 import { world } from "@/game/ecs/world";
 import {
   zombieEntities,
-  playerEntities,
   combatPlayerEntities,
   barricadeEntities,
 } from "@/game/ecs/queries";
@@ -29,7 +28,6 @@ import { safeEmit } from "@/game/events/event-bus";
 import { FIRE } from "./fire-constants";
 import { MATERIAL } from "./material-constants";
 import { TILE_SIZE } from "@/game/procgen/constants";
-import { getObjectDef } from "@/game/procgen/object-defs";
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -290,6 +288,10 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
                 player.health.current - damage,
               );
 
+              // Sync combat previousHealth so the combat system does not
+              // interpret fire damage as a zombie hit and grant i-frames.
+              player.combatState.previousHealth = player.health.current;
+
               safeEmit(ctx.eventBus, "fire-damage", {
                 position: { x: player.position.x, y: player.position.y },
                 damage,
@@ -321,13 +323,14 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           if (constraint) {
             try {
               ctx.scene.matter.world.removeConstraint(constraint);
+              ctx.constraintRegistry.unregister(constraintId);
             } catch (err) {
               console.error(
                 `[FireSystem] Failed to remove constraint ${constraintId}:`,
                 err,
               );
+              // Do NOT unregister �� constraint is still in the physics world
             }
-            ctx.constraintRegistry.unregister(constraintId);
           }
         }
 
@@ -358,21 +361,26 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
 
       // --- Remove physics body from Matter.js ---
       if (entity.physicsBody) {
-        const body = ctx.bodyRegistry.get(entity.physicsBody.bodyId);
+        const bodyId = entity.physicsBody.bodyId;
+        const body = ctx.bodyRegistry.get(bodyId);
         if (body) {
           try {
             ctx.scene.matter.world.remove(body);
           } catch (err) {
             console.error(
-              `[FireSystem] Failed to remove physics body:`,
+              `[FireSystem] Failed to remove physics body ${bodyId}:`,
               err,
             );
           }
         }
+        ctx.bodyRegistry.unregister(bodyId);
       }
 
       // --- Remove entity from ECS ---
-      world.remove(entity);
+      // Guard: entity may have been removed by event handlers in steps 3-4
+      if (entity.position && entity.material) {
+        world.remove(entity);
+      }
 
       // --- Emit burnout event ---
       safeEmit(ctx.eventBus, "fire-burnout", {
