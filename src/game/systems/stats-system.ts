@@ -69,9 +69,14 @@ export function resetRunStats(): void {
  *
  * Register after CombatSystem and before PhysicsSyncSystem so positions
  * are final for the tick but no side effects are produced.
+ *
+ * Listener cleanup: Event listeners are NOT explicitly removed because
+ * GameScene.create() creates a fresh eventBus via createGameEventBus()
+ * each session. Old listeners are garbage collected with the old bus.
+ * This function must only be called once per bus lifetime.
  */
 export function createStatsSystem(ctx: SceneContext): SystemFn {
-  // Event-driven counters
+  // Event-driven counters (cleaned up when eventBus is GC'd)
   ctx.eventBus.on("barricade-placed", () => {
     barricadesBuilt++;
   });
@@ -85,6 +90,10 @@ export function createStatsSystem(ctx: SceneContext): SystemFn {
     if (!player) return;
 
     const { x, y } = player.position;
+
+    // Guard against NaN coordinates from physics edge cases.
+    // NaN would permanently poison the accumulator (NaN + anything = NaN).
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
     if (needsInit) {
       // First tick: initialize previous position to spawn point

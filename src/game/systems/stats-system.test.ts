@@ -8,7 +8,7 @@ import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
-import { resetWorld } from "@/game/ecs/world";
+import { world, resetWorld } from "@/game/ecs/world";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 
 const DT = 1 / 60;
@@ -188,6 +188,38 @@ describe("StatsSystem", () => {
       system(DT); // no movement
 
       expect(getRunStats().distanceTraveled).toBe(0);
+    });
+
+    it("handles player entity removal mid-run without crashing", () => {
+      const entity = createPlayerEntity(0, 0, 1);
+      system(DT); // init
+
+      entity.position.x = 100;
+      system(DT); // accumulate 100px
+      expect(getRunStats().distanceTraveled).toBeCloseTo(100, 5);
+
+      // Remove the player entity (e.g. post-death cleanup)
+      world.remove(entity);
+      system(DT); // should no-op, not crash
+      system(DT);
+
+      expect(getRunStats().distanceTraveled).toBeCloseTo(100, 5);
+    });
+
+    it("skips NaN coordinates from physics edge cases", () => {
+      const entity = createPlayerEntity(0, 0, 1);
+      system(DT); // init
+
+      entity.position.x = NaN;
+      entity.position.y = NaN;
+      system(DT); // should skip NaN tick
+
+      // Restore valid position
+      entity.position.x = 50;
+      entity.position.y = 0;
+      system(DT); // resumes from prevX=0 since NaN tick was skipped
+
+      expect(getRunStats().distanceTraveled).toBeCloseTo(50, 5);
     });
   });
 

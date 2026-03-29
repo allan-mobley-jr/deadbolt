@@ -155,6 +155,17 @@ describe("useGameStore", () => {
       expect(state.distanceTraveled).toBe(1234.5);
       expect(state.objectsUsed).toBe(10);
     });
+
+    it("overwrites incrementBarricadesBuilt (game-side is authoritative)", () => {
+      useGameStore.getState().incrementBarricadesBuilt();
+      useGameStore.getState().incrementBarricadesBuilt();
+      useGameStore.getState().incrementBarricadesBuilt();
+      expect(useGameStore.getState().barricadesBuilt).toBe(3);
+
+      // Game-side snapshot at death overwrites the live counter
+      useGameStore.getState().setRunStats(7, 500, 2);
+      expect(useGameStore.getState().barricadesBuilt).toBe(7);
+    });
   });
 
   describe("incrementBarricadesBuilt", () => {
