@@ -57,6 +57,23 @@ function pixelToTile(px: number): number {
   return Math.floor(px / TILE_SIZE);
 }
 
+/**
+ * Find the barricade with the lowest currentDurability.
+ * Returns the barricade entity or null if no barricades exist.
+ * Used by brute AI for both pathfinding and attack target selection.
+ */
+function findWeakestBarricade(): Entity | null {
+  let weakest: Entity | null = null;
+  let lowestDurability = Infinity;
+  for (const barricade of barricadeEntities) {
+    if (barricade.barricade.currentDurability < lowestDurability) {
+      lowestDurability = barricade.barricade.currentDurability;
+      weakest = barricade;
+    }
+  }
+  return weakest;
+}
+
 /** Convert tile coordinate to world pixel center. */
 function tileToPx(tile: number): number {
   return tile * TILE_SIZE + TILE_SIZE / 2;
@@ -224,24 +241,50 @@ function runPathingState(
     entity.velocity.vy = 0;
   }
 
-  // --- Check proximity to barricades ---
+  // --- Barricade detection ---
   const bDetectSq = ZOMBIE_AI.BARRICADE_DETECTION_RANGE * ZOMBIE_AI.BARRICADE_DETECTION_RANGE;
-  const atkRangeSq = ZOMBIE_AI.ATTACK_RANGE * ZOMBIE_AI.ATTACK_RANGE;
 
-  for (const barricade of barricadeEntities) {
-    const d = distSq(
-      entity.position.x, entity.position.y,
-      barricade.position.x, barricade.position.y,
-    );
-    if (d <= bDetectSq) {
-      ai.state = "attacking";
-      ai.attackTargetBodyId = barricade.physicsBody.bodyId;
-      ai.attackCooldownRemaining = 0;
-      break;
+  // Brutes actively seek the weakest barricade regardless of proximity.
+  // They enter attacking when within detection range of their target.
+  if (stats.variant === "brute") {
+    const weakestBarricade = findWeakestBarricade();
+    if (weakestBarricade?.position && weakestBarricade.physicsBody) {
+      const d = distSq(
+        entity.position.x, entity.position.y,
+        weakestBarricade.position.x, weakestBarricade.position.y,
+      );
+      if (d <= bDetectSq) {
+        ai.state = "attacking";
+        ai.attackTargetBodyId = weakestBarricade.physicsBody.bodyId;
+        ai.attackCooldownRemaining = 0;
+      }
+    }
+  } else {
+    // Standard barricade proximity check (shambler, runner, horde)
+    for (const barricade of barricadeEntities) {
+      // Runner vault: skip barricades with durability at or below threshold
+      if (
+        stats.vaultDurabilityThreshold > 0 &&
+        barricade.barricade.currentDurability <= stats.vaultDurabilityThreshold
+      ) {
+        continue;
+      }
+
+      const d = distSq(
+        entity.position.x, entity.position.y,
+        barricade.position.x, barricade.position.y,
+      );
+      if (d <= bDetectSq) {
+        ai.state = "attacking";
+        ai.attackTargetBodyId = barricade.physicsBody.bodyId;
+        ai.attackCooldownRemaining = 0;
+        break;
+      }
     }
   }
 
   // --- Check proximity to player ---
+  const atkRangeSq = ZOMBIE_AI.ATTACK_RANGE * ZOMBIE_AI.ATTACK_RANGE;
   if (ai.state === "pathing" && player?.position) {
     const d = distSq(
       entity.position.x, entity.position.y,
@@ -323,7 +366,10 @@ function runAttackingState(
   if (ai.attackCooldownRemaining <= 0) {
     if (targetEntity.health) {
       const prevHealth = targetEntity.health.current;
-      targetEntity.health.current = Math.max(0, prevHealth - stats.attackDamage);
+      const damage = isBarricade
+        ? stats.attackDamage * stats.barricadeDamageMultiplier
+        : stats.attackDamage;
+      targetEntity.health.current = Math.max(0, prevHealth - damage);
       const actualDelta = targetEntity.health.current - prevHealth;
 
       if (!isBarricade && targetEntity.playerControlled) {
@@ -394,7 +440,11 @@ function transitionToPathing(ai: AIState, stats: ZombieType): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Compute an A* path from the entity's current position to the safehouse.
+ * Compute an A* path from the entity's current position to its target.
+ *
+ * Standard zombies path toward the safehouse center. Brutes path toward
+ * the weakest barricade (lowest currentDurability), falling back to the
+ * safehouse center if no barricades exist.
  *
  * Extracted as a shared helper so it can be called both from the idle→pathing
  * transition (initial path) and from the pathing handler (periodic recalc).
@@ -420,8 +470,19 @@ function computePath(
 
   const start = { x: startTileX, y: startTileY };
 
-  // Try to path to safehouse center; if center isn't walkable, find nearest
+  // Brutes seek the weakest barricade; others head for the safehouse center.
   let target = { x: safehouseCenter.x, y: safehouseCenter.y };
+
+  if (entity.zombieType.variant === "brute") {
+    const weakestBarricade = findWeakestBarricade();
+    if (weakestBarricade?.position) {
+      target = {
+        x: pixelToTile(weakestBarricade.position.x),
+        y: pixelToTile(weakestBarricade.position.y),
+      };
+    }
+    // If no barricades, falls through to safehouseCenter
+  }
 
   if (!pathfindingGrid.isWalkable(target.x, target.y)) {
     const found = findNearestWalkable(pathfindingGrid, target.x, target.y);

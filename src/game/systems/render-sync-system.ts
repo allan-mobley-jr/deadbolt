@@ -12,10 +12,13 @@ import type { BarricadeSnapEvent } from "@/game/events/event-bus";
 
 /** Colour map for sprite keys (temporary until real sprites exist). */
 const SPRITE_COLOURS: Record<string, number> = {
-  player: 0x4ade80, // green
-  zombie: 0xef4444, // red
-  barricade: 0x94a3b8, // slate
-  bullet: 0xfacc15, // yellow
+  player: 0x4ade80,       // green
+  zombie: 0xef4444,       // red (shambler)
+  zombie_runner: 0xf97316, // orange
+  zombie_brute: 0x7c3aed, // purple
+  zombie_horde: 0xa3e635, // lime green
+  barricade: 0x94a3b8,    // slate
+  bullet: 0xfacc15,       // yellow
 };
 
 const FALLBACK_COLOUR = 0xffffff;
@@ -73,8 +76,28 @@ function spriteColour(key: string): number {
 const OBJECT_SIZE = 16;
 const IMMOVABLE_OBJECT_SIZE = 32;
 
+/**
+ * Visual sizes per zombie variant sprite key.
+ *
+ * These are intentionally slightly smaller than the physics body sizes
+ * (defined in VARIANT_STATS.bodySize) so that zombies don't visually
+ * overlap when packed together. The physics body handles collision; the
+ * visual rectangle is purely cosmetic.
+ *   shambler: physics 20, visual 20  (baseline)
+ *   runner:   physics 20, visual 18  (appears nimble)
+ *   brute:    physics 28, visual 28  (looms large)
+ *   horde:    physics 14, visual 12  (swarm of tiny dots)
+ */
+const ZOMBIE_VISUAL_SIZES: Record<string, number> = {
+  zombie: 20,
+  zombie_runner: 18,
+  zombie_brute: 28,
+  zombie_horde: 12,
+};
+
 function getVisualSize(key: string): number {
   if (key === "bullet") return 6;
+  if (ZOMBIE_VISUAL_SIZES[key] !== undefined) return ZOMBIE_VISUAL_SIZES[key];
   const def = getObjectDef(key);
   if (def) return def.immovable ? IMMOVABLE_OBJECT_SIZE : OBJECT_SIZE;
   return PLAYER_SIZE;
