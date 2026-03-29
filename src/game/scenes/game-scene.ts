@@ -18,6 +18,7 @@ import { createZombieAISystem, resetZombieKills } from "@/game/systems/zombie-ai
 import { createCombatSystem } from "@/game/systems/combat-system";
 import { createWaveSystem } from "@/game/systems/wave-system";
 import { createStatsSystem, resetRunStats } from "@/game/systems/stats-system";
+import { createMaterialSystem, MaterialRegistry } from "@/game/systems/material-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
@@ -102,9 +103,10 @@ export default class GameScene extends Phaser.Scene {
     bodyRegistry.register(playerBody);
     createPlayerEntity(px, py, playerBody.id);
 
-    // --- Registries for barricade system ---
+    // --- Registries for barricade and material systems ---
     const constraintRegistry = new ConstraintRegistry();
     const wallAnchorRegistry = new WallAnchorRegistry();
+    const materialRegistry = new MaterialRegistry();
 
     // --- Scene context (shared by all system factories) ---
     const ctx: SceneContext = {
@@ -116,6 +118,7 @@ export default class GameScene extends Phaser.Scene {
       eventBus: createGameEventBus(),
       constraintRegistry,
       wallAnchorRegistry,
+      materialRegistry,
       pathfindingGrid: this.worldData.pathfinding,
       entryPoints: this.worldData.safehouse.entryPointsToDefend,
       safehouseCenter: this.worldData.safehouse.minimapPosition,
@@ -162,6 +165,7 @@ export default class GameScene extends Phaser.Scene {
       createCombatSystem(ctx),
       createStatsSystem(ctx),
       createPhysicsSyncSystem(ctx),
+      createMaterialSystem(ctx),
     ];
 
     this.gameLoop = new GameLoop(systems);

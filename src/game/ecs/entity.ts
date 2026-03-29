@@ -8,6 +8,7 @@ import type {
   Inventory,
   Interactable,
   ObjectProperties,
+  Material,
   Barricade,
   AIState,
   ZombieType,
@@ -35,6 +36,7 @@ export interface Entity {
   inventory?: Inventory;
   interactable?: Interactable;
   objectProperties?: ObjectProperties;
+  material?: Material;
   barricade?: Barricade;
   aiState?: AIState;
   zombieType?: ZombieType;

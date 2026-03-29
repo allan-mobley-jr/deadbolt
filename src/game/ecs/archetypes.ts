@@ -1,10 +1,12 @@
 import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
+import type { Material, ZombieType, ZombieVariant } from "./components";
 import type { ObjectCategory } from "@/types/procgen";
-import type { ZombieType, ZombieVariant } from "./components";
 import { createEmptyInventory } from "@/game/systems/inventory-utils";
 import { SHAMBLER_STATS, SHAMBLER_HEALTH } from "@/game/systems/zombie-ai-constants";
+import { MATERIAL_ASSIGNMENTS } from "@/game/systems/material-constants";
+import { getObjectDef } from "@/game/procgen/object-defs";
 
 // ---------------------------------------------------------------------------
 // Sprite key mapping — variant → render key for visual differentiation
@@ -47,7 +49,7 @@ export type ZombieEntity = With<
 
 export type BarricadeEntity = With<
   Entity,
-  "position" | "renderable" | "physicsBody" | "health" | "barricade"
+  "position" | "renderable" | "physicsBody" | "health" | "barricade" | "material"
 >;
 
 export type ProjectileEntity = With<
@@ -57,7 +59,7 @@ export type ProjectileEntity = With<
 
 export type ObjectEntity = With<
   Entity,
-  "position" | "renderable" | "physicsBody" | "interactable" | "objectProperties"
+  "position" | "renderable" | "physicsBody" | "interactable" | "objectProperties" | "material"
 >;
 
 // ---------------------------------------------------------------------------
@@ -128,6 +130,33 @@ export function createZombieEntity(
   });
 }
 
+/**
+ * Build a Material component for the given object type.
+ *
+ * Looks up the category and explosive potential from MATERIAL_ASSIGNMENTS,
+ * and resolves flammability/conductivity from the physics values. Falls
+ * back to wood/inert when the object type is unrecognised.
+ */
+function buildMaterial(
+  objectType: string,
+  callerTag: string,
+  physics: { flammability: number; conductivity: number },
+): Material {
+  const assignment = MATERIAL_ASSIGNMENTS[objectType];
+  if (!assignment) {
+    console.warn(
+      `[${callerTag}] No MATERIAL_ASSIGNMENTS entry for "${objectType}". Falling back to wood/inert.`,
+    );
+  }
+  return {
+    category: assignment?.category ?? 'wood',
+    flammability: physics.flammability,
+    conductivity: physics.conductivity,
+    explosivePotential: assignment?.explosivePotential ?? 0,
+    state: 'inert',
+  };
+}
+
 /** Spawn a barricade entity at the given position with material-derived durability. */
 export function createBarricadeEntity(
   x: number,
@@ -138,6 +167,12 @@ export function createBarricadeEntity(
   constraintIds: number[],
   maxDurability: number,
 ): BarricadeEntity {
+  const def = getObjectDef(sourceObjectType);
+  if (!def) {
+    console.warn(
+      `[createBarricadeEntity] No ObjectDefinition for "${sourceObjectType}". Flammability/conductivity default to 0.`,
+    );
+  }
   return world.add({
     position: { x, y },
     renderable: { spriteKey: sourceObjectType },
@@ -150,6 +185,10 @@ export function createBarricadeEntity(
       maxDurability,
       currentDurability: maxDurability,
     },
+    material: buildMaterial(sourceObjectType, "createBarricadeEntity", {
+      flammability: def?.physics.flammability ?? 0,
+      conductivity: def?.physics.conductivity ?? 0,
+    }),
   });
 }
 
@@ -201,5 +240,6 @@ export function createObjectEntity(
       lootValue,
       immovable,
     },
+    material: buildMaterial(objectType, "createObjectEntity", physics),
   });
 }

@@ -60,3 +60,13 @@ export const zombieEntities = world.with(
   "aiState",
   "zombieType",
 );
+
+/** Entities with material properties and a position (for spatial material queries). */
+export const materialEntities = world.with("position", "material");
+
+/** Material entities that also have physics bodies (for collision-pair adjacency). */
+export const materialPhysicsEntities = world.with(
+  "position",
+  "material",
+  "physicsBody",
+);

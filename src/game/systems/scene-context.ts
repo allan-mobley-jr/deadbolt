@@ -2,6 +2,7 @@ import type Phaser from "phaser";
 import type { BodyRegistry } from "./body-registry";
 import type { ConstraintRegistry } from "./constraint-registry";
 import type { WallAnchorRegistry } from "./wall-anchor-registry";
+import type { MaterialRegistry } from "./material-system";
 import type { DayPhase } from "./day-night-constants";
 import { DAY_NIGHT, getPhaseDuration } from "./day-night-constants";
 import type { GameEventBus } from "@/game/events/event-bus";
@@ -91,6 +92,8 @@ export interface SceneContext {
   safehouseCenter?: TileCoord;
   /** Zombie spawn zones from procedural generation (edge + far-building). */
   spawnZones?: SpawnZone[];
+  /** Material interaction query registry for fire, electricity, and explosion systems. */
+  materialRegistry?: MaterialRegistry;
 }
 
 /** Create a zeroed-out input state. */
