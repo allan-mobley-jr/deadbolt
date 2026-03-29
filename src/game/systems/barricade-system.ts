@@ -4,10 +4,11 @@
  * Runs each fixed tick after InteractionSystem (to see freshly-dropped objects)
  * and before PhysicsSyncSystem (so constraints are active for the same tick).
  *
- * Three responsibilities:
+ * Four responsibilities:
  *   1. Snap detection: detect objects near entry points and emit visual feedback
  *   2. Placement: on pointer release within snap zone, anchor object with constraints
- *   3. Destruction: when barricade health reaches zero, break constraints and restore debris
+ *   3. Damage tracking: detect health changes and emit visual feedback events
+ *   4. Destruction: when barricade health reaches zero, break constraints and restore debris
  *
  * NO React imports — this is pure TypeScript.
  */
@@ -80,7 +81,7 @@ function pixelToTile(px: number): number {
  *
  * Requires constraintRegistry, wallAnchorRegistry, pathfindingGrid, and
  * entryPoints to be set on SceneContext. If any are missing, the system
- * is a no-op (graceful degradation for test environments).
+ * logs a one-time warning and becomes a no-op.
  */
 export function createBarricadeSystem(ctx: SceneContext): SystemFn {
   /** Track the last snap target for event deduplication. */
@@ -88,6 +89,9 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
 
   /** Track previous health values to detect damage events. */
   const prevHealthMap = new Map<Entity, number>();
+
+  /** Whether we have already warned about missing context properties. */
+  let warnedMissingContext = false;
 
   return (_dt: number): void => {
     // Guard: skip if registries are not wired up
@@ -97,6 +101,16 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
       !ctx.pathfindingGrid ||
       !ctx.entryPoints
     ) {
+      if (!warnedMissingContext) {
+        warnedMissingContext = true;
+        console.warn(
+          "[BarricadeSystem] Skipping — missing required context:",
+          !ctx.constraintRegistry && "constraintRegistry",
+          !ctx.wallAnchorRegistry && "wallAnchorRegistry",
+          !ctx.pathfindingGrid && "pathfindingGrid",
+          !ctx.entryPoints && "entryPoints",
+        );
+      }
       return;
     }
 
@@ -170,145 +184,17 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
       snapObjectEntity.objectProperties &&
       snapObjectEntity.physicsBody
     ) {
-      const op = snapObjectEntity.objectProperties;
-      const def = getObjectDef(op.objectType);
-      if (!def) {
-        console.warn(
-          `[BarricadeSystem] Unknown object type for barricade: ${op.objectType}`,
-        );
-      } else {
-        // Calculate durability from material
-        const maxDurability = Math.round(
-          def.physics.durability * BARRICADE_DURABILITY_SCALE,
-        );
-
-        if (maxDurability <= 0) {
-          // Too fragile to barricade (e.g. cardboard_box with 0.1 durability = 20 HP, still valid)
-          // Actually allow anything > 0
-        }
-
-        // Resolve the physics body
-        const bodyId = snapObjectEntity.physicsBody.bodyId;
-        const objectBody = ctx.bodyRegistry.get(bodyId);
-        if (!objectBody) {
-          console.warn(
-            `[BarricadeSystem] No body found for bodyId=${bodyId}`,
-          );
-        } else {
-          // Move object to snap center for clean alignment
-          objectBody.position.x = currentSnapTarget.centerX;
-          objectBody.position.y = currentSnapTarget.centerY;
-          objectBody.velocity.x = 0;
-          objectBody.velocity.y = 0;
-
-          // Resolve anchor bodies
-          const anchorA = ctx.bodyRegistry.get(currentSnapTarget.anchorBodyIdA);
-          const anchorB = ctx.bodyRegistry.get(currentSnapTarget.anchorBodyIdB);
-
-          if (!anchorA || !anchorB) {
-            console.warn(
-              `[BarricadeSystem] Missing anchor bodies for entry point ${currentSnapTarget.entryPointIndex}`,
-            );
-          } else {
-            // Create constraints anchoring the object to both frame sides
-            const constraintIds: number[] = [];
-
-            try {
-              const constraintA = ctx.scene.matter.add.constraint(
-                anchorA,
-                objectBody,
-                0,
-                CONSTRAINT_STIFFNESS,
-              );
-              (constraintA as MatterJS.ConstraintType & { damping?: number }).damping = CONSTRAINT_DAMPING;
-              constraintRegistry.register(constraintA);
-              constraintIds.push(constraintA.id);
-
-              const constraintB = ctx.scene.matter.add.constraint(
-                anchorB,
-                objectBody,
-                0,
-                CONSTRAINT_STIFFNESS,
-              );
-              (constraintB as MatterJS.ConstraintType & { damping?: number }).damping = CONSTRAINT_DAMPING;
-              constraintRegistry.register(constraintB);
-              constraintIds.push(constraintB.id);
-            } catch (err) {
-              console.error(
-                `[BarricadeSystem] Failed to create constraints:`,
-                err,
-              );
-              // Clean up any partially created constraints
-              for (const id of constraintIds) {
-                const c = constraintRegistry.get(id);
-                if (c) {
-                  try {
-                    ctx.scene.matter.world.removeConstraint(c);
-                  } catch {
-                    // Ignore cleanup errors
-                  }
-                  constraintRegistry.unregister(id);
-                }
-              }
-              return;
-            }
-
-            // Convert entity: add barricade + health, remove interactable + objectProperties
-            const entryPointIndex = currentSnapTarget.entryPointIndex;
-            const sourceObjectType = op.objectType;
-
-            // Add barricade component
-            world.addComponent(snapObjectEntity, "barricade", {
-              constraintIds,
-              entryPointIndex,
-              sourceObjectType,
-              maxDurability,
-              currentDurability: maxDurability,
-            });
-
-            // Add health component
-            world.addComponent(snapObjectEntity, "health", {
-              current: maxDurability,
-              max: maxDurability,
-            });
-
-            // Remove interaction components — barricades are not interactable
-            world.removeComponent(snapObjectEntity, "interactable");
-            world.removeComponent(snapObjectEntity, "objectProperties");
-
-            // Update ECS position to match snap center
-            snapObjectEntity.position!.x = currentSnapTarget.centerX;
-            snapObjectEntity.position!.y = currentSnapTarget.centerY;
-
-            // Increase body friction so barricade resists pushing
-            objectBody.friction = 0.95;
-            objectBody.frictionAir = 0.3;
-
-            // Update pathfinding grid
-            const tileX = pixelToTile(currentSnapTarget.centerX);
-            const tileY = pixelToTile(currentSnapTarget.centerY);
-            pathfindingGrid.setWalkable(tileX, tileY, false);
-
-            // Update entry point state
-            if (entryPoints[entryPointIndex]) {
-              entryPoints[entryPointIndex].barricaded = true;
-            }
-
-            // Track initial health for damage detection
-            prevHealthMap.set(snapObjectEntity, maxDurability);
-
-            // Emit placement event
-            safeEmit(ctx.eventBus, "barricade-placed", {
-              position: { x: currentSnapTarget.centerX, y: currentSnapTarget.centerY },
-              health: maxDurability,
-              maxHealth: maxDurability,
-            });
-
-            // Clear snap state
-            activeSnapTarget = null;
-          }
-        }
-      }
+      tryPlaceBarricade(
+        ctx,
+        constraintRegistry,
+        pathfindingGrid,
+        entryPoints,
+        currentSnapTarget,
+        snapObjectEntity,
+        prevHealthMap,
+      );
+      // Clear snap state after placement attempt
+      activeSnapTarget = null;
     }
 
     // -----------------------------------------------------------------
@@ -350,10 +236,22 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
     }
 
     for (const entity of toDestroy) {
-      const barricade = entity.barricade!;
+      // Read all values defensively before any mutations
+      const barricade = entity.barricade;
+      const position = entity.position;
+      const physicsBodyId = entity.physicsBody?.bodyId;
+
+      if (!barricade || !position) {
+        console.warn(
+          "[BarricadeSystem] Skipping destruction — entity missing expected components",
+        );
+        prevHealthMap.delete(entity);
+        continue;
+      }
+
       const entryPointIndex = barricade.entryPointIndex;
       const sourceObjectType = barricade.sourceObjectType;
-      const position = { x: entity.position!.x, y: entity.position!.y };
+      const positionCopy = { x: position.x, y: position.y };
 
       // Remove constraints from Matter.js world
       for (const constraintId of barricade.constraintIds) {
@@ -394,10 +292,12 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
       }
 
       // Reduce body friction so debris slides when pushed
-      const body = ctx.bodyRegistry.get(entity.physicsBody!.bodyId);
-      if (body) {
-        body.friction = def?.immovable ? 0.95 : 0.8;
-        body.frictionAir = def?.immovable ? 0.3 : 0.1;
+      if (physicsBodyId !== undefined) {
+        const body = ctx.bodyRegistry.get(physicsBodyId);
+        if (body) {
+          body.friction = def?.immovable ? 0.95 : 0.8;
+          body.frictionAir = def?.immovable ? 0.3 : 0.1;
+        }
       }
 
       // Clean up health tracking
@@ -412,17 +312,211 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
       );
 
       if (!hasOtherBarricades) {
-        const tileX = pixelToTile(position.x);
-        const tileY = pixelToTile(position.y);
-        pathfindingGrid.setWalkable(tileX, tileY, true);
+        const tileX = pixelToTile(positionCopy.x);
+        const tileY = pixelToTile(positionCopy.y);
+        const updated = pathfindingGrid.setWalkable(tileX, tileY, true);
+        if (!updated) {
+          console.warn(
+            `[BarricadeSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
+          );
+        }
 
         if (entryPoints[entryPointIndex]) {
           entryPoints[entryPointIndex].barricaded = false;
+        } else {
+          console.warn(
+            `[BarricadeSystem] Entry point index ${entryPointIndex} out of bounds (${entryPoints.length} entry points)`,
+          );
         }
       }
 
       // Emit destruction event
-      safeEmit(ctx.eventBus, "barricade-broken", { position });
+      safeEmit(ctx.eventBus, "barricade-broken", { position: positionCopy });
+    }
+
+    // -----------------------------------------------------------------
+    // 5. Cleanup — remove stale entries from prevHealthMap
+    // -----------------------------------------------------------------
+
+    for (const entity of prevHealthMap.keys()) {
+      if (!entity.barricade || !entity.health) {
+        prevHealthMap.delete(entity);
+      }
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Placement helper (extracted so errors don't skip damage/destruction)
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt to place a barricade at the given snap target.
+ *
+ * Extracted as a separate function so `return` on error only exits
+ * placement, not the entire system tick (which must still process
+ * damage tracking and destruction).
+ */
+function tryPlaceBarricade(
+  ctx: SceneContext,
+  constraintRegistry: NonNullable<SceneContext["constraintRegistry"]>,
+  pathfindingGrid: NonNullable<SceneContext["pathfindingGrid"]>,
+  entryPoints: NonNullable<SceneContext["entryPoints"]>,
+  snapTarget: WallAnchorPair,
+  snapObjectEntity: Entity,
+  prevHealthMap: Map<Entity, number>,
+): void {
+  const op = snapObjectEntity.objectProperties!;
+  const def = getObjectDef(op.objectType);
+  if (!def) {
+    console.warn(
+      `[BarricadeSystem] Unknown object type for barricade: ${op.objectType}`,
+    );
+    return;
+  }
+
+  // Calculate durability from material
+  const maxDurability = Math.round(
+    def.physics.durability * BARRICADE_DURABILITY_SCALE,
+  );
+
+  if (maxDurability <= 0) {
+    console.warn(
+      `[BarricadeSystem] Object ${op.objectType} has zero durability, cannot barricade`,
+    );
+    return;
+  }
+
+  // Resolve the physics body
+  const bodyId = snapObjectEntity.physicsBody!.bodyId;
+  const objectBody = ctx.bodyRegistry.get(bodyId);
+  if (!objectBody) {
+    console.warn(
+      `[BarricadeSystem] No body found for bodyId=${bodyId}`,
+    );
+    return;
+  }
+
+  // Move object to snap center for clean alignment
+  objectBody.position.x = snapTarget.centerX;
+  objectBody.position.y = snapTarget.centerY;
+  objectBody.velocity.x = 0;
+  objectBody.velocity.y = 0;
+
+  // Resolve anchor bodies
+  const anchorA = ctx.bodyRegistry.get(snapTarget.anchorBodyIdA);
+  const anchorB = ctx.bodyRegistry.get(snapTarget.anchorBodyIdB);
+
+  if (!anchorA || !anchorB) {
+    console.warn(
+      `[BarricadeSystem] Missing anchor bodies for entry point ${snapTarget.entryPointIndex}`,
+    );
+    return;
+  }
+
+  // Create constraints anchoring the object to both frame sides
+  const constraintIds: number[] = [];
+
+  try {
+    const constraintA = ctx.scene.matter.add.constraint(
+      anchorA,
+      objectBody,
+      0,
+      CONSTRAINT_STIFFNESS,
+    );
+    (constraintA as MatterJS.ConstraintType & { damping?: number }).damping = CONSTRAINT_DAMPING;
+    constraintRegistry.register(constraintA);
+    constraintIds.push(constraintA.id);
+
+    const constraintB = ctx.scene.matter.add.constraint(
+      anchorB,
+      objectBody,
+      0,
+      CONSTRAINT_STIFFNESS,
+    );
+    (constraintB as MatterJS.ConstraintType & { damping?: number }).damping = CONSTRAINT_DAMPING;
+    constraintRegistry.register(constraintB);
+    constraintIds.push(constraintB.id);
+  } catch (err) {
+    console.error(
+      "[BarricadeSystem] Failed to create constraints:",
+      err,
+    );
+    // Clean up any partially created constraints
+    for (const id of constraintIds) {
+      const c = constraintRegistry.get(id);
+      if (c) {
+        try {
+          ctx.scene.matter.world.removeConstraint(c);
+        } catch (cleanupErr) {
+          console.error(
+            `[BarricadeSystem] Failed to clean up partial constraint ${id}:`,
+            cleanupErr,
+          );
+        }
+        constraintRegistry.unregister(id);
+      }
+    }
+    return;
+  }
+
+  // Convert entity: add barricade + health, remove interactable + objectProperties
+  const entryPointIndex = snapTarget.entryPointIndex;
+  const sourceObjectType = op.objectType;
+
+  // Add barricade component
+  world.addComponent(snapObjectEntity, "barricade", {
+    constraintIds,
+    entryPointIndex,
+    sourceObjectType,
+    maxDurability,
+    currentDurability: maxDurability,
+  });
+
+  // Add health component
+  world.addComponent(snapObjectEntity, "health", {
+    current: maxDurability,
+    max: maxDurability,
+  });
+
+  // Remove interaction components — barricades are not interactable
+  world.removeComponent(snapObjectEntity, "interactable");
+  world.removeComponent(snapObjectEntity, "objectProperties");
+
+  // Update ECS position to match snap center
+  snapObjectEntity.position!.x = snapTarget.centerX;
+  snapObjectEntity.position!.y = snapTarget.centerY;
+
+  // Increase body friction so barricade resists pushing
+  objectBody.friction = 0.95;
+  objectBody.frictionAir = 0.3;
+
+  // Update pathfinding grid
+  const tileX = pixelToTile(snapTarget.centerX);
+  const tileY = pixelToTile(snapTarget.centerY);
+  const updated = pathfindingGrid.setWalkable(tileX, tileY, false);
+  if (!updated) {
+    console.warn(
+      `[BarricadeSystem] Failed to block pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
+    );
+  }
+
+  // Update entry point state
+  if (entryPoints[entryPointIndex]) {
+    entryPoints[entryPointIndex].barricaded = true;
+  } else {
+    console.warn(
+      `[BarricadeSystem] Entry point index ${entryPointIndex} out of bounds (${entryPoints.length} entry points)`,
+    );
+  }
+
+  // Track initial health for damage detection
+  prevHealthMap.set(snapObjectEntity, maxDurability);
+
+  // Emit placement event
+  safeEmit(ctx.eventBus, "barricade-placed", {
+    position: { x: snapTarget.centerX, y: snapTarget.centerY },
+    health: maxDurability,
+    maxHealth: maxDurability,
+  });
 }
