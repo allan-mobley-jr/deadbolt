@@ -126,10 +126,11 @@ function createZombieBody(
   });
   body.inertia = Infinity;
   body.inverseInertia = 0;
-  // SAFETY: bodyRegistry.register only reads body.id for the internal map.
-  // The real Phaser MatterFactory.rectangle returns a full MatterJS.BodyType,
-  // but SpawnContext narrows the interface for testability. If register's
-  // contract changes, this cast must be revisited.
+  // SAFETY: bodyRegistry.register stores the body instance in its internal
+  // map keyed by body.id. The real Phaser MatterFactory.rectangle returns a
+  // full MatterJS.BodyType, but SpawnContext narrows the interface for
+  // testability. If BodyRegistry.register's expectations about the body
+  // shape change, this cast must be revisited.
   ctx.bodyRegistry.register(body as unknown as MatterJS.BodyType);
   return body.id;
 }

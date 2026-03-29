@@ -1,5 +1,5 @@
 import type { ObjectCategory } from '@/types/procgen';
-import type { SizeCategory } from "@/game/procgen/object-defs";
+import type { SizeCategory } from '@/game/procgen/object-defs';
 
 /** 2D position in world space (pixels, not tiles). */
 export interface Position {
