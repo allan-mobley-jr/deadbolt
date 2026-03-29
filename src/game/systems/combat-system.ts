@@ -82,9 +82,28 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
    */
   let hitRadiusSq = 0;
 
+  /**
+   * Closure-scoped sensor body ID for orphan cleanup.
+   * If the player entity is removed mid-swing (e.g. permadeath), the entity's
+   * CombatState is inaccessible. This backup lets us clean up the physics body.
+   */
+  let activeSensorId: number | null = null;
+
   return (dt: number): void => {
     const player = combatPlayerEntities.entities[0];
-    if (!player) return;
+    if (!player) {
+      // Clean up orphaned sensor body if player was removed mid-swing
+      if (activeSensorId !== null) {
+        const sensorBody = ctx.bodyRegistry.get(activeSensorId);
+        if (sensorBody) {
+          ctx.scene.matter.world.remove(sensorBody);
+        }
+        ctx.bodyRegistry.unregister(activeSensorId);
+        activeSensorId = null;
+        swingHitSet.clear();
+      }
+      return;
+    }
 
     const { combatState: cs, health, position: pos, inventory } = player;
 
@@ -107,6 +126,7 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
       }
       ctx.bodyRegistry.unregister(cs.sensorBodyId);
       cs.sensorBodyId = null;
+      activeSensorId = null;
       swingHitSet.clear();
     }
 
@@ -142,6 +162,7 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
       );
       ctx.bodyRegistry.register(sensorBody);
       cs.sensorBodyId = sensorBody.id;
+      activeSensorId = sensorBody.id;
 
       // Set swing state
       cs.swingTimeRemaining = COMBAT.SWING_DURATION;
@@ -243,7 +264,10 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
           }
         }
 
-        // Apply knockback to player (away from attacker)
+        // Apply knockback to player (away from attacker) when source is known
+        let sourceDirX = 0;
+        let sourceDirY = 0;
+
         if (closestZombieDSq < Infinity) {
           const kbDx = pos.x - closestZombieX;
           const kbDy = pos.y - closestZombieY;
@@ -255,21 +279,17 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
               playerBody.force.x += (kbDx / kbDist) * COMBAT.PLAYER_KNOCKBACK_FORCE;
               playerBody.force.y += (kbDy / kbDist) * COMBAT.PLAYER_KNOCKBACK_FORCE;
             }
+            sourceDirX = (closestZombieX - pos.x) / kbDist;
+            sourceDirY = (closestZombieY - pos.y) / kbDist;
           }
-
-          // Emit player-hit event for UI feedback
-          const dirDist = Math.sqrt(
-            (closestZombieX - pos.x) ** 2 + (closestZombieY - pos.y) ** 2,
-          );
-          safeEmit(ctx.eventBus, "player-hit", {
-            position: { x: pos.x, y: pos.y },
-            damage: damageTaken,
-            sourceDirection: {
-              x: dirDist > 0 ? (closestZombieX - pos.x) / dirDist : 0,
-              y: dirDist > 0 ? (closestZombieY - pos.y) / dirDist : 0,
-            },
-          });
         }
+
+        // Always emit player-hit event for UI feedback (even if no attacker found)
+        safeEmit(ctx.eventBus, "player-hit", {
+          position: { x: pos.x, y: pos.y },
+          damage: damageTaken,
+          sourceDirection: { x: sourceDirX, y: sourceDirY },
+        });
       }
     }
 

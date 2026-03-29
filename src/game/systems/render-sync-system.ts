@@ -5,6 +5,7 @@ import { playerEntities, renderableEntities, inventoryEntities, barricadeEntitie
 import type { Entity } from "@/game/ecs/entity";
 import { getObjectDef } from "@/game/procgen/object-defs";
 import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent } from "@/game/events/event-bus";
+import { COMBAT } from "./combat-constants";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -445,7 +446,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       swingGfx.clear();
 
       activeSwing.age += _dt;
-      const swingFraction = Math.min(activeSwing.age / 0.15, 1);
+      const swingFraction = Math.min(activeSwing.age / COMBAT.SWING_DURATION, 1);
 
       if (swingFraction < 1) {
         const fadeAlpha = SWING_ARC_ALPHA * (1 - swingFraction);

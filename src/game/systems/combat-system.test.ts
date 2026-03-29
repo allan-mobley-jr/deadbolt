@@ -5,7 +5,7 @@ import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { createGameEventBus } from "@/game/events/event-bus";
 import type { GameEventMap } from "@/game/events/event-bus";
-import { resetWorld } from "@/game/ecs/world";
+import { world, resetWorld } from "@/game/ecs/world";
 import { createPlayerEntity, createZombieEntity } from "@/game/ecs/archetypes";
 import {
   SHAMBLER_STATS,
@@ -425,6 +425,46 @@ describe("CombatSystem", () => {
       damage: 5,
       position: { x: 100, y: 100 },
     });
+  });
+
+  it("emits player-hit event even when no attacking zombie is found", () => {
+    const player = spawnPlayer(ctx, 100, 100);
+    // No zombies spawned at all
+    const handler = vi.fn<(...args: GameEventMap["player-hit"]) => void>();
+    ctx.eventBus.on("player-hit", handler);
+
+    // Simulate damage from unknown source
+    player.health.current = 92;
+    player.combatState.previousHealth = 100;
+
+    system(DT);
+
+    // Should still emit player-hit with zero direction
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0]).toMatchObject({
+      damage: 8,
+      sourceDirection: { x: 0, y: 0 },
+    });
+  });
+
+  it("cleans up orphaned sensor body when player entity is removed", () => {
+    const player = spawnPlayer(ctx, 100, 100);
+
+    // Start a swing
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+    ctx.inputState.attackPressed = false;
+
+    const sensorId = player.combatState.sensorBodyId!;
+    expect(ctx.bodyRegistry.get(sensorId)).toBeDefined();
+
+    // Remove the player entity (simulate permadeath)
+    world.remove(player);
+
+    // Next tick should clean up the orphaned sensor
+    system(DT);
+
+    expect(ctx.bodyRegistry.get(sensorId)).toBeUndefined();
   });
 
   it("emits corrected player-health-changed during i-frame revert", () => {

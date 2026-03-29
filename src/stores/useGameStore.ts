@@ -12,6 +12,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { DayPhase } from "@/game/systems/day-night-constants";
+import type { ZombieVariant } from "@/game/ecs/components";
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -40,7 +41,7 @@ export interface GameStoreState {
   totalKills: number;
 
   /** Kills broken down by zombie variant type. */
-  killsByType: Record<string, number>;
+  killsByType: Partial<Record<ZombieVariant, number>>;
 
   /** Whether the game is paused. */
   paused: boolean;
@@ -66,7 +67,7 @@ export interface GameStoreActions {
   /** Set the total kill count (authoritative value from game events). */
   setTotalKills: (totalKills: number) => void;
   /** Increment the kill count for a specific zombie variant. */
-  incrementKillsByType: (variant: string) => void;
+  incrementKillsByType: (variant: ZombieVariant) => void;
   /** Set the paused state (used by bridge for UI → game commands). */
   setPaused: (paused: boolean) => void;
   /** Reset to initial state between game sessions. */
