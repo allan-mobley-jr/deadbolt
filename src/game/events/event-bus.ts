@@ -125,6 +125,11 @@ export interface PlayerDiedEvent {
   cause: string;
 }
 
+/** Emitted at the start of a new run with the seed for UI display. */
+export interface RunStartedEvent {
+  seed: string;
+}
+
 /** Emitted when an interactable object enters the player's range. */
 export interface InteractionPromptEvent {
   objectType: string;
@@ -250,6 +255,9 @@ export interface GameEventMap {
   "player-health-changed": [event: PlayerHealthChangedEvent];
   "inventory-changed": [event: InventoryChangedEvent];
   "player-died": [event: PlayerDiedEvent];
+
+  // Run lifecycle
+  "run-started": [event: RunStartedEvent];
 
   // Combat / waves
   "wave-started": [event: WaveStartedEvent];
