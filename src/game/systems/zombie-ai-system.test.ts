@@ -521,6 +521,132 @@ describe("ZombieAISystem", () => {
   });
 
   // -----------------------------------------------------------------------
+  // Stagger re-entry guard
+  // -----------------------------------------------------------------------
+
+  describe("stagger re-entry", () => {
+    it("does not restart stagger timer when taking damage while already staggered", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current -= 10; // Take damage
+      system(DT); // → staggered
+
+      expect(zombie.aiState.state).toBe("staggered");
+      const remainingBefore = zombie.aiState.staggerTimeRemaining;
+
+      // Take more damage while staggered
+      zombie.health.current -= 5;
+      system(DT);
+
+      // Stagger timer should continue counting down, NOT reset to full duration
+      expect(zombie.aiState.state).toBe("staggered");
+      expect(zombie.aiState.staggerTimeRemaining).toBeLessThan(remainingBefore);
+      expect(zombie.aiState.staggerTimeRemaining).not.toBeCloseTo(
+        SHAMBLER_STATS.staggerDuration,
+        2,
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Attack disengage
+  // -----------------------------------------------------------------------
+
+  describe("attack disengage", () => {
+    it("returns to pathing when target moves far out of range", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 200,
+      );
+
+      // Place zombie close to barricade
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → attacking
+      expect(zombie.aiState.state).toBe("attacking");
+
+      // Move barricade far away (simulate by modifying position)
+      barricade.position.x = bPos.x + 500;
+      barricade.position.y = bPos.y + 500;
+      system(DT);
+
+      expect(zombie.aiState.state).toBe("pathing");
+      expect(zombie.aiState.attackTargetBodyId).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Non-walkable safehouse center
+  // -----------------------------------------------------------------------
+
+  describe("non-walkable safehouse center", () => {
+    it("finds alternate target when safehouse center is blocked", () => {
+      const matrix: number[][] = [];
+      for (let y = 0; y < 10; y++) {
+        matrix.push(new Array(10).fill(0));
+      }
+      // Block the safehouse center tile
+      matrix[5][5] = 1;
+
+      const grid = new PathfindingGrid(matrix);
+      ctx = createMockContext({
+        pathfindingGrid: grid,
+        safehouseCenter: { x: 5, y: 5 },
+      });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing (should find alt target)
+
+      // Zombie should still compute a valid path (to a nearby walkable tile)
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Reset kills
+  // -----------------------------------------------------------------------
+
+  describe("resetZombieKills", () => {
+    it("resets kill counter so next death reports totalKills as 1", () => {
+      const killedEvents: Array<{ totalKills: number }> = [];
+      ctx.eventBus.on("zombie-killed", (e) => {
+        killedEvents.push({ totalKills: e.totalKills });
+      });
+
+      // Kill first zombie
+      const pos1 = tileCenter(0, 0);
+      const z1 = createZombieEntity(pos1.x, pos1.y, 1);
+      system(DT);
+      z1.health.current = 0;
+      system(DT);
+
+      expect(killedEvents[0].totalKills).toBe(1);
+
+      // Reset kills
+      resetZombieKills();
+
+      // Kill second zombie — should report 1, not 2
+      const pos2 = tileCenter(1, 0);
+      const z2 = createZombieEntity(pos2.x, pos2.y, 2);
+      system(DT);
+      z2.health.current = 0;
+      system(DT);
+
+      expect(killedEvents[1].totalKills).toBe(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Edge cases
   // -----------------------------------------------------------------------
 

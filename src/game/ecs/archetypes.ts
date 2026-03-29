@@ -73,9 +73,12 @@ export function createPlayerEntity(
 /**
  * Spawn a zombie entity at the given position.
  *
+ * @param stats — zombie variant stats (defaults to shambler).
  * @param initialTickOffset — randomised tick counter for pathfinding stagger.
  *   Different values for each zombie prevent all zombies from recalculating
  *   paths on the same tick.
+ * @param hp — starting health (defaults to SHAMBLER_HEALTH). Pass a different
+ *   value for future zombie variants with more or less health.
  */
 export function createZombieEntity(
   x: number,
@@ -83,8 +86,8 @@ export function createZombieEntity(
   bodyId: number,
   stats: ZombieType = { ...SHAMBLER_STATS },
   initialTickOffset: number = 0,
+  hp: number = SHAMBLER_HEALTH,
 ): ZombieEntity {
-  const hp = SHAMBLER_HEALTH;
   return world.add({
     position: { x, y },
     velocity: { vx: 0, vy: 0 },

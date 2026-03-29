@@ -71,6 +71,10 @@ export function resetZombieKills(): void {
 export function createZombieAISystem(ctx: SceneContext): SystemFn {
   let warnedMissingContext = false;
 
+  // Hoist to closure scope to avoid per-tick GC pressure at 60 Hz.
+  // Cleared at the start of each tick; backing buffer is reused.
+  const toRemove: Entity[] = [];
+
   return (dt: number): void => {
     if (!ctx.pathfindingGrid || !ctx.safehouseCenter) {
       if (!warnedMissingContext) {
@@ -87,8 +91,8 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
     const { pathfindingGrid, safehouseCenter } = ctx;
     const player = playerEntities.entities[0];
 
-    // Collect dead zombies for deferred removal (can't modify query during iteration)
-    const toRemove: Entity[] = [];
+    // Clear deferred removal list (can't modify query during iteration)
+    toRemove.length = 0;
 
     for (const entity of zombieEntities) {
       const ai = entity.aiState;
@@ -134,7 +138,11 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
           break;
 
         case "dead":
-          handleDeath(entity, ctx, toRemove);
+          // Guard: only process death once per entity (prevents double-counting
+          // kills if entity persists in the query for one extra tick).
+          if (!toRemove.includes(entity)) {
+            handleDeath(entity, ctx, toRemove);
+          }
           break;
       }
     }
@@ -403,6 +411,17 @@ function computePath(
 ): void {
   const startTileX = pixelToTile(entity.position.x);
   const startTileY = pixelToTile(entity.position.y);
+
+  // Guard against NaN/non-finite positions from physics glitches
+  if (!Number.isFinite(startTileX) || !Number.isFinite(startTileY)) {
+    console.warn(
+      "[ZombieAISystem] Zombie has non-finite position, skipping pathfind",
+    );
+    ai.path = [];
+    ai.pathIndex = 0;
+    return;
+  }
+
   const start = { x: startTileX, y: startTileY };
 
   // Try to path to safehouse center; if center isn't walkable, find nearest
@@ -420,8 +439,11 @@ function computePath(
   if (result.found) {
     ai.path = result.path;
     ai.pathIndex = 1; // Skip start tile (zombie is already there)
+  } else {
+    // Path failure — clear stale path so zombie doesn't walk an outdated route
+    ai.path = [];
+    ai.pathIndex = 0;
   }
-  // If no path found, keep existing path (if any) or stay still
 }
 
 // ---------------------------------------------------------------------------

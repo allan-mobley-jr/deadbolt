@@ -261,7 +261,10 @@ export default class GameScene extends Phaser.Scene {
    */
   private spawnInitialZombies(bodyRegistry: BodyRegistry): void {
     const spawnZones = this.worldData!.spawnZones;
-    if (!spawnZones || spawnZones.length === 0) return;
+    if (!spawnZones || spawnZones.length === 0) {
+      console.warn("[GameScene] No spawn zones available — skipping zombie spawn");
+      return;
+    }
 
     const MAX_INITIAL_ZOMBIES = 5;
     let spawned = 0;
