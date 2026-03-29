@@ -22,6 +22,7 @@ function createMockRect(x = 0, y = 0) {
       return this;
     }),
     setVisible: vi.fn().mockReturnThis(),
+    setStrokeStyle: vi.fn().mockReturnThis(),
   };
 }
 
@@ -589,6 +590,169 @@ describe("RenderSyncSystem", () => {
       // setFillStyle should have been called at least twice with different colors
       const calls = equipRect.setFillStyle.mock.calls;
       expect(calls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Barricade visual feedback
+  // -------------------------------------------------------------------------
+
+  describe("barricade visual feedback", () => {
+    function addPlayerAndBarricade(
+      playerPos: { x: number; y: number },
+      barricadePos: { x: number; y: number },
+      healthCurrent: number,
+      healthMax: number,
+    ) {
+      world.add({
+        position: playerPos,
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+      });
+      world.add({
+        position: barricadePos,
+        renderable: { spriteKey: "wooden_plank" },
+        physicsBody: { bodyId: 999 },
+        health: { current: healthCurrent, max: healthMax },
+        barricade: {
+          constraintIds: [1, 2],
+          entryPointIndex: 0,
+          sourceObjectType: "wooden_plank",
+          maxDurability: healthMax,
+          currentDurability: healthCurrent,
+        },
+      });
+    }
+
+    it("creates barricade health bar graphics on first tick with barricade", () => {
+      const { ctx } = createMockContext();
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 60, 60);
+      system(DT);
+
+      const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+      // aim indicator + barricade health bar = 2 graphics objects
+      expect(addGraphics).toHaveBeenCalledTimes(2);
+    });
+
+    it("draws green health bar fill when HP is above 66%", () => {
+      const { ctx } = createMockContext();
+      const system = createRenderSyncSystem(ctx);
+
+      // Full health: 60/60 = 100%
+      addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 60, 60);
+      system(DT);
+
+      const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+      const barricadeGfx = addGraphics.mock.results[1]!.value;
+
+      const fillStyleCalls = barricadeGfx.fillStyle.mock.calls;
+      // Background bar
+      expect(fillStyleCalls).toContainEqual([0x1a1a2e, 0.8]);
+      // Green fill (HP > 66%)
+      expect(fillStyleCalls).toContainEqual([0x4ade80, 1.0]);
+    });
+
+    it("draws amber health bar fill when HP is between 33% and 66%", () => {
+      const { ctx } = createMockContext();
+      const system = createRenderSyncSystem(ctx);
+
+      // 50% health: 30/60
+      addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 30, 60);
+      system(DT);
+
+      const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+      const barricadeGfx = addGraphics.mock.results[1]!.value;
+
+      const fillStyleCalls = barricadeGfx.fillStyle.mock.calls;
+      // Amber fill (33% < HP <= 66%)
+      expect(fillStyleCalls).toContainEqual([0xf59e0b, 1.0]);
+    });
+
+    it("draws red health bar fill when HP is at or below 33%", () => {
+      const { ctx } = createMockContext();
+      const system = createRenderSyncSystem(ctx);
+
+      // 20% health: 12/60
+      addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 12, 60);
+      system(DT);
+
+      const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+      const barricadeGfx = addGraphics.mock.results[1]!.value;
+
+      const fillStyleCalls = barricadeGfx.fillStyle.mock.calls;
+      // Red fill (HP <= 33%)
+      expect(fillStyleCalls).toContainEqual([0xef4444, 1.0]);
+    });
+
+    it("does not draw health bar when barricade is beyond view range", () => {
+      const { ctx } = createMockContext();
+      const system = createRenderSyncSystem(ctx);
+
+      // Player at origin, barricade very far away
+      addPlayerAndBarricade({ x: 0, y: 0 }, { x: 9999, y: 9999 }, 60, 60);
+      system(DT);
+
+      const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
+      const barricadeGfx = addGraphics.mock.results[1]!.value;
+
+      // clear() is always called, but fillRect should NOT be called
+      // (barricade is outside BARRICADE_VIEW_RANGE_SQ)
+      expect(barricadeGfx.clear).toHaveBeenCalled();
+      expect(barricadeGfx.fillRect).not.toHaveBeenCalled();
+    });
+
+    it("shows snap indicator when barricade-snap event fires with snapping:true", () => {
+      const { ctx, addRectangle } = createMockContext();
+      const snapRect = createMockRect();
+      addRectangle.mockReturnValue(snapRect);
+
+      const system = createRenderSyncSystem(ctx);
+
+      // Emit snap event
+      ctx.eventBus.emit("barricade-snap", {
+        entryPointIndex: 0,
+        snapCenter: { x: 200, y: 300 },
+        orientation: "horizontal" as const,
+        snapping: true,
+      });
+
+      system(DT);
+
+      // Snap rectangle created with correct parameters
+      expect(addRectangle).toHaveBeenCalledWith(0, 0, 36, 36, 0x60a5fa, 0.35);
+      expect(snapRect.setPosition).toHaveBeenCalledWith(200, 300);
+      expect(snapRect.setVisible).toHaveBeenCalledWith(true);
+    });
+
+    it("hides snap indicator when barricade-snap fires with snapping:false", () => {
+      const { ctx, addRectangle } = createMockContext();
+      const snapRect = createMockRect();
+      addRectangle.mockReturnValue(snapRect);
+
+      const system = createRenderSyncSystem(ctx);
+
+      // Show snap indicator first
+      ctx.eventBus.emit("barricade-snap", {
+        entryPointIndex: 0,
+        snapCenter: { x: 200, y: 300 },
+        orientation: "horizontal" as const,
+        snapping: true,
+      });
+      system(DT);
+
+      // Hide snap indicator
+      ctx.eventBus.emit("barricade-snap", {
+        entryPointIndex: 0,
+        snapCenter: { x: 200, y: 300 },
+        orientation: "horizontal" as const,
+        snapping: false,
+      });
+      system(DT);
+
+      expect(snapRect.setVisible).toHaveBeenCalledWith(false);
     });
   });
 });

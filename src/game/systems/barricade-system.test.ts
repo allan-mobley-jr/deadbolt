@@ -2,14 +2,16 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createBarricadeSystem,
   BARRICADE_DURABILITY_SCALE,
+  BARRICADE_PLACE_RANGE,
 } from "./barricade-system";
+import * as objectDefs from "@/game/procgen/object-defs";
 import type { SceneContext } from "./scene-context";
 import { createInputState, createClockState } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { ConstraintRegistry } from "./constraint-registry";
 import { WallAnchorRegistry } from "./wall-anchor-registry";
 import { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
-import { resetWorld } from "@/game/ecs/world";
+import { world, resetWorld } from "@/game/ecs/world";
 import { createGameEventBus } from "@/game/events/event-bus";
 import type { GameEventBus } from "@/game/events/event-bus";
 import {
@@ -286,6 +288,39 @@ describe("BarricadeSystem", () => {
         expect.objectContaining({ snapping: false }),
       );
     });
+
+    it("does not detect snap when player is outside BARRICADE_PLACE_RANGE", () => {
+      const { ctx, bodyRegistry, eventBus } = createMockContext();
+
+      // Player far from entry point (beyond BARRICADE_PLACE_RANGE)
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(9999, 9999, playerBody.id);
+
+      // Object at entry point center (within snap radius of anchors)
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      const handler = vi.fn();
+      eventBus.on("barricade-snap", handler);
+
+      ctx.inputState.pointerDown = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      // No snap event because object is beyond player's placement range
+      expect(handler).not.toHaveBeenCalled();
+
+      // Verify BARRICADE_PLACE_RANGE is what we expect
+      expect(BARRICADE_PLACE_RANGE).toBe(96);
+    });
   });
 
   describe("placement", () => {
@@ -396,6 +431,236 @@ describe("BarricadeSystem", () => {
       system(1 / 60);
 
       expect(barricadeEntities.entities).toHaveLength(0);
+    });
+
+    it("moves object body to snap center and zeroes velocity on placement", () => {
+      const { ctx, bodyRegistry } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      // Object slightly off-center (but within snap radius)
+      const objBody = mockBody(undefined, epCenterX + 5, epCenterY + 5);
+      objBody.velocity.x = 10;
+      objBody.velocity.y = -5;
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX + 5, epCenterY + 5, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(barricadeEntities.entities).toHaveLength(1);
+      // Body snapped to entry point center
+      expect(objBody.position.x).toBe(epCenterX);
+      expect(objBody.position.y).toBe(epCenterY);
+      // Velocity zeroed
+      expect(objBody.velocity.x).toBe(0);
+      expect(objBody.velocity.y).toBe(0);
+      // Friction increased for barricade stability
+      expect(objBody.friction).toBe(0.95);
+      expect(objBody.frictionAir).toBe(0.3);
+    });
+
+    it("cleans up first constraint when second constraint creation throws", () => {
+      const { ctx, bodyRegistry, constraintRegistry } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // First constraint creation succeeds, second throws
+      const addConstraint = (ctx.scene.matter.add as unknown as { constraint: ReturnType<typeof vi.fn> }).constraint;
+      addConstraint
+        .mockImplementationOnce(() => mockConstraint())
+        .mockImplementationOnce(() => { throw new Error("physics engine exploded"); });
+
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      // No barricade should be created
+      expect(barricadeEntities.entities).toHaveLength(0);
+      // Entity remains interactable
+      expect(interactableEntities.entities).toHaveLength(1);
+      // First constraint cleaned up from registry
+      expect(constraintRegistry.size).toBe(0);
+      // removeConstraint called once to clean up the partial constraint
+      const removeConstraint = (ctx.scene.matter.world as unknown as { removeConstraint: ReturnType<typeof vi.fn> }).removeConstraint;
+      expect(removeConstraint).toHaveBeenCalledTimes(1);
+
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it("aborts placement when object type is unknown", () => {
+      const { ctx, bodyRegistry, constraintRegistry } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "nonexistent_junk", ObjectCategory.Loot, false,
+        { durability: 0.5, flammability: 0, conductivity: 0 }, 1,
+      );
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(barricadeEntities.entities).toHaveLength(0);
+      expect(interactableEntities.entities).toHaveLength(1);
+      expect(constraintRegistry.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Unknown object type"),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it("aborts placement when body is not in body registry", () => {
+      const { ctx, bodyRegistry, constraintRegistry } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      // Create entity with a bodyId that is NOT registered in bodyRegistry
+      const unregisteredBodyId = 9999;
+      createObjectEntity(
+        epCenterX, epCenterY, unregisteredBodyId,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(barricadeEntities.entities).toHaveLength(0);
+      expect(interactableEntities.entities).toHaveLength(1);
+      expect(constraintRegistry.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("No body found"),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it("aborts placement when anchor bodies are missing from body registry", () => {
+      const { ctx, bodyRegistry, constraintRegistry, wallAnchorRegistry } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // Replace anchor registry with body IDs that don't exist in bodyRegistry
+      (wallAnchorRegistry as unknown as { anchors: unknown[] }).anchors = [
+        {
+          entryPointIndex: 0,
+          anchorBodyIdA: 88888, // not registered
+          anchorBodyIdB: 88889, // not registered
+          centerX: epCenterX,
+          centerY: epCenterY,
+          orientation: "horizontal" as const,
+        },
+      ];
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(barricadeEntities.entities).toHaveLength(0);
+      expect(interactableEntities.entities).toHaveLength(1);
+      expect(constraintRegistry.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Missing anchor bodies"),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it("rejects placement when object has zero durability", () => {
+      const { ctx, bodyRegistry, constraintRegistry } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // Mock getObjectDef to return a definition with zero durability
+      const spy = vi.spyOn(objectDefs, "getObjectDef").mockReturnValueOnce({
+        ...objectDefs.getObjectDef("wooden_plank")!,
+        physics: { mass: 3, durability: 0, flammability: 0.9, conductivity: 0 },
+      });
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(barricadeEntities.entities).toHaveLength(0);
+      expect(interactableEntities.entities).toHaveLength(1);
+      expect(constraintRegistry.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("zero durability"),
+      );
+
+      spy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 
@@ -569,6 +834,55 @@ describe("BarricadeSystem", () => {
       expect(pathfindingGrid.isWalkable(5, 3)).toBe(false);
       expect(entryPoints[0].barricaded).toBe(true);
     });
+
+    it("removes barricade but does not restore interactable when object type is unknown", () => {
+      const {
+        ctx, bodyRegistry, eventBus, constraintRegistry,
+      } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // Place the barricade normally
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(barricadeEntities.entities).toHaveLength(1);
+      const barricade = barricadeEntities.entities[0];
+
+      // Mutate source type to something unknown before destruction
+      barricade.barricade.sourceObjectType = "unknown_garbage";
+
+      // Destroy the barricade
+      ctx.inputState.pointerReleased = false;
+      barricade.health.current = 0;
+
+      const brokenHandler = vi.fn();
+      eventBus.on("barricade-broken", brokenHandler);
+
+      system(1 / 60);
+
+      // Barricade component removed
+      expect(barricadeEntities.entities).toHaveLength(0);
+      // Interactable NOT restored (unknown object type means def is undefined)
+      expect(interactableEntities.entities).toHaveLength(0);
+      // Constraints still cleaned up
+      expect(constraintRegistry.size).toBe(0);
+      // Destruction event still emitted
+      expect(brokenHandler).toHaveBeenCalled();
+    });
   });
 
   describe("durability calculation", () => {
@@ -598,6 +912,87 @@ describe("BarricadeSystem", () => {
       const barricade = barricadeEntities.entities[0];
       expect(barricade.health.max).toBe(Math.round(0.8 * BARRICADE_DURABILITY_SCALE));
       expect(barricade.barricade.maxDurability).toBe(Math.round(0.8 * BARRICADE_DURABILITY_SCALE));
+    });
+  });
+
+  describe("cleanup", () => {
+    it("does not crash when barricade components are externally removed", () => {
+      const { ctx, bodyRegistry, eventBus } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // Place the barricade (populates prevHealthMap)
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      const entity = barricadeEntities.entities[0];
+      expect(entity).toBeDefined();
+
+      // Externally remove barricade and health components
+      ctx.inputState.pointerReleased = false;
+      world.removeComponent(entity, "barricade");
+      world.removeComponent(entity, "health");
+
+      // System should handle stale prevHealthMap gracefully
+      const damageHandler = vi.fn();
+      eventBus.on("barricade-damaged", damageHandler);
+
+      expect(() => system(1 / 60)).not.toThrow();
+      // No spurious damage events for the defunct entity
+      expect(damageHandler).not.toHaveBeenCalled();
+    });
+
+    it("does not emit damage events when barricade health increases", () => {
+      const { ctx, bodyRegistry, eventBus } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      const barricade = barricadeEntities.entities[0];
+      const maxHp = barricade.health.max;
+
+      // Simulate damage first
+      ctx.inputState.pointerReleased = false;
+      barricade.health.current = maxHp - 20;
+      system(1 / 60);
+
+      // Now simulate healing (health increases)
+      const damageHandler = vi.fn();
+      eventBus.on("barricade-damaged", damageHandler);
+
+      barricade.health.current = maxHp;
+      system(1 / 60);
+
+      // No damage event when health goes up
+      expect(damageHandler).not.toHaveBeenCalled();
     });
   });
 });
