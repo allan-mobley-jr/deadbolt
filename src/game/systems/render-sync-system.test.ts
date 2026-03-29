@@ -41,6 +41,9 @@ function createMockContext(alphaValue = 0.5): {
         moveTo: vi.fn(),
         lineTo: vi.fn(),
         strokePath: vi.fn(),
+        setDepth: vi.fn().mockReturnThis(),
+        fillStyle: vi.fn(),
+        fillRect: vi.fn(),
       }),
     },
     cameras: {
@@ -240,7 +243,8 @@ describe("RenderSyncSystem", () => {
     system(DT);
 
     const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
-    expect(addGraphics).toHaveBeenCalledTimes(1);
+    // Called twice: once for aim indicator, once for barricade health bars
+    expect(addGraphics).toHaveBeenCalledTimes(2);
   });
 
   it("draws the aim line toward the mouse position", () => {
@@ -324,7 +328,8 @@ describe("RenderSyncSystem", () => {
     system(DT);
 
     const addGraphics = (ctx.scene.add as unknown as { graphics: ReturnType<typeof vi.fn> }).graphics;
-    expect(addGraphics).toHaveBeenCalledTimes(1);
+    // Called twice total: aim indicator (1st tick) + barricade health bars (1st tick), then reused
+    expect(addGraphics).toHaveBeenCalledTimes(2);
   });
 
   it("only wires camera follow once", () => {
