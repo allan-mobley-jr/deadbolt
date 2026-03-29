@@ -101,6 +101,31 @@ export interface Inventory {
   maxCarryWeight: number;
 }
 
+// ---------------------------------------------------------------------------
+// Barricade components (issue #22)
+// ---------------------------------------------------------------------------
+
+/**
+ * Marks an entity as a barricade anchored to a door/window frame.
+ *
+ * Stores the Matter.js constraint IDs that anchor the object to wall
+ * anchor bodies, the entry point being defended, and material-derived
+ * durability. The Health component is also present on barricade entities
+ * and tracks the same HP pool (max = maxDurability).
+ */
+export interface Barricade {
+  /** Matter.js constraint IDs anchoring this object to the wall frame. */
+  constraintIds: number[];
+  /** Index into the safehouse's entryPointsToDefend array. */
+  entryPointIndex: number;
+  /** Source object type key (for visual feedback and post-destruction restore). */
+  sourceObjectType: string;
+  /** Maximum durability HP derived from ObjectDefinition.physics.durability. */
+  maxDurability: number;
+  /** Current durability HP. When 0, constraints break. */
+  currentDurability: number;
+}
+
 /** Properties specific to placed world objects. */
 export interface ObjectProperties {
   /** Object type key (matches ObjectDefinition.type). */

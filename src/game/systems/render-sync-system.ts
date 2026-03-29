@@ -1,9 +1,10 @@
 import type Phaser from "phaser";
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
-import { playerEntities, renderableEntities, inventoryEntities } from "@/game/ecs/queries";
+import { playerEntities, renderableEntities, inventoryEntities, barricadeEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
 import { getObjectDef } from "@/game/procgen/object-defs";
+import type { BarricadeSnapEvent } from "@/game/events/event-bus";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -32,6 +33,30 @@ const EQUIP_INDICATOR_SIZE = 8;
 const EQUIP_OFFSET_X = 10;
 const EQUIP_OFFSET_Y = 10;
 
+/** Barricade health bar dimensions. */
+const HEALTH_BAR_WIDTH = 28;
+const HEALTH_BAR_HEIGHT = 4;
+const HEALTH_BAR_OFFSET_Y = -20;
+
+/** Barricade health bar fill colours by HP fraction tier. */
+const HEALTH_COLOR_GOOD = 0x4ade80;    // green
+const HEALTH_COLOR_WARNING = 0xf59e0b; // amber
+const HEALTH_COLOR_DANGER = 0xef4444;  // red
+const HEALTH_BG_COLOR = 0x1a1a2e;      // dark background
+
+/** Barricade damage tint colours by HP fraction tier. */
+const BARRICADE_TINT_GOOD = 0x94a3b8;    // slate (default barricade colour)
+const BARRICADE_TINT_WARNING = 0xf59e0b; // amber
+const BARRICADE_TINT_DANGER = 0xef4444;  // red
+
+/** Snap indicator colour and opacity. */
+const SNAP_COLOR = 0x60a5fa;           // blue-400
+const SNAP_ALPHA = 0.35;
+const SNAP_RECT_SIZE = 36;
+
+/** Distance from player at which barricade health bars are visible. */
+const BARRICADE_VIEW_RANGE_SQ = 96 * 96;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -53,6 +78,18 @@ function getVisualSize(key: string): number {
   const def = getObjectDef(key);
   if (def) return def.immovable ? IMMOVABLE_OBJECT_SIZE : OBJECT_SIZE;
   return PLAYER_SIZE;
+}
+
+/** Pick a colour from a three-tier palette based on HP fraction. */
+function colorByHpTier(
+  hpFraction: number,
+  good: number,
+  warning: number,
+  danger: number,
+): number {
+  if (hpFraction <= 0.33) return danger;
+  if (hpFraction <= 0.66) return warning;
+  return good;
 }
 
 function createVisual(
@@ -92,6 +129,20 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
 
   /** Whether camera follow has been wired. */
   let cameraFollowWired = false;
+
+  /** Barricade health bar graphics (created lazily). */
+  let barricadeGfx: Phaser.GameObjects.Graphics | null = null;
+
+  /** Snap indicator rectangle (created lazily, toggled by events). */
+  let snapGfx: Phaser.GameObjects.Rectangle | null = null;
+
+  /** Current snap state from barricade-snap events. */
+  let snapState: BarricadeSnapEvent | null = null;
+
+  // Listen for snap events from the barricade system
+  ctx.eventBus.on("barricade-snap", (e: BarricadeSnapEvent) => {
+    snapState = e.snapping ? e : null;
+  });
 
   return (_dt: number): void => {
     const alpha = ctx.getAlpha();
@@ -201,6 +252,79 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
           }
         }
       }
+    }
+
+    // --- Barricade visual feedback ---
+
+    // Health bars above barricades within view range of the player
+    if (player) {
+      if (!barricadeGfx) {
+        barricadeGfx = scene.add.graphics();
+        barricadeGfx.setDepth(Number.MAX_SAFE_INTEGER - 2);
+      }
+
+      barricadeGfx.clear();
+
+      const psx = player.position.x;
+      const psy = player.position.y;
+
+      for (const entity of barricadeEntities) {
+        const ex = entity.position.x;
+        const ey = entity.position.y;
+        const hpFraction =
+          entity.health.max > 0
+            ? entity.health.current / entity.health.max
+            : 0;
+
+        // Apply damage tint to the sprite
+        const sprite = sprites.get(entity);
+        if (sprite) {
+          sprite.setFillStyle(
+            colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER),
+          );
+        }
+
+        // Only show health bars if player is close enough
+        const dx = psx - ex;
+        const dy = psy - ey;
+        if (dx * dx + dy * dy > BARRICADE_VIEW_RANGE_SQ) continue;
+
+        // Background bar
+        const barX = ex - HEALTH_BAR_WIDTH / 2;
+        const barY = ey + HEALTH_BAR_OFFSET_Y;
+        barricadeGfx.fillStyle(HEALTH_BG_COLOR, 0.8);
+        barricadeGfx.fillRect(barX, barY, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
+
+        // Fill bar
+        const fillColor = colorByHpTier(hpFraction, HEALTH_COLOR_GOOD, HEALTH_COLOR_WARNING, HEALTH_COLOR_DANGER);
+        barricadeGfx.fillStyle(fillColor, 1.0);
+        barricadeGfx.fillRect(
+          barX,
+          barY,
+          HEALTH_BAR_WIDTH * Math.max(0, hpFraction),
+          HEALTH_BAR_HEIGHT,
+        );
+      }
+    }
+
+    // --- Snap zone indicator ---
+    if (snapState) {
+      if (!snapGfx) {
+        snapGfx = scene.add.rectangle(
+          0,
+          0,
+          SNAP_RECT_SIZE,
+          SNAP_RECT_SIZE,
+          SNAP_COLOR,
+          SNAP_ALPHA,
+        );
+        snapGfx.setStrokeStyle(2, SNAP_COLOR, 0.8);
+        snapGfx.setDepth(Number.MAX_SAFE_INTEGER - 3);
+      }
+      snapGfx.setPosition(snapState.snapCenter.x, snapState.snapCenter.y);
+      snapGfx.setVisible(true);
+    } else if (snapGfx) {
+      snapGfx.setVisible(false);
     }
   };
 }

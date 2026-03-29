@@ -32,3 +32,11 @@ export const inventoryEntities = world.with(
   "position",
   "inventory",
 );
+
+/** Barricade entities with physics and health. */
+export const barricadeEntities = world.with(
+  "position",
+  "physicsBody",
+  "health",
+  "barricade",
+);

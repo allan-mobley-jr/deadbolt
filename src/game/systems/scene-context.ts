@@ -1,8 +1,12 @@
 import type Phaser from "phaser";
 import type { BodyRegistry } from "./body-registry";
+import type { ConstraintRegistry } from "./constraint-registry";
+import type { WallAnchorRegistry } from "./wall-anchor-registry";
 import type { DayPhase } from "./day-night-constants";
 import { DAY_NIGHT, getPhaseDuration } from "./day-night-constants";
 import type { GameEventBus } from "@/game/events/event-bus";
+import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
+import type { EntryPoint } from "@/types/procgen";
 
 /**
  * Snapshot of normalised input state, written by InputSystem each fixed tick
@@ -23,6 +27,8 @@ export interface InputState {
   quickSelectPressed: number;
   /** True while the primary mouse button is held down. */
   pointerDown: boolean;
+  /** True only on the tick the primary button transitions from down to up. */
+  pointerReleased: boolean;
   /** World-space X of the pointer (valid when pointerDown is true). */
   pointerWorldX: number;
   /** World-space Y of the pointer (valid when pointerDown is true). */
@@ -71,6 +77,14 @@ export interface SceneContext {
   clockState: ClockState;
   /** Typed event bus for game-to-game and game-to-UI communication. */
   eventBus: GameEventBus;
+  /** Constraint registry for Matter.js barricade constraint references. */
+  constraintRegistry?: ConstraintRegistry;
+  /** Wall anchor registry for barricade snap targets at entry points. */
+  wallAnchorRegistry?: WallAnchorRegistry;
+  /** Pathfinding grid for runtime walkability updates (barricade placement). */
+  pathfindingGrid?: PathfindingGrid;
+  /** Entry points to defend (from safehouse selection). */
+  entryPoints?: EntryPoint[];
 }
 
 /** Create a zeroed-out input state. */
@@ -83,6 +97,7 @@ export function createInputState(): InputState {
     interactPressed: false,
     quickSelectPressed: -1,
     pointerDown: false,
+    pointerReleased: false,
     pointerWorldX: 0,
     pointerWorldY: 0,
   };

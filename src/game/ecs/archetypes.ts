@@ -27,7 +27,7 @@ export type ZombieEntity = With<
 
 export type BarricadeEntity = With<
   Entity,
-  "position" | "renderable" | "physicsBody" | "health"
+  "position" | "renderable" | "physicsBody" | "health" | "barricade"
 >;
 
 export type ProjectileEntity = With<
@@ -77,17 +77,28 @@ export function createZombieEntity(
   });
 }
 
-/** Spawn a barricade entity at the given position. */
+/** Spawn a barricade entity at the given position with material-derived durability. */
 export function createBarricadeEntity(
   x: number,
   y: number,
   bodyId: number,
+  sourceObjectType: string,
+  entryPointIndex: number,
+  constraintIds: number[],
+  maxDurability: number,
 ): BarricadeEntity {
   return world.add({
     position: { x, y },
-    renderable: { spriteKey: "barricade" },
+    renderable: { spriteKey: sourceObjectType },
     physicsBody: { bodyId },
-    health: { current: 200, max: 200 },
+    health: { current: maxDurability, max: maxDurability },
+    barricade: {
+      constraintIds,
+      entryPointIndex,
+      sourceObjectType,
+      maxDurability,
+      currentDurability: maxDurability,
+    },
   });
 }
 

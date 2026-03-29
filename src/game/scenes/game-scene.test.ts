@@ -203,6 +203,9 @@ describe("GameScene", () => {
         moveTo: vi.fn(),
         lineTo: vi.fn(),
         strokePath: vi.fn(),
+        setDepth: vi.fn().mockReturnThis(),
+        fillStyle: vi.fn(),
+        fillRect: vi.fn(),
       })),
       renderTexture: vi.fn().mockReturnValue(mockRenderTexture),
     } as unknown as Phaser.GameObjects.GameObjectFactory;
@@ -246,12 +249,20 @@ describe("GameScene", () => {
         autoUpdate: true,
         step: worldStep,
         convertTilemapLayer,
+        removeConstraint: vi.fn(),
       },
       add: {
         rectangle: vi.fn().mockImplementation(
           (x: number, y: number, _w: number, _h: number, opts?: Record<string, unknown>) =>
             createMockBody(x, y, opts as { isStatic?: boolean }),
         ),
+        constraint: vi.fn().mockImplementation(() => ({
+          id: Math.floor(Math.random() * 100000),
+          bodyA: null,
+          bodyB: null,
+          stiffness: 0.8,
+          length: 0,
+        })),
       },
     } as unknown as Phaser.Physics.Matter.MatterPhysics;
 
