@@ -458,6 +458,31 @@ describe("ZombieAISystem", () => {
       expect(zombie.velocity.vy).toBe(0);
     });
 
+    it("emits clamped delta when damage exceeds remaining health", () => {
+      const events: Array<{ current: number; delta: number }> = [];
+      ctx.eventBus.on("player-health-changed", (e) => {
+        events.push({ current: e.current, delta: e.delta });
+      });
+
+      const pPos = tileCenter(3, 3);
+      const player = createPlayerEntity(pPos.x, pPos.y, 10);
+      player.health.current = 2; // Less than attackDamage (5)
+
+      const zPos = {
+        x: pPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: pPos.y,
+      };
+      createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → attacking
+      system(DT); // attack
+
+      expect(player.health.current).toBe(0);
+      expect(events.length).toBeGreaterThan(0);
+      // Delta should reflect actual applied damage (-2), not raw attackDamage (-5)
+      expect(events[0].delta).toBe(-2);
+    });
+
     it("emits player-died when player health reaches zero", () => {
       const diedEvents: Array<{ cause: string }> = [];
       ctx.eventBus.on("player-died", (e) => {

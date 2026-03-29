@@ -117,7 +117,7 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
         ai.state = "dead";
       }
 
-      // --- Damage detection (any state except dead) ---
+      // --- Damage detection (pathing or attacking only) ---
       if (ai.state !== "dead" && health.current < ai.previousHealth) {
         if (ai.state === "pathing" || ai.state === "attacking") {
           ai.state = "staggered";
@@ -322,13 +322,15 @@ function runAttackingState(
   ai.attackCooldownRemaining -= dt;
   if (ai.attackCooldownRemaining <= 0) {
     if (targetEntity.health) {
-      targetEntity.health.current = Math.max(0, targetEntity.health.current - stats.attackDamage);
+      const prevHealth = targetEntity.health.current;
+      targetEntity.health.current = Math.max(0, prevHealth - stats.attackDamage);
+      const actualDelta = targetEntity.health.current - prevHealth;
 
       if (!isBarricade && targetEntity.playerControlled) {
         safeEmit(ctx.eventBus, "player-health-changed", {
           current: targetEntity.health.current,
           max: targetEntity.health.max,
-          delta: -stats.attackDamage,
+          delta: actualDelta,
         });
 
         if (targetEntity.health.current <= 0) {

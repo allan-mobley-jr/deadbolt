@@ -142,7 +142,8 @@ export type AIStateName = 'idle' | 'pathing' | 'attacking' | 'staggered' | 'dead
  *                    dead (terminal, entity removed)
  *
  * Any state can transition to dead when health <= 0.
- * Any state except dead can transition to staggered when health decreases.
+ * Pathing or attacking transitions to staggered when health decreases.
+ * Stagger is not refreshed while already staggered.
  */
 export interface AIState {
   /** Current state machine state. */
