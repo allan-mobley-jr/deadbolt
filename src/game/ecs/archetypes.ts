@@ -2,9 +2,11 @@ import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
 import type { ObjectCategory } from "@/types/procgen";
-import type { ZombieType, ZombieVariant } from "./components";
+import type { ZombieType, ZombieVariant, MaterialCategory } from "./components";
 import { createEmptyInventory } from "@/game/systems/inventory-utils";
 import { SHAMBLER_STATS, SHAMBLER_HEALTH } from "@/game/systems/zombie-ai-constants";
+import { MATERIAL_ASSIGNMENTS } from "@/game/systems/material-constants";
+import { getObjectDef } from "@/game/procgen/object-defs";
 
 // ---------------------------------------------------------------------------
 // Sprite key mapping — variant → render key for visual differentiation
@@ -47,7 +49,7 @@ export type ZombieEntity = With<
 
 export type BarricadeEntity = With<
   Entity,
-  "position" | "renderable" | "physicsBody" | "health" | "barricade"
+  "position" | "renderable" | "physicsBody" | "health" | "barricade" | "material"
 >;
 
 export type ProjectileEntity = With<
@@ -57,7 +59,7 @@ export type ProjectileEntity = With<
 
 export type ObjectEntity = With<
   Entity,
-  "position" | "renderable" | "physicsBody" | "interactable" | "objectProperties"
+  "position" | "renderable" | "physicsBody" | "interactable" | "objectProperties" | "material"
 >;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,8 @@ export function createBarricadeEntity(
   constraintIds: number[],
   maxDurability: number,
 ): BarricadeEntity {
+  const assignment = MATERIAL_ASSIGNMENTS[sourceObjectType];
+  const def = getObjectDef(sourceObjectType);
   return world.add({
     position: { x, y },
     renderable: { spriteKey: sourceObjectType },
@@ -149,6 +153,13 @@ export function createBarricadeEntity(
       sourceObjectType,
       maxDurability,
       currentDurability: maxDurability,
+    },
+    material: {
+      category: assignment?.category ?? 'wood',
+      flammability: def?.physics.flammability ?? 0,
+      conductivity: def?.physics.conductivity ?? 0,
+      explosivePotential: assignment?.explosivePotential ?? 0,
+      state: 'inert',
     },
   });
 }
@@ -184,6 +195,7 @@ export function createObjectEntity(
   },
   lootValue: number,
 ): ObjectEntity {
+  const assignment = MATERIAL_ASSIGNMENTS[objectType];
   return world.add({
     position: { x, y },
     renderable: { spriteKey: objectType },
@@ -200,6 +212,13 @@ export function createObjectEntity(
       conductivity: physics.conductivity,
       lootValue,
       immovable,
+    },
+    material: {
+      category: assignment?.category ?? 'wood',
+      flammability: physics.flammability,
+      conductivity: physics.conductivity,
+      explosivePotential: assignment?.explosivePotential ?? 0,
+      state: 'inert',
     },
   });
 }

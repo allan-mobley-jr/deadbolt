@@ -12,7 +12,7 @@
 import EventEmitter from "eventemitter3";
 import type { DayPhase } from "@/game/systems/day-night-constants";
 import type { SizeCategory } from "@/game/procgen/object-defs";
-import type { ZombieVariant } from "@/game/ecs/components";
+import type { ZombieVariant, MaterialState } from "@/game/ecs/components";
 
 // ---------------------------------------------------------------------------
 // Event payload types — Game → UI
@@ -215,6 +215,18 @@ export interface PlayerHitEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Material state (issue #28)
+// ---------------------------------------------------------------------------
+
+/** Emitted when an entity's material state changes (burning, electrified, inert). */
+export interface MaterialStateChangedEvent {
+  position: { x: number; y: number };
+  objectType: string;
+  previousState: MaterialState;
+  newState: MaterialState;
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -284,6 +296,9 @@ export interface GameEventMap {
   "object-examined": [event: ObjectExaminedEvent];
   "object-dropped": [event: ObjectDroppedEvent];
   "noise-generated": [event: NoiseGeneratedEvent];
+
+  // Material state
+  "material-state-changed": [event: MaterialStateChangedEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
