@@ -152,6 +152,10 @@ function getVisibilityTexture(scene: Phaser.Scene): string | null {
 /** Key used to cache the fire light gradient texture. */
 const FIRE_LIGHT_TEXTURE_KEY = "__fire_light";
 
+/** Derived softness and diameter for fire light textures. */
+const FIRE_LIGHT_SOFTNESS = FIRE.FIRE_LIGHT_RADIUS * 0.3;
+const FIRE_LIGHT_DIAMETER = (FIRE.FIRE_LIGHT_RADIUS + FIRE_LIGHT_SOFTNESS) * 2;
+
 /**
  * Create or retrieve a smaller soft-edged circle texture for fire light.
  * Uses FIRE.FIRE_LIGHT_RADIUS with a warm orange-tinted gradient.
@@ -161,9 +165,7 @@ function getFireLightTexture(scene: Phaser.Scene): string | null {
     return FIRE_LIGHT_TEXTURE_KEY;
   }
 
-  const softness = FIRE.FIRE_LIGHT_RADIUS * 0.3;
-  const diameter = (FIRE.FIRE_LIGHT_RADIUS + softness) * 2;
-  const canvas = scene.textures.createCanvas(FIRE_LIGHT_TEXTURE_KEY, diameter, diameter);
+  const canvas = scene.textures.createCanvas(FIRE_LIGHT_TEXTURE_KEY, FIRE_LIGHT_DIAMETER, FIRE_LIGHT_DIAMETER);
   if (!canvas) {
     console.error(
       "[LightingSystem] Failed to create fire light canvas texture.",
@@ -172,17 +174,17 @@ function getFireLightTexture(scene: Phaser.Scene): string | null {
   }
 
   const ctx2d = canvas.context;
-  const cx = diameter / 2;
-  const cy = diameter / 2;
+  const cx = FIRE_LIGHT_DIAMETER / 2;
+  const cy = FIRE_LIGHT_DIAMETER / 2;
 
-  const innerRadius = FIRE.FIRE_LIGHT_RADIUS - softness;
-  const outerRadius = FIRE.FIRE_LIGHT_RADIUS + softness;
+  const innerRadius = FIRE.FIRE_LIGHT_RADIUS - FIRE_LIGHT_SOFTNESS;
+  const outerRadius = FIRE.FIRE_LIGHT_RADIUS + FIRE_LIGHT_SOFTNESS;
   const gradient = ctx2d.createRadialGradient(cx, cy, Math.max(0, innerRadius), cx, cy, outerRadius);
   gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
   gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
 
   ctx2d.fillStyle = gradient;
-  ctx2d.fillRect(0, 0, diameter, diameter);
+  ctx2d.fillRect(0, 0, FIRE_LIGHT_DIAMETER, FIRE_LIGHT_DIAMETER);
   canvas.refresh();
 
   return FIRE_LIGHT_TEXTURE_KEY;
@@ -282,8 +284,7 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
     }
 
     if (fireLightTextureKey) {
-      const softness = FIRE.FIRE_LIGHT_RADIUS * 0.3;
-      const fireDiameter = (FIRE.FIRE_LIGHT_RADIUS + softness) * 2;
+      const halfDiameter = FIRE_LIGHT_DIAMETER / 2;
 
       for (const entity of materialEntities) {
         if (entity.material.state !== "burning") continue;
@@ -292,8 +293,8 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
         const sy = entity.position.y - cam.scrollY;
         overlay.erase(
           fireLightTextureKey,
-          sx - fireDiameter / 2,
-          sy - fireDiameter / 2,
+          sx - halfDiameter,
+          sy - halfDiameter,
         );
       }
     }

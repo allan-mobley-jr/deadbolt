@@ -233,34 +233,34 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     age: number;
   }> = [];
 
-  // Listen for damage-dealt events
-  ctx.eventBus.on("damage-dealt", (e: DamageDealtEvent) => {
+  /** Spawn a floating damage number at a world position. */
+  function spawnDamageText(
+    x: number,
+    y: number,
+    damage: number,
+    color: string,
+  ): void {
     const text = ctx.scene.add
-      .text(e.position.x, e.position.y - 16, String(Math.round(e.damage)), {
+      .text(x, y - 16, String(Math.round(damage)), {
         fontFamily: "monospace",
         fontSize: DAMAGE_TEXT_FONT_SIZE,
-        color: DAMAGE_TEXT_COLOUR,
+        color,
         stroke: "#000000",
         strokeThickness: 2,
       })
       .setOrigin(0.5)
       .setDepth(Number.MAX_SAFE_INTEGER);
     damageTexts.push({ text, age: 0 });
+  }
+
+  // Listen for damage-dealt events
+  ctx.eventBus.on("damage-dealt", (e: DamageDealtEvent) => {
+    spawnDamageText(e.position.x, e.position.y, e.damage, DAMAGE_TEXT_COLOUR);
   });
 
   // Listen for fire-damage events (orange floating numbers)
   ctx.eventBus.on("fire-damage", (e: FireDamageEvent) => {
-    const text = ctx.scene.add
-      .text(e.position.x, e.position.y - 16, String(Math.round(e.damage)), {
-        fontFamily: "monospace",
-        fontSize: DAMAGE_TEXT_FONT_SIZE,
-        color: FIRE_DAMAGE_TEXT_COLOUR,
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5)
-      .setDepth(Number.MAX_SAFE_INTEGER);
-    damageTexts.push({ text, age: 0 });
+    spawnDamageText(e.position.x, e.position.y, e.damage, FIRE_DAMAGE_TEXT_COLOUR);
   });
 
   /**
@@ -433,13 +433,11 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         // Apply damage tint to the sprite (burning overrides damage colour)
         const sprite = sprites.get(entity);
         if (sprite) {
+          const baseTint = colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER);
           if (entity.material?.state === "burning") {
-            const baseTint = colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER);
             sprite.setFillStyle(blendWithFireTint(baseTint, totalElapsed));
           } else {
-            sprite.setFillStyle(
-              colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER),
-            );
+            sprite.setFillStyle(baseTint);
           }
         }
 

@@ -201,20 +201,20 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           if (Math.random() >= chance) continue;
 
           // Ignite the target
-          const previousState = target.material.state;
           target.material.state = "burning";
+          const targetObjectType = getObjectType(target);
 
           safeEmit(ctx.eventBus, "material-state-changed", {
             position: { x: target.position.x, y: target.position.y },
-            objectType: getObjectType(target),
-            previousState,
+            objectType: targetObjectType,
+            previousState: "inert",
             newState: "burning",
           });
 
           safeEmit(ctx.eventBus, "fire-spread", {
             sourcePosition: { x: entity.position.x, y: entity.position.y },
             targetPosition: { x: target.position.x, y: target.position.y },
-            targetObjectType: getObjectType(target),
+            targetObjectType,
           });
 
           // The newly burning entity will be picked up in step 1 next tick
@@ -329,7 +329,7 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
                 `[FireSystem] Failed to remove constraint ${constraintId}:`,
                 err,
               );
-              // Do NOT unregister �� constraint is still in the physics world
+              // Do NOT unregister -- constraint is still in the physics world
             }
           }
         }
@@ -420,13 +420,12 @@ export function igniteEntity(
     return false;
   }
 
-  const previousState = entity.material.state;
   entity.material.state = "burning";
 
   safeEmit(ctx.eventBus, "material-state-changed", {
     position: { x: entity.position.x, y: entity.position.y },
     objectType: getObjectType(entity),
-    previousState,
+    previousState: "inert",
     newState: "burning",
   });
 
