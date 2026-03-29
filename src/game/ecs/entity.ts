@@ -9,6 +9,7 @@ import type {
   Interactable,
   ObjectProperties,
   Material,
+  Battery,
   Barricade,
   AIState,
   ZombieType,
@@ -37,6 +38,7 @@ export interface Entity {
   interactable?: Interactable;
   objectProperties?: ObjectProperties;
   material?: Material;
+  battery?: Battery;
   barricade?: Barricade;
   aiState?: AIState;
   zombieType?: ZombieType;

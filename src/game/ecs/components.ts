@@ -265,6 +265,26 @@ export interface Material {
   state: MaterialState;
 }
 
+// ---------------------------------------------------------------------------
+// Battery component (issue #30)
+// ---------------------------------------------------------------------------
+
+/**
+ * Battery charge state for electricity chain sources (car_battery entities).
+ *
+ * Tracks current charge and whether the battery is actively powering an
+ * electric chain. The ElectricitySystem reads and writes this component
+ * each fixed tick.
+ */
+export interface Battery {
+  /** Current charge in arbitrary units (0 = depleted). */
+  charge: number;
+  /** Maximum charge capacity. */
+  maxCharge: number;
+  /** Whether this battery is currently powering an electric chain. */
+  active: boolean;
+}
+
 /** Properties specific to placed world objects. */
 export interface ObjectProperties {
   /** Object type key (matches ObjectDefinition.type). */

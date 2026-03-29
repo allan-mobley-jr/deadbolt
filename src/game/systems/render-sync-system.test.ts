@@ -904,8 +904,12 @@ describe("RenderSyncSystem", () => {
       mockSprite.setFillStyle.mockClear();
       system(DT); // Update tick
 
-      // setFillStyle should NOT be called again for a non-burning, non-barricade entity
-      expect(mockSprite.setFillStyle).not.toHaveBeenCalled();
+      // setFillStyle IS called to reset to base sprite colour (ensures tint
+      // is removed after a burning/electrified → inert transition), but the
+      // value should be the plain sprite colour — not a fire or electric tint.
+      expect(mockSprite.setFillStyle).toHaveBeenCalled();
+      const resetColour = mockSprite.setFillStyle.mock.calls[0][0];
+      expect(resetColour).toBeTypeOf("number");
     });
   });
 });

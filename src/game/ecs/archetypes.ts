@@ -1,11 +1,12 @@
 import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
-import type { Material, ZombieType, ZombieVariant } from "./components";
+import type { Battery, Material, ZombieType, ZombieVariant } from "./components";
 import type { ObjectCategory } from "@/types/procgen";
 import { createEmptyInventory } from "@/game/systems/inventory-utils";
 import { SHAMBLER_STATS, SHAMBLER_HEALTH } from "@/game/systems/zombie-ai-constants";
 import { MATERIAL_ASSIGNMENTS } from "@/game/systems/material-constants";
+import { ELECTRICITY } from "@/game/systems/electricity-constants";
 import { getObjectDef } from "@/game/procgen/object-defs";
 
 // ---------------------------------------------------------------------------
@@ -208,6 +209,18 @@ export function createProjectileEntity(
   });
 }
 
+/**
+ * Build a Battery component with default charge values.
+ * Used for car_battery entities that serve as electricity chain sources.
+ */
+function buildBattery(): Battery {
+  return {
+    charge: ELECTRICITY.INITIAL_CHARGE,
+    maxCharge: ELECTRICITY.MAX_CHARGE,
+    active: false,
+  };
+}
+
 /** Spawn a world object entity from an object definition. */
 export function createObjectEntity(
   x: number,
@@ -223,12 +236,12 @@ export function createObjectEntity(
   },
   lootValue: number,
 ): ObjectEntity {
-  return world.add({
+  const base = {
     position: { x, y },
     renderable: { spriteKey: objectType },
     physicsBody: { bodyId },
     interactable: {
-      interactionType: immovable ? "push" : "pickup",
+      interactionType: immovable ? ("push" as const) : ("pickup" as const),
       highlighted: false,
     },
     objectProperties: {
@@ -241,5 +254,8 @@ export function createObjectEntity(
       immovable,
     },
     material: buildMaterial(objectType, "createObjectEntity", physics),
-  });
+    // Car batteries get a Battery component for the electricity chain system
+    ...(objectType === "car_battery" ? { battery: buildBattery() } : {}),
+  };
+  return world.add(base);
 }

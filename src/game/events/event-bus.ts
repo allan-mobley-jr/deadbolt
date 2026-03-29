@@ -261,6 +261,36 @@ export interface FireBurnoutEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Electricity (issue #30)
+// ---------------------------------------------------------------------------
+
+/** Emitted when an electric chain is formed or recalculated with a new size. */
+export interface ElectricityChainFormedEvent {
+  batteryPosition: { x: number; y: number };
+  /** Number of entities in the chain (including the battery). */
+  chainSize: number;
+}
+
+/** Emitted when an electrified object deals contact damage. */
+export interface ElectricityDamageEvent {
+  position: { x: number; y: number };
+  damage: number;
+  targetType: "zombie" | "player";
+}
+
+/** Emitted when a car battery runs out of charge. */
+export interface ElectricityDepletedEvent {
+  batteryPosition: { x: number; y: number };
+}
+
+/** Emitted periodically with current battery charge level. */
+export interface ElectricityChargeChangedEvent {
+  batteryPosition: { x: number; y: number };
+  charge: number;
+  maxCharge: number;
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -339,6 +369,12 @@ export interface GameEventMap {
   "fire-spread": [event: FireSpreadEvent];
   "fire-damage": [event: FireDamageEvent];
   "fire-burnout": [event: FireBurnoutEvent];
+
+  // Electricity (issue #30)
+  "electricity-chain-formed": [event: ElectricityChainFormedEvent];
+  "electricity-damage": [event: ElectricityDamageEvent];
+  "electricity-depleted": [event: ElectricityDepletedEvent];
+  "electricity-charge-changed": [event: ElectricityChargeChangedEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
