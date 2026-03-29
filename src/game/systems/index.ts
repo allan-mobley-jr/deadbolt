@@ -28,3 +28,6 @@ export { createCommandSystem } from "./command-system";
 export { createInteractionSystem } from "./interaction-system";
 export { createZombieAISystem, resetZombieKills } from "./zombie-ai-system";
 export { ZOMBIE_AI, SHAMBLER_STATS, SHAMBLER_HEALTH } from "./zombie-ai-constants";
+export { createWaveSystem } from "./wave-system";
+export { getWaveConfig } from "./wave-system-constants";
+export type { NightWaveConfig } from "./wave-system-constants";

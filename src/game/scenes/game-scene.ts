@@ -15,17 +15,11 @@ import { createInteractionSystem } from "@/game/systems/interaction-system";
 import { createInventorySystem } from "@/game/systems/inventory-system";
 import { createBarricadeSystem } from "@/game/systems/barricade-system";
 import { createZombieAISystem, resetZombieKills } from "@/game/systems/zombie-ai-system";
+import { createWaveSystem } from "@/game/systems/wave-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
-import {
-  getAvailableVariants,
-  selectVariant,
-  spawnZombie,
-  spawnHordeCluster,
-  type SpawnContext,
-} from "@/game/systems/zombie-spawner-utils";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
@@ -120,6 +114,7 @@ export default class GameScene extends Phaser.Scene {
       pathfindingGrid: this.worldData.pathfinding,
       entryPoints: this.worldData.safehouse.entryPointsToDefend,
       safehouseCenter: this.worldData.safehouse.minimapPosition,
+      spawnZones: this.worldData.spawnZones,
     };
 
     // Publish the bus so the React bridge can connect to it.
@@ -135,9 +130,6 @@ export default class GameScene extends Phaser.Scene {
       bodyRegistry,
     );
 
-    // --- Spawn initial test zombies from spawn zones ---
-    this.spawnInitialZombies(bodyRegistry);
-
     // --- Assemble fixed-tick systems (60 Hz) ---
     const systems: SystemFn[] = [
       createCommandSystem(ctx),
@@ -146,6 +138,7 @@ export default class GameScene extends Phaser.Scene {
       createInteractionSystem(ctx),
       createBarricadeSystem(ctx),
       createDayNightSystem(ctx),
+      createWaveSystem(ctx),
       createMovementSystem(ctx),
       createZombieAISystem(ctx),
       createPhysicsSyncSystem(ctx),
@@ -258,62 +251,6 @@ export default class GameScene extends Phaser.Scene {
   // -----------------------------------------------------------------------
   // Object spawning
   // -----------------------------------------------------------------------
-
-  /**
-   * Spawn a small group of test zombies from the first available spawn zones.
-   *
-   * Selects zombie archetypes based on the current night number using the
-   * weighted variant selection system. Horde variants spawn as a cluster
-   * of 5-10 weak zombies. This is still a temporary spawn mechanism —
-   * a full wave spawner will replace it in a future issue.
-   */
-  private spawnInitialZombies(bodyRegistry: BodyRegistry): void {
-    const spawnZones = this.worldData!.spawnZones;
-    if (!spawnZones || spawnZones.length === 0) {
-      console.warn("[GameScene] No spawn zones available — skipping zombie spawn");
-      return;
-    }
-
-    const MAX_INITIAL_ZOMBIES = 5;
-    let spawned = 0;
-
-    // Simple seeded RNG for deterministic variant selection (test spawner)
-    let rngState = 42;
-    const rng = (): number => {
-      rngState = (rngState * 1664525 + 1013904223) >>> 0;
-      return rngState / 0x100000000;
-    };
-
-    // Determine available variants based on current day number.
-    // The test spawner defaults to day 1. When the wave system is
-    // implemented, it will read ctx.clockState.dayNumber instead.
-    const dayNumber = 1;
-    const available = getAvailableVariants(dayNumber);
-
-    const spawnCtx: SpawnContext = {
-      matterAdd: this.matter.add,
-      bodyRegistry,
-    };
-
-    for (const zone of spawnZones) {
-      if (spawned >= MAX_INITIAL_ZOMBIES) break;
-      if (zone.spawnPoints.length === 0) continue;
-
-      const point = zone.spawnPoints[0];
-      const px = point.x * TILE_SIZE + TILE_SIZE / 2;
-      const py = point.y * TILE_SIZE + TILE_SIZE / 2;
-
-      const variant = selectVariant(available, rng);
-
-      if (variant === "horde") {
-        const cluster = spawnHordeCluster(spawnCtx, px, py, rng, spawned);
-        spawned += cluster.length;
-      } else {
-        spawnZombie(spawnCtx, variant, px, py, spawned);
-        spawned++;
-      }
-    }
-  }
 
   /**
    * Convert PlacedObjects from all buildings into ECS entities with
