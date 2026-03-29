@@ -48,7 +48,7 @@ export interface MaterialAssignment {
  *   fuel        — combustible liquids/materials (extremely flammable, explosive)
  *   electronic  — items with wiring or batteries (conductive, slightly flammable)
  */
-export const MATERIAL_ASSIGNMENTS: Readonly<Record<string, MaterialAssignment>> = {
+export const MATERIAL_ASSIGNMENTS: Readonly<Partial<Record<string, MaterialAssignment>>> = {
   // Furniture
   bookshelf:      { category: 'wood',       explosivePotential: 0.0 },
   wooden_chair:   { category: 'wood',       explosivePotential: 0.0 },

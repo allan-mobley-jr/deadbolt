@@ -618,6 +618,170 @@ describe("MaterialRegistry state queries", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Entity removal / world churn
+// ---------------------------------------------------------------------------
+
+describe("MaterialRegistry after entity removal", () => {
+  it("removed entities no longer appear in radius queries", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const gasCan = spawnGasCan(ctx, 100, 100);
+    const plank = spawnWoodenPlank(ctx, 110, 100);
+    system(DT);
+
+    expect(reg.queryRadius(100, 100, 200)).toHaveLength(2);
+
+    // Remove gas can from the world
+    world.remove(gasCan);
+    system(DT);
+
+    const results = reg.queryRadius(100, 100, 200);
+    expect(results).toHaveLength(1);
+    expect(results[0].entity.material.category).toBe("wood");
+  });
+
+  it("removed entities no longer appear in body ID lookup", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const gasCan = spawnGasCan(ctx, 100, 100);
+    const bodyId = gasCan.physicsBody.bodyId;
+    system(DT);
+
+    expect(reg.getEntityByBodyId(bodyId)).toBeDefined();
+
+    world.remove(gasCan);
+    system(DT);
+
+    expect(reg.getEntityByBodyId(bodyId)).toBeUndefined();
+  });
+
+  it("removed entities no longer appear in adjacency queries", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const wire = spawnWireSpool(ctx, 100, 100);
+    const metal = spawnMetalSheet(ctx, 110, 100);
+
+    mockPairs = [
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId } },
+    ];
+
+    system(DT);
+    expect(reg.getAdjacentEntities(wire.physicsBody.bodyId)).toHaveLength(1);
+
+    // Remove metal sheet
+    world.remove(metal);
+    system(DT);
+
+    expect(reg.getAdjacentEntities(wire.physicsBody.bodyId)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Boundary and edge cases
+// ---------------------------------------------------------------------------
+
+describe("MaterialRegistry edge cases", () => {
+  it("includes entities exactly at the boundary distance", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    // Entity exactly 50px away from query point
+    spawnGasCan(ctx, 150, 100);
+    system(DT);
+
+    const results = reg.queryRadius(100, 100, 50);
+    expect(results).toHaveLength(1);
+    expect(results[0].distance).toBeCloseTo(50, 5);
+  });
+
+  it("queryRadius with radius 0 returns only entity at exact point", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    spawnGasCan(ctx, 100, 100);         // at query point
+    spawnWoodenPlank(ctx, 100, 101);    // 1px away
+    system(DT);
+
+    const results = reg.queryRadius(100, 100, 0);
+    expect(results).toHaveLength(1);
+    expect(results[0].distance).toBe(0);
+  });
+
+  it("getExplosiveInRadius uses default EXPLOSION_RADIUS", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    // Just beyond default explosion radius
+    const farX = 100 + MATERIAL.EXPLOSION_RADIUS + 10;
+    spawnGasCan(ctx, farX, 100);
+    system(DT);
+
+    const results = reg.getExplosiveInRadius(100, 100);
+    expect(results).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fallback behavior for unknown object types
+// ---------------------------------------------------------------------------
+
+describe("Material fallback for unknown types", () => {
+  it("defaults to wood category for unknown object type", () => {
+    const ctx = createMockContext();
+    const bodyId = registerMockBody(ctx);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const entity = createObjectEntity(
+      100, 100, bodyId,
+      "unknown_mystery_object", ObjectCategory.Debris, false,
+      { durability: 0.5, flammability: 0.5, conductivity: 0.5 },
+      0,
+    );
+
+    expect(entity.material.category).toBe("wood");
+    expect(entity.material.explosivePotential).toBe(0);
+    // Physics values are passed directly, not from assignments
+    expect(entity.material.flammability).toBe(0.5);
+    expect(entity.material.conductivity).toBe(0.5);
+    // Should have warned
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("unknown_mystery_object"),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it("barricade defaults to wood with zero physics for unknown type", () => {
+    const ctx = createMockContext();
+    const bodyId = registerMockBody(ctx);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const barricade = createBarricadeEntity(
+      100, 100, bodyId,
+      "nonexistent_type", 0, [200, 201], 60,
+    );
+
+    expect(barricade.material.category).toBe("wood");
+    expect(barricade.material.flammability).toBe(0);
+    expect(barricade.material.conductivity).toBe(0);
+    expect(barricade.material.explosivePotential).toBe(0);
+    // Should have warned about both missing assignment and missing def
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+
+    warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Body ID lookup
 // ---------------------------------------------------------------------------
 

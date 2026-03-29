@@ -12,15 +12,17 @@ describe("MATERIAL_ASSIGNMENTS", () => {
 
   it("has valid category for every entry", () => {
     const validCategories = new Set(["wood", "metal", "fabric", "fuel", "electronic"]);
-    for (const [type, assignment] of Object.entries(MATERIAL_ASSIGNMENTS)) {
-      expect(validCategories.has(assignment.category)).toBe(true);
+    for (const [, assignment] of Object.entries(MATERIAL_ASSIGNMENTS)) {
+      expect(assignment).toBeDefined();
+      expect(validCategories.has(assignment!.category)).toBe(true);
     }
   });
 
   it("has explosivePotential in 0-1 range for every entry", () => {
-    for (const [type, assignment] of Object.entries(MATERIAL_ASSIGNMENTS)) {
-      expect(assignment.explosivePotential).toBeGreaterThanOrEqual(0);
-      expect(assignment.explosivePotential).toBeLessThanOrEqual(1);
+    for (const [, assignment] of Object.entries(MATERIAL_ASSIGNMENTS)) {
+      expect(assignment).toBeDefined();
+      expect(assignment!.explosivePotential).toBeGreaterThanOrEqual(0);
+      expect(assignment!.explosivePotential).toBeLessThanOrEqual(1);
     }
   });
 

@@ -271,6 +271,9 @@ export function createMaterialSystem(ctx: SceneContext): SystemFn {
     throw new Error("[MaterialSystem] ctx.materialRegistry is required");
   }
 
+  /** One-time flag to avoid spamming the console if engine is missing. */
+  let warnedMissingEngine = false;
+
   return (_dt: number): void => {
     // 1. Rebuild body → entity lookup
     registry.rebuildBodyLookup();
@@ -283,6 +286,14 @@ export function createMaterialSystem(ctx: SceneContext): SystemFn {
     // available in test mocks or before the first physics step.
     const matterWorld = ctx.scene.matter.world as unknown as Record<string, unknown>;
     const engine = matterWorld.engine as MatterEngine | undefined;
+
+    if (!engine && !warnedMissingEngine) {
+      console.warn(
+        "[MaterialSystem] Matter.js engine not found on ctx.scene.matter.world. Adjacency detection disabled.",
+      );
+      warnedMissingEngine = true;
+    }
+
     const pairs = engine?.pairs?.list ?? [];
     registry.updateAdjacency(pairs);
   };
