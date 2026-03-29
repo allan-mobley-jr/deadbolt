@@ -241,7 +241,9 @@ function runPathingState(
     entity.velocity.vy = 0;
   }
 
-  // --- Brute: target the weakest barricade globally ---
+  // --- Barricade detection ---
+  const bDetectSq = ZOMBIE_AI.BARRICADE_DETECTION_RANGE * ZOMBIE_AI.BARRICADE_DETECTION_RANGE;
+
   // Brutes actively seek the weakest barricade regardless of proximity.
   // They enter attacking when within detection range of their target.
   if (stats.variant === "brute") {
@@ -251,7 +253,6 @@ function runPathingState(
         entity.position.x, entity.position.y,
         weakestBarricade.position.x, weakestBarricade.position.y,
       );
-      const bDetectSq = ZOMBIE_AI.BARRICADE_DETECTION_RANGE * ZOMBIE_AI.BARRICADE_DETECTION_RANGE;
       if (d <= bDetectSq) {
         ai.state = "attacking";
         ai.attackTargetBodyId = weakestBarricade.physicsBody.bodyId;
@@ -259,9 +260,7 @@ function runPathingState(
       }
     }
   } else {
-    // --- Standard barricade proximity check (shambler, runner, horde) ---
-    const bDetectSq = ZOMBIE_AI.BARRICADE_DETECTION_RANGE * ZOMBIE_AI.BARRICADE_DETECTION_RANGE;
-
+    // Standard barricade proximity check (shambler, runner, horde)
     for (const barricade of barricadeEntities) {
       // Runner vault: skip barricades with durability at or below threshold
       if (

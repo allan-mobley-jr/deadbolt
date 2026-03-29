@@ -1,3 +1,6 @@
+import type { ObjectCategory } from '@/types/procgen';
+import type { SizeCategory } from "@/game/procgen/object-defs";
+
 /** 2D position in world space (pixels, not tiles). */
 export interface Position {
   x: number;
@@ -54,8 +57,6 @@ export interface Health {
 // Object placement components (issue #15)
 // ---------------------------------------------------------------------------
 
-import type { ObjectCategory } from '@/types/procgen';
-
 /** Marks an entity as interactable by the player. */
 export interface Interactable {
   /** What kind of interaction is available. */
@@ -63,8 +64,6 @@ export interface Interactable {
   /** Whether the entity is currently highlighted (player in range). */
   highlighted: boolean;
 }
-
-import type { SizeCategory } from "@/game/procgen/object-defs";
 
 /**
  * Data for a single occupied inventory slot.

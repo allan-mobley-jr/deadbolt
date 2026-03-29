@@ -17,8 +17,7 @@ import {
   HORDE_CLUSTER_SIZE,
   HORDE_CLUSTER_SPREAD,
 } from "./zombie-ai-constants";
-import { createZombieEntity } from "@/game/ecs/archetypes";
-import type { ZombieEntity } from "@/game/ecs/archetypes";
+import { createZombieEntity, type ZombieEntity } from "@/game/ecs/archetypes";
 import type { BodyRegistry } from "./body-registry";
 
 // ---------------------------------------------------------------------------

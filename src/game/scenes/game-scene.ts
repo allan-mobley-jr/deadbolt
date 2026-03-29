@@ -24,8 +24,8 @@ import {
   selectVariant,
   spawnZombie,
   spawnHordeCluster,
+  type SpawnContext,
 } from "@/game/systems/zombie-spawner-utils";
-import type { SpawnContext } from "@/game/systems/zombie-spawner-utils";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
