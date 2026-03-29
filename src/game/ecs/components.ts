@@ -230,6 +230,41 @@ export interface CombatState {
   previousHealth: number;
 }
 
+// ---------------------------------------------------------------------------
+// Material components (issue #28)
+// ---------------------------------------------------------------------------
+
+/** Material category labels for chain-reaction classification. */
+export type MaterialCategory = 'wood' | 'metal' | 'fabric' | 'fuel' | 'electronic';
+
+/** Dynamic material state for chain-reaction tracking. */
+export type MaterialState = 'inert' | 'burning' | 'electrified';
+
+/**
+ * Material properties for chain-reaction interactions (fire, electricity, explosions).
+ *
+ * Present on all interactive world objects AND barricade entities. Unlike
+ * ObjectProperties (which is removed during barricade placement), Material
+ * persists across entity lifecycle transitions.
+ *
+ * Static properties (category, flammability, conductivity, explosivePotential)
+ * are set once at entity creation from the object definition table. The
+ * `state` field is dynamic — written by effect systems (fire, electricity),
+ * read by the MaterialSystem for query filtering.
+ */
+export interface Material {
+  /** Material classification for interaction rules. */
+  category: MaterialCategory;
+  /** Fire spread susceptibility (0 = fireproof, 1 = instant ignition). */
+  flammability: number;
+  /** Electrical conductivity (0 = insulator, 1 = perfect conductor). */
+  conductivity: number;
+  /** Explosion potential (0 = inert, 1 = maximum blast). */
+  explosivePotential: number;
+  /** Current dynamic state. Written by effect systems, read by MaterialSystem. */
+  state: MaterialState;
+}
+
 /** Properties specific to placed world objects. */
 export interface ObjectProperties {
   /** Object type key (matches ObjectDefinition.type). */
