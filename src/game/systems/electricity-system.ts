@@ -83,8 +83,8 @@ function traceChain(
   // Add the battery itself to the chain
   chain.add(battery as PhysicsMaterialEntity);
 
-  while (queue.length > 0) {
-    const bodyId = queue.shift()!;
+  for (let i = 0; i < queue.length; i++) {
+    const bodyId = queue[i];
     const neighbors = registry.getConductiveNeighbors(bodyId);
 
     for (const neighbor of neighbors) {

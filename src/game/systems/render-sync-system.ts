@@ -362,6 +362,9 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         sprite.setFillStyle(
           blendWithElectricTint(spriteColour(entity.renderable.spriteKey), totalElapsed),
         );
+      } else if (entity.material && !entity.barricade) {
+        // Reset to the base sprite colour when not burning or electrified.
+        sprite.setFillStyle(spriteColour(entity.renderable.spriteKey));
       }
     }
 
