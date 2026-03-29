@@ -294,7 +294,7 @@ describe("WaveSystem", () => {
       system(DT);
 
       // Night 1 spawn interval is 0.8s
-      // After 0.5s, should have few zombies (first spawns at t=0)
+      // After 0.5s (before first spawn at ~0.8s), should still have few zombies
       tickSeconds(system, 0.5);
       const earlyCount = zombieEntities.entities.length;
 
