@@ -1,10 +1,10 @@
 import type Phaser from "phaser";
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
-import { playerEntities, renderableEntities, inventoryEntities, barricadeEntities } from "@/game/ecs/queries";
+import { playerEntities, renderableEntities, inventoryEntities, barricadeEntities, combatPlayerEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
 import { getObjectDef } from "@/game/procgen/object-defs";
-import type { BarricadeSnapEvent } from "@/game/events/event-bus";
+import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent } from "@/game/events/event-bus";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -59,6 +59,29 @@ const SNAP_RECT_SIZE = 36;
 
 /** Distance from player at which barricade health bars are visible. */
 const BARRICADE_VIEW_RANGE_SQ = 96 * 96;
+
+// --- Combat visual config ---
+
+/** Colour for the melee swing arc indicator. */
+const SWING_ARC_COLOUR = 0xffffff;
+const SWING_ARC_ALPHA = 0.8;
+const SWING_ARC_LINE_WIDTH = 3;
+
+/** Damage number text style. */
+const DAMAGE_TEXT_COLOUR = "#ef4444"; // red
+const DAMAGE_TEXT_FONT_SIZE = "14px";
+
+/** How long damage numbers float before being destroyed (seconds). */
+const DAMAGE_TEXT_LIFETIME = 0.8;
+
+/** Upward drift speed for damage numbers (pixels/second). */
+const DAMAGE_TEXT_DRIFT = 30;
+
+/** How long the zombie death flash lasts (seconds). */
+const DEATH_FLASH_DURATION = 0.12;
+
+/** I-frame flicker rate (oscillations per second). */
+const IFRAME_FLICKER_RATE = 20;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -166,6 +189,66 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
   ctx.eventBus.on("barricade-snap", (e: BarricadeSnapEvent) => {
     snapState = e.snapping ? e : null;
   });
+
+  // --- Combat visual state ---
+
+  /** Swing arc graphics (created lazily). */
+  let swingGfx: Phaser.GameObjects.Graphics | null = null;
+
+  /** Active swing arc for visual rendering. */
+  let activeSwing: { x: number; y: number; angle: number; range: number; age: number } | null = null;
+
+  // Listen for melee-swing events
+  ctx.eventBus.on("melee-swing", (e: MeleeSwingEvent) => {
+    activeSwing = { x: e.position.x, y: e.position.y, angle: e.aimAngle, range: e.range, age: 0 };
+  });
+
+  /** Floating damage numbers. */
+  const damageTexts: Array<{
+    text: Phaser.GameObjects.Text;
+    age: number;
+  }> = [];
+
+  // Listen for damage-dealt events
+  ctx.eventBus.on("damage-dealt", (e: DamageDealtEvent) => {
+    const text = ctx.scene.add
+      .text(e.position.x, e.position.y - 16, String(Math.round(e.damage)), {
+        fontFamily: "monospace",
+        fontSize: DAMAGE_TEXT_FONT_SIZE,
+        color: DAMAGE_TEXT_COLOUR,
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setDepth(Number.MAX_SAFE_INTEGER);
+    damageTexts.push({ text, age: 0 });
+  });
+
+  /**
+   * Zombie death flash tracking.
+   * Maps entity reference → remaining flash time.
+   * We tint the sprite white briefly before the entity is removed.
+   */
+  const deathFlashes = new Map<Entity, number>();
+
+  // Listen for zombie-killed events to trigger death flash
+  ctx.eventBus.on("zombie-killed", (e) => {
+    // Find the zombie entity at the death position
+    // (entity may still exist this frame before deferred removal)
+    for (const entity of renderableEntities) {
+      if (
+        entity.aiState?.state === "dead" &&
+        Math.abs(entity.position.x - e.position.x) < 1 &&
+        Math.abs(entity.position.y - e.position.y) < 1
+      ) {
+        deathFlashes.set(entity, DEATH_FLASH_DURATION);
+        break;
+      }
+    }
+  });
+
+  /** Total elapsed time for i-frame flicker calculation. */
+  let totalElapsed = 0;
 
   return (_dt: number): void => {
     const alpha = ctx.getAlpha();
@@ -348,6 +431,94 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       snapGfx.setVisible(true);
     } else if (snapGfx) {
       snapGfx.setVisible(false);
+    }
+
+    // --- Combat visuals ---
+    totalElapsed += _dt;
+
+    // Melee swing arc
+    if (activeSwing) {
+      if (!swingGfx) {
+        swingGfx = scene.add.graphics();
+        swingGfx.setDepth(Number.MAX_SAFE_INTEGER - 4);
+      }
+      swingGfx.clear();
+
+      activeSwing.age += _dt;
+      const swingFraction = Math.min(activeSwing.age / 0.15, 1);
+
+      if (swingFraction < 1) {
+        const fadeAlpha = SWING_ARC_ALPHA * (1 - swingFraction);
+        swingGfx.lineStyle(SWING_ARC_LINE_WIDTH, SWING_ARC_COLOUR, fadeAlpha);
+
+        // Draw a short arc line from the player position in the aim direction
+        const playerSpr = player ? sprites.get(player) : null;
+        const originX = playerSpr?.x ?? activeSwing.x;
+        const originY = playerSpr?.y ?? activeSwing.y;
+        const arcSpread = 0.6; // radians (~35 degrees each side)
+
+        swingGfx.beginPath();
+        const startAngle = activeSwing.angle - arcSpread;
+        const endAngle = activeSwing.angle + arcSpread;
+        const steps = 8;
+        for (let i = 0; i <= steps; i++) {
+          const a = startAngle + (endAngle - startAngle) * (i / steps);
+          const px = originX + Math.cos(a) * activeSwing.range;
+          const py = originY + Math.sin(a) * activeSwing.range;
+          if (i === 0) {
+            swingGfx.moveTo(px, py);
+          } else {
+            swingGfx.lineTo(px, py);
+          }
+        }
+        swingGfx.strokePath();
+      } else {
+        activeSwing = null;
+      }
+    } else if (swingGfx) {
+      swingGfx.clear();
+    }
+
+    // Floating damage numbers
+    for (let i = damageTexts.length - 1; i >= 0; i--) {
+      const dt = damageTexts[i];
+      dt.age += _dt;
+      dt.text.y -= DAMAGE_TEXT_DRIFT * _dt;
+      dt.text.setAlpha(1 - dt.age / DAMAGE_TEXT_LIFETIME);
+
+      if (dt.age >= DAMAGE_TEXT_LIFETIME) {
+        dt.text.destroy();
+        damageTexts.splice(i, 1);
+      }
+    }
+
+    // Player i-frame flicker
+    const combatPlayer = combatPlayerEntities.entities[0];
+    if (combatPlayer && combatPlayer.combatState.iFramesRemaining > 0) {
+      const playerSprite = sprites.get(combatPlayer);
+      if (playerSprite) {
+        const flicker = Math.floor(totalElapsed * IFRAME_FLICKER_RATE) % 2;
+        playerSprite.setAlpha(flicker === 0 ? 0.3 : 1.0);
+      }
+    } else if (combatPlayer) {
+      const playerSprite = sprites.get(combatPlayer);
+      if (playerSprite && playerSprite.alpha < 1) {
+        playerSprite.setAlpha(1.0);
+      }
+    }
+
+    // Zombie death flash (tint white briefly before removal)
+    for (const [entity, timeLeft] of deathFlashes) {
+      const sprite = sprites.get(entity);
+      if (sprite) {
+        sprite.setFillStyle(0xffffff);
+      }
+      const remaining = timeLeft - _dt;
+      if (remaining <= 0) {
+        deathFlashes.delete(entity);
+      } else {
+        deathFlashes.set(entity, remaining);
+      }
     }
   };
 }
