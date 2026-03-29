@@ -63,12 +63,12 @@ const BARRICADE_VIEW_RANGE_SQ = 96 * 96;
 
 // --- Combat visual config ---
 
-/** Colour for the melee swing arc indicator. */
+/** Melee swing arc visual properties. */
 const SWING_ARC_COLOUR = 0xffffff;
 const SWING_ARC_ALPHA = 0.8;
 const SWING_ARC_LINE_WIDTH = 3;
 
-/** Damage number text style. */
+/** Damage number visual properties. */
 const DAMAGE_TEXT_COLOUR = "#ef4444"; // red
 const DAMAGE_TEXT_FONT_SIZE = "14px";
 
@@ -83,6 +83,9 @@ const DEATH_FLASH_DURATION = 0.12;
 
 /** I-frame flicker rate (oscillations per second). */
 const IFRAME_FLICKER_RATE = 20;
+
+/** Arc spread for swing visual (radians, ~35 degrees each side). */
+const SWING_ARC_SPREAD = 0.6;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -456,11 +459,9 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         const playerSpr = player ? sprites.get(player) : null;
         const originX = playerSpr?.x ?? activeSwing.x;
         const originY = playerSpr?.y ?? activeSwing.y;
-        const arcSpread = 0.6; // radians (~35 degrees each side)
-
         swingGfx.beginPath();
-        const startAngle = activeSwing.angle - arcSpread;
-        const endAngle = activeSwing.angle + arcSpread;
+        const startAngle = activeSwing.angle - SWING_ARC_SPREAD;
+        const endAngle = activeSwing.angle + SWING_ARC_SPREAD;
         const steps = 8;
         for (let i = 0; i <= steps; i++) {
           const a = startAngle + (endAngle - startAngle) * (i / steps);
@@ -482,29 +483,28 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
 
     // Floating damage numbers
     for (let i = damageTexts.length - 1; i >= 0; i--) {
-      const dt = damageTexts[i];
-      dt.age += _dt;
-      dt.text.y -= DAMAGE_TEXT_DRIFT * _dt;
-      dt.text.setAlpha(1 - dt.age / DAMAGE_TEXT_LIFETIME);
+      const entry = damageTexts[i];
+      entry.age += _dt;
+      entry.text.y -= DAMAGE_TEXT_DRIFT * _dt;
+      entry.text.setAlpha(1 - entry.age / DAMAGE_TEXT_LIFETIME);
 
-      if (dt.age >= DAMAGE_TEXT_LIFETIME) {
-        dt.text.destroy();
+      if (entry.age >= DAMAGE_TEXT_LIFETIME) {
+        entry.text.destroy();
         damageTexts.splice(i, 1);
       }
     }
 
     // Player i-frame flicker
     const combatPlayer = combatPlayerEntities.entities[0];
-    if (combatPlayer && combatPlayer.combatState.iFramesRemaining > 0) {
+    if (combatPlayer) {
       const playerSprite = sprites.get(combatPlayer);
       if (playerSprite) {
-        const flicker = Math.floor(totalElapsed * IFRAME_FLICKER_RATE) % 2;
-        playerSprite.setAlpha(flicker === 0 ? 0.3 : 1.0);
-      }
-    } else if (combatPlayer) {
-      const playerSprite = sprites.get(combatPlayer);
-      if (playerSprite && playerSprite.alpha < 1) {
-        playerSprite.setAlpha(1.0);
+        if (combatPlayer.combatState.iFramesRemaining > 0) {
+          const flicker = Math.floor(totalElapsed * IFRAME_FLICKER_RATE) % 2;
+          playerSprite.setAlpha(flicker === 0 ? 0.3 : 1.0);
+        } else if (playerSprite.alpha < 1) {
+          playerSprite.setAlpha(1.0);
+        }
       }
     }
 

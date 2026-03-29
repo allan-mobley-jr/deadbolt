@@ -96,10 +96,9 @@ const killsByType: Record<ZombieVariant, number> = {
 /** Reset kills (called on game restart). */
 export function resetZombieKills(): void {
   totalKills = 0;
-  killsByType.shambler = 0;
-  killsByType.runner = 0;
-  killsByType.brute = 0;
-  killsByType.horde = 0;
+  for (const key of Object.keys(killsByType) as ZombieVariant[]) {
+    killsByType[key] = 0;
+  }
 }
 
 /** Get a snapshot of kills broken down by zombie variant. */

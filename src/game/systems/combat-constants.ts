@@ -29,6 +29,9 @@ export const COMBAT = {
   /** Height/depth of the melee sensor body (pixels). */
   SWING_SENSOR_HEIGHT: 16,
 
+  /** Largest zombie half-size for overlap checks (brute bodySize 28 / 2). */
+  MAX_ZOMBIE_HALF_SIZE: 14,
+
   // --- Item scaling ---
   //
   // Equipped item mass modifies damage, range, and cooldown:

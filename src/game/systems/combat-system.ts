@@ -36,6 +36,52 @@ function distSq(ax: number, ay: number, bx: number, by: number): number {
 }
 
 /**
+ * Half-diagonal of the swing sensor rectangle (constant).
+ * Pre-computed once since SWING_SENSOR_WIDTH and SWING_SENSOR_HEIGHT are fixed.
+ */
+const SENSOR_HALF_DIAG = Math.sqrt(
+  COMBAT.SWING_SENSOR_WIDTH * COMBAT.SWING_SENSOR_WIDTH +
+  COMBAT.SWING_SENSOR_HEIGHT * COMBAT.SWING_SENSOR_HEIGHT,
+) / 2;
+
+/**
+ * Squared hit radius for melee overlap checks.
+ * Sensor half-diagonal + largest zombie half-size, squared for distance comparison.
+ */
+const HIT_RADIUS_SQ =
+  (SENSOR_HALF_DIAG + COMBAT.MAX_ZOMBIE_HALF_SIZE) *
+  (SENSOR_HALF_DIAG + COMBAT.MAX_ZOMBIE_HALF_SIZE);
+
+/**
+ * Apply a knockback force to a physics body along the direction from
+ * (fromX, fromY) to (toX, toY). Returns the normalised direction
+ * vector, or {0,0} if the points overlap.
+ */
+function applyKnockback(
+  ctx: SceneContext,
+  bodyId: number,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  force: number,
+): { nx: number; ny: number } {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist <= 0) return { nx: 0, ny: 0 };
+
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const body = ctx.bodyRegistry.get(bodyId);
+  if (body) {
+    body.force.x += nx * force;
+    body.force.y += ny * force;
+  }
+  return { nx, ny };
+}
+
+/**
  * Compute melee stats from the currently equipped item (or bare hands).
  *
  * Returns effective damage, range, and cooldown based on item mass.
@@ -75,12 +121,6 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
   /** Position of the sensor centre for overlap checks. */
   let sensorCenterX = 0;
   let sensorCenterY = 0;
-
-  /**
-   * Hit radius for the distance-based overlap check.
-   * Combines half the sensor diagonal with half the zombie body size.
-   */
-  let hitRadiusSq = 0;
 
   /**
    * Closure-scoped sensor body ID for orphan cleanup.
@@ -170,14 +210,6 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
       swingDamage = stats.damage;
       swingHitSet.clear();
 
-      // Hit radius: half sensor diagonal + generous zombie half-size
-      const halfDiag = Math.sqrt(
-        COMBAT.SWING_SENSOR_WIDTH * COMBAT.SWING_SENSOR_WIDTH +
-        COMBAT.SWING_SENSOR_HEIGHT * COMBAT.SWING_SENSOR_HEIGHT,
-      ) / 2;
-      const maxZombieHalfSize = 14; // brute bodySize 28 / 2
-      hitRadiusSq = (halfDiag + maxZombieHalfSize) * (halfDiag + maxZombieHalfSize);
-
       // Emit swing event for visual feedback
       safeEmit(ctx.eventBus, "melee-swing", {
         position: { x: sensorCenterX, y: sensorCenterY },
@@ -201,7 +233,7 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
           zombie.position.y,
         );
 
-        if (d <= hitRadiusSq) {
+        if (d <= HIT_RADIUS_SQ) {
           // ---- 5. Apply damage ----
           const prevHp = zombie.health.current;
           zombie.health.current = Math.max(0, prevHp - swingDamage);
@@ -214,18 +246,14 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
             targetType: "zombie",
           });
 
-          // ---- Apply knockback to zombie ----
-          const kbDx = zombie.position.x - pos.x;
-          const kbDy = zombie.position.y - pos.y;
-          const kbDist = Math.sqrt(kbDx * kbDx + kbDy * kbDy);
-
-          if (kbDist > 0) {
-            const zombieBody = ctx.bodyRegistry.get(zombie.physicsBody.bodyId);
-            if (zombieBody) {
-              zombieBody.force.x += (kbDx / kbDist) * COMBAT.ZOMBIE_KNOCKBACK_FORCE;
-              zombieBody.force.y += (kbDy / kbDist) * COMBAT.ZOMBIE_KNOCKBACK_FORCE;
-            }
-          }
+          // Apply knockback to zombie (away from player)
+          applyKnockback(
+            ctx,
+            zombie.physicsBody.bodyId,
+            pos.x, pos.y,
+            zombie.position.x, zombie.position.y,
+            COMBAT.ZOMBIE_KNOCKBACK_FORCE,
+          );
         }
       }
     }
@@ -264,27 +292,25 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
           }
         }
 
-        // Apply knockback to player (away from attacker) when source is known
+        // Apply knockback to player (away from closest attacker)
+        // and derive the source direction for the UI hit event.
         let sourceDirX = 0;
         let sourceDirY = 0;
 
         if (closestZombieDSq < Infinity) {
-          const kbDx = pos.x - closestZombieX;
-          const kbDy = pos.y - closestZombieY;
-          const kbDist = Math.sqrt(kbDx * kbDx + kbDy * kbDy);
-
-          if (kbDist > 0) {
-            const playerBody = ctx.bodyRegistry.get(player.physicsBody.bodyId);
-            if (playerBody) {
-              playerBody.force.x += (kbDx / kbDist) * COMBAT.PLAYER_KNOCKBACK_FORCE;
-              playerBody.force.y += (kbDy / kbDist) * COMBAT.PLAYER_KNOCKBACK_FORCE;
-            }
-            sourceDirX = (closestZombieX - pos.x) / kbDist;
-            sourceDirY = (closestZombieY - pos.y) / kbDist;
-          }
+          // Knockback pushes player away from zombie (zombie → player direction)
+          const { nx, ny } = applyKnockback(
+            ctx,
+            player.physicsBody.bodyId,
+            closestZombieX, closestZombieY,
+            pos.x, pos.y,
+            COMBAT.PLAYER_KNOCKBACK_FORCE,
+          );
+          // Source direction is zombie → player (opposite of knockback push)
+          sourceDirX = -nx;
+          sourceDirY = -ny;
         }
 
-        // Always emit player-hit event for UI feedback (even if no attacker found)
         safeEmit(ctx.eventBus, "player-hit", {
           position: { x: pos.x, y: pos.y },
           damage: damageTaken,
