@@ -19,6 +19,7 @@ import { createCombatSystem } from "@/game/systems/combat-system";
 import { createWaveSystem } from "@/game/systems/wave-system";
 import { createStatsSystem, resetRunStats } from "@/game/systems/stats-system";
 import { createMaterialSystem, MaterialRegistry } from "@/game/systems/material-system";
+import { createFireSystem } from "@/game/systems/fire-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
@@ -166,6 +167,7 @@ export default class GameScene extends Phaser.Scene {
       createStatsSystem(ctx),
       createPhysicsSyncSystem(ctx),
       createMaterialSystem(ctx),
+      createFireSystem(ctx),
     ];
 
     this.gameLoop = new GameLoop(systems);

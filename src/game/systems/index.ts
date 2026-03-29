@@ -37,3 +37,7 @@ export { createMaterialSystem, MaterialRegistry } from "./material-system";
 export type { MaterialQueryResult } from "./material-system";
 export { MATERIAL, MATERIAL_ASSIGNMENTS } from "./material-constants";
 export type { MaterialAssignment } from "./material-constants";
+
+// Fire system
+export { createFireSystem, igniteEntity } from "./fire-system";
+export { FIRE } from "./fire-constants";

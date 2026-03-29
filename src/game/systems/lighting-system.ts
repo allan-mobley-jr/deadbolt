@@ -18,7 +18,8 @@ import type Phaser from "phaser";
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
 import { LIGHTING, type DayPhase } from "./day-night-constants";
-import { playerEntities } from "@/game/ecs/queries";
+import { FIRE } from "./fire-constants";
+import { playerEntities, materialEntities } from "@/game/ecs/queries";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -145,6 +146,51 @@ function getVisibilityTexture(scene: Phaser.Scene): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Fire light texture
+// ---------------------------------------------------------------------------
+
+/** Key used to cache the fire light gradient texture. */
+const FIRE_LIGHT_TEXTURE_KEY = "__fire_light";
+
+/** Derived softness and diameter for fire light textures. */
+const FIRE_LIGHT_SOFTNESS = FIRE.FIRE_LIGHT_RADIUS * 0.3;
+const FIRE_LIGHT_DIAMETER = (FIRE.FIRE_LIGHT_RADIUS + FIRE_LIGHT_SOFTNESS) * 2;
+
+/**
+ * Create or retrieve a smaller soft-edged circle texture for fire light.
+ * Uses FIRE.FIRE_LIGHT_RADIUS with a warm orange-tinted gradient.
+ */
+function getFireLightTexture(scene: Phaser.Scene): string | null {
+  if (scene.textures.exists(FIRE_LIGHT_TEXTURE_KEY)) {
+    return FIRE_LIGHT_TEXTURE_KEY;
+  }
+
+  const canvas = scene.textures.createCanvas(FIRE_LIGHT_TEXTURE_KEY, FIRE_LIGHT_DIAMETER, FIRE_LIGHT_DIAMETER);
+  if (!canvas) {
+    console.error(
+      "[LightingSystem] Failed to create fire light canvas texture.",
+    );
+    return null;
+  }
+
+  const ctx2d = canvas.context;
+  const cx = FIRE_LIGHT_DIAMETER / 2;
+  const cy = FIRE_LIGHT_DIAMETER / 2;
+
+  const innerRadius = FIRE.FIRE_LIGHT_RADIUS - FIRE_LIGHT_SOFTNESS;
+  const outerRadius = FIRE.FIRE_LIGHT_RADIUS + FIRE_LIGHT_SOFTNESS;
+  const gradient = ctx2d.createRadialGradient(cx, cy, Math.max(0, innerRadius), cx, cy, outerRadius);
+  gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+  gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+  ctx2d.fillStyle = gradient;
+  ctx2d.fillRect(0, 0, FIRE_LIGHT_DIAMETER, FIRE_LIGHT_DIAMETER);
+  canvas.refresh();
+
+  return FIRE_LIGHT_TEXTURE_KEY;
+}
+
+// ---------------------------------------------------------------------------
 // System factory
 // ---------------------------------------------------------------------------
 
@@ -159,6 +205,8 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
   let overlay: Phaser.GameObjects.RenderTexture | null = null;
   /** undefined = not attempted, null = attempted and failed, string = ready. */
   let visibilityTextureKey: string | null | undefined = undefined;
+  /** Fire light texture key (lazy init). */
+  let fireLightTextureKey: string | null | undefined = undefined;
 
   /** Tracked viewport dimensions so we can resize the overlay. */
   let lastWidth = 0;
@@ -227,6 +275,28 @@ export function createLightingSystem(ctx: SceneContext): SystemFn {
         screenX - diameter / 2,
         screenY - diameter / 2,
       );
+    }
+
+    // --- Fire light sources ---
+    // Burning objects punch light holes in the darkness overlay.
+    if (fireLightTextureKey === undefined) {
+      fireLightTextureKey = getFireLightTexture(scene);
+    }
+
+    if (fireLightTextureKey) {
+      const halfDiameter = FIRE_LIGHT_DIAMETER / 2;
+
+      for (const entity of materialEntities) {
+        if (entity.material.state !== "burning") continue;
+
+        const sx = entity.position.x - cam.scrollX;
+        const sy = entity.position.y - cam.scrollY;
+        overlay.erase(
+          fireLightTextureKey,
+          sx - halfDiameter,
+          sy - halfDiameter,
+        );
+      }
     }
   };
 }
