@@ -6,6 +6,16 @@ import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
 
+vi.mock("@/game/systems/stats-system", () => ({
+  getRunStats: vi.fn(() => ({
+    barricadesBuilt: 0,
+    distanceTraveled: 0,
+    objectsUsed: 0,
+  })),
+}));
+
+import { getRunStats } from "@/game/systems/stats-system";
+
 describe("bridge", () => {
   let bus: GameEventBus;
 
@@ -246,6 +256,40 @@ describe("bridge", () => {
       bridge.disconnect();
     });
 
+    it("snapshots run stats into gameStore on player-died", () => {
+      vi.mocked(getRunStats).mockReturnValue({
+        barricadesBuilt: 5,
+        distanceTraveled: 1234.5,
+        objectsUsed: 10,
+      });
+
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "player-died", {
+        dayNumber: 3,
+        totalKills: 42,
+        survivalTime: 600,
+        cause: "zombie",
+      });
+
+      const state = useGameStore.getState();
+      expect(state.barricadesBuilt).toBe(5);
+      expect(state.distanceTraveled).toBe(1234.5);
+      expect(state.objectsUsed).toBe(10);
+
+      bridge.disconnect();
+    });
+
+    it("stores the run seed in gameStore on run-started event", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "run-started", { seed: "test-seed-abc" });
+
+      expect(useGameStore.getState().seed).toBe("test-seed-abc");
+
+      bridge.disconnect();
+    });
+
     it("adds notification on item-picked-up", () => {
       const bridge = connectBridge(bus);
 
@@ -275,6 +319,25 @@ describe("bridge", () => {
       expect(notifications).toHaveLength(1);
       expect(notifications[0].message).toContain("Barricade placed");
       expect(notifications[0].type).toBe("success");
+
+      bridge.disconnect();
+    });
+
+    it("increments barricadesBuilt counter in gameStore on barricade-placed", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "barricade-placed", {
+        position: { x: 100, y: 200 },
+        health: 50,
+        maxHealth: 50,
+      });
+      safeEmit(bus, "barricade-placed", {
+        position: { x: 200, y: 300 },
+        health: 50,
+        maxHealth: 50,
+      });
+
+      expect(useGameStore.getState().barricadesBuilt).toBe(2);
 
       bridge.disconnect();
     });

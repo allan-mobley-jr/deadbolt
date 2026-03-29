@@ -17,12 +17,13 @@ import { createBarricadeSystem } from "@/game/systems/barricade-system";
 import { createZombieAISystem, resetZombieKills } from "@/game/systems/zombie-ai-system";
 import { createCombatSystem } from "@/game/systems/combat-system";
 import { createWaveSystem } from "@/game/systems/wave-system";
+import { createStatsSystem, resetRunStats } from "@/game/systems/stats-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
-import { createGameEventBus } from "@/game/events/event-bus";
-import { setActiveBus } from "@/game/PhaserGame";
+import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
+import { setActiveBus, setActiveSeed } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import { getObjectDef } from "@/game/procgen/object-defs";
@@ -40,6 +41,7 @@ export default class GameScene extends Phaser.Scene {
   private fpsText!: Phaser.GameObjects.Text;
   private showDebug = false;
   private crashed = false;
+  private frozen = false;
   private worldData: WorldData | null = null;
 
   constructor() {
@@ -64,10 +66,12 @@ export default class GameScene extends Phaser.Scene {
 
     // --- Allow recovery if a prior cycle crashed (e.g. update before create) ---
     this.crashed = false;
+    this.frozen = false;
 
     // --- Reset ECS world and session counters from any prior run ---
     resetWorld();
     resetZombieKills();
+    resetRunStats();
 
     // --- Camera / background ---
     this.cameras.main.setBackgroundColor("#1a1a2e");
@@ -121,6 +125,19 @@ export default class GameScene extends Phaser.Scene {
     // Publish the bus so the React bridge can connect to it.
     setActiveBus(ctx.eventBus);
 
+    // --- Freeze game loop on player death (permadeath) ---
+    ctx.eventBus.on("player-died", () => {
+      this.frozen = true;
+    });
+
+    // --- Store seed for UI access (pull-based, avoids bridge timing race) ---
+    setActiveSeed(this.worldData!.config.seed);
+
+    // --- Also emit run-started for any listeners already connected ---
+    safeEmit(ctx.eventBus, "run-started", {
+      seed: this.worldData!.config.seed,
+    });
+
     // --- Spawn world objects from procedural generation data ---
     this.spawnWorldObjects(bodyRegistry);
 
@@ -143,6 +160,7 @@ export default class GameScene extends Phaser.Scene {
       createMovementSystem(ctx),
       createZombieAISystem(ctx),
       createCombatSystem(ctx),
+      createStatsSystem(ctx),
       createPhysicsSyncSystem(ctx),
     ];
 
@@ -176,7 +194,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.crashed) return;
+    if (this.crashed || this.frozen) return;
 
     try {
       // Phaser provides delta in milliseconds; GameLoop expects seconds.

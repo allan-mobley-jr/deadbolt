@@ -45,6 +45,17 @@ export interface GameStoreState {
 
   /** Whether the game is paused. */
   paused: boolean;
+
+  /** Run seed for death screen display and sharing. */
+  seed: string | null;
+  /** Number of barricades built during the run. */
+  barricadesBuilt: number;
+  /** Total distance traveled in pixels during the run. */
+  distanceTraveled: number;
+  /** Number of items picked up during the run. */
+  objectsUsed: number;
+  /** Incremented to trigger GameContainer remount for new runs. */
+  runKey: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +81,14 @@ export interface GameStoreActions {
   incrementKillsByType: (variant: ZombieVariant) => void;
   /** Set the paused state (used by bridge for UI → game commands). */
   setPaused: (paused: boolean) => void;
+  /** Store the run seed from a run-started event. */
+  setSeed: (seed: string) => void;
+  /** Snapshot final run stats from the stats system at death time. */
+  setRunStats: (barricadesBuilt: number, distanceTraveled: number, objectsUsed: number) => void;
+  /** Increment barricades built counter. */
+  incrementBarricadesBuilt: () => void;
+  /** Increment runKey to trigger GameContainer remount for a new run. */
+  incrementRunKey: () => void;
   /** Reset to initial state between game sessions. */
   reset: () => void;
 }
@@ -90,6 +109,11 @@ const initialState: GameStoreState = {
   totalKills: 0,
   killsByType: {},
   paused: false,
+  seed: null,
+  barricadesBuilt: 0,
+  distanceTraveled: 0,
+  objectsUsed: 0,
+  runKey: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -120,6 +144,17 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()(
 
     setPaused: (paused) => set({ paused }),
 
-    reset: () => set(initialState),
+    setSeed: (seed) => set({ seed }),
+
+    setRunStats: (barricadesBuilt, distanceTraveled, objectsUsed) =>
+      set({ barricadesBuilt, distanceTraveled, objectsUsed }),
+
+    incrementBarricadesBuilt: () =>
+      set((state) => ({ barricadesBuilt: state.barricadesBuilt + 1 })),
+
+    incrementRunKey: () =>
+      set((state) => ({ runKey: state.runKey + 1 })),
+
+    reset: () => set((state) => ({ ...initialState, runKey: state.runKey })),
   })),
 );

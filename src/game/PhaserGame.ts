@@ -15,6 +15,17 @@ let instance: Phaser.Game | null = null;
 let activeBus: GameEventBus | null = null;
 
 /**
+ * Module-scoped run seed for the current session.
+ * Set by GameScene.create(), read by GameContainer after bridge connects.
+ *
+ * Stored here because the `run-started` event fires synchronously in
+ * GameScene.create(), before the React bridge has connected via its
+ * requestAnimationFrame polling loop. This pull-based approach guarantees
+ * the seed is available when the bridge connects.
+ */
+let activeSeed: string | null = null;
+
+/**
  * Build the Phaser game configuration without creating an instance.
  * Exported so tests can validate the config without needing a real canvas.
  */
@@ -88,6 +99,7 @@ export function destroyGame(): void {
   const ref = instance;
   instance = null;
   activeBus = null;
+  activeSeed = null;
   try {
     ref.destroy(true);
   } catch (err) {
@@ -112,4 +124,14 @@ export function setActiveBus(bus: GameEventBus | null): void {
 /** Read-only accessor for the current event bus (or null). */
 export function getActiveBus(): GameEventBus | null {
   return activeBus;
+}
+
+/** Called by GameScene.create() to store the run seed for UI access. */
+export function setActiveSeed(seed: string | null): void {
+  activeSeed = seed;
+}
+
+/** Read-only accessor for the current run seed (or null). */
+export function getActiveSeed(): string | null {
+  return activeSeed;
 }

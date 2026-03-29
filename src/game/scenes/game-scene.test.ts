@@ -4,7 +4,8 @@ import { resetWorld, world } from "@/game/ecs/world";
 import { TILE_SIZE, TileType } from "@/game/tiles/tile-types";
 import type { WorldData } from "@/types/world";
 import { TileType as ProcgenTileType } from "@/types/procgen";
-import { setActiveBus, getActiveBus } from "@/game/PhaserGame";
+import { setActiveBus, getActiveBus, getActiveSeed } from "@/game/PhaserGame";
+import { safeEmit } from "@/game/events/event-bus";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -616,6 +617,87 @@ describe("GameScene", () => {
       expect(tickCalls).toBe(1);
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Frozen flag (permadeath)
+  // -----------------------------------------------------------------------
+
+  describe("frozen flag (permadeath)", () => {
+    it("freezes the game loop when player-died is emitted", () => {
+      scene.create();
+      const bus = getActiveBus()!;
+
+      const gameLoop = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      const tickSpy = vi.spyOn(gameLoop, "tick");
+
+      // Emit player-died to trigger freeze
+      safeEmit(bus, "player-died", {
+        dayNumber: 3,
+        totalKills: 42,
+        survivalTime: 600,
+        cause: "zombie",
+      });
+
+      // Subsequent updates should be no-ops
+      tickSpy.mockClear();
+      scene.update(0, 16.67);
+      scene.update(16.67, 16.67);
+      expect(tickSpy).not.toHaveBeenCalled();
+
+      setActiveBus(null);
+    });
+
+    it("create() resets the frozen flag so the scene can be reused", () => {
+      scene.create();
+      const bus = getActiveBus()!;
+
+      // Freeze via death
+      safeEmit(bus, "player-died", {
+        dayNumber: 1,
+        totalKills: 0,
+        survivalTime: 10,
+        cause: "zombie",
+      });
+
+      // Verify frozen
+      const gameLoopBefore = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      const spyBefore = vi.spyOn(gameLoopBefore, "tick");
+      scene.update(0, 16.67);
+      expect(spyBefore).not.toHaveBeenCalled();
+
+      // Re-create (simulates remount via runKey)
+      scene.init(mockWorldData);
+      scene.create();
+
+      // Should work again after re-create
+      const gameLoopAfter = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      const spyAfter = vi.spyOn(gameLoopAfter, "tick");
+      scene.update(0, 16.67);
+      expect(spyAfter).toHaveBeenCalledTimes(1);
+
+      setActiveBus(null);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Seed publishing
+  // -----------------------------------------------------------------------
+
+  describe("seed publishing", () => {
+    it("publishes the run seed via setActiveSeed on create", () => {
+      scene.create();
+
+      expect(getActiveSeed()).toBe("test-seed");
+
+      setActiveBus(null);
     });
   });
 });
