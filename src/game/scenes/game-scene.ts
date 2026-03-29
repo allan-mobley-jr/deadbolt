@@ -13,6 +13,9 @@ import { createLightingSystem } from "@/game/systems/lighting-system";
 import { createCommandSystem } from "@/game/systems/command-system";
 import { createInteractionSystem } from "@/game/systems/interaction-system";
 import { createInventorySystem } from "@/game/systems/inventory-system";
+import { createBarricadeSystem } from "@/game/systems/barricade-system";
+import { ConstraintRegistry } from "@/game/systems/constraint-registry";
+import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus } from "@/game/events/event-bus";
@@ -91,6 +94,10 @@ export default class GameScene extends Phaser.Scene {
     bodyRegistry.register(playerBody);
     createPlayerEntity(px, py, playerBody.id);
 
+    // --- Registries for barricade system ---
+    const constraintRegistry = new ConstraintRegistry();
+    const wallAnchorRegistry = new WallAnchorRegistry();
+
     // --- Scene context (shared by all system factories) ---
     const ctx: SceneContext = {
       scene: this,
@@ -99,6 +106,10 @@ export default class GameScene extends Phaser.Scene {
       getAlpha: () => this.gameLoop.alpha,
       clockState: createClockState(),
       eventBus: createGameEventBus(),
+      constraintRegistry,
+      wallAnchorRegistry,
+      pathfindingGrid: this.worldData.pathfinding,
+      entryPoints: this.worldData.safehouse.entryPointsToDefend,
     };
 
     // Publish the bus so the React bridge can connect to it.
@@ -107,12 +118,20 @@ export default class GameScene extends Phaser.Scene {
     // --- Spawn world objects from procedural generation data ---
     this.spawnWorldObjects(bodyRegistry);
 
+    // --- Create wall anchor bodies at entry point frame edges ---
+    wallAnchorRegistry.createAnchors(
+      this.worldData.safehouse.entryPointsToDefend,
+      this.matter.add,
+      bodyRegistry,
+    );
+
     // --- Assemble fixed-tick systems (60 Hz) ---
     const systems: SystemFn[] = [
       createCommandSystem(ctx),
       createInputSystem(ctx),
       createInventorySystem(ctx),
       createInteractionSystem(ctx),
+      createBarricadeSystem(ctx),
       createDayNightSystem(ctx),
       createMovementSystem(ctx),
       createPhysicsSyncSystem(ctx),

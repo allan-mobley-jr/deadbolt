@@ -260,20 +260,27 @@ describe("archetype factories", () => {
 
   describe("createBarricadeEntity", () => {
     it("creates barricade without velocity", () => {
-      const barricade = createBarricadeEntity(10, 20, 3);
+      const barricade = createBarricadeEntity(10, 20, 3, "wooden_plank", 0, [101, 102], 60);
       expect(barricade.position).toEqual({ x: 10, y: 20 });
-      expect(barricade.renderable.spriteKey).toBe("barricade");
+      expect(barricade.renderable.spriteKey).toBe("wooden_plank");
       expect(barricade.physicsBody.bodyId).toBe(3);
-      expect(barricade.health).toEqual({ current: 200, max: 200 });
+      expect(barricade.health).toEqual({ current: 60, max: 60 });
+      expect(barricade.barricade).toEqual({
+        constraintIds: [101, 102],
+        entryPointIndex: 0,
+        sourceObjectType: "wooden_plank",
+        maxDurability: 60,
+        currentDurability: 60,
+      });
     });
 
     it("is not in movingEntities query (no velocity)", () => {
-      createBarricadeEntity(0, 0, 1);
+      createBarricadeEntity(0, 0, 1, "metal_sheet", 0, [201], 160);
       expect(movingEntities.size).toBe(0);
     });
 
     it("appears in all other relevant queries", () => {
-      createBarricadeEntity(0, 0, 1);
+      createBarricadeEntity(0, 0, 1, "metal_sheet", 0, [201], 160);
       expect(renderableEntities.size).toBe(1);
       expect(physicsBodies.size).toBe(1);
       expect(damageableEntities.size).toBe(1);
@@ -549,7 +556,7 @@ describe("post-reset query accuracy", () => {
     createPlayerEntity(0, 0, 1);
     resetWorld();
 
-    const barricade = createBarricadeEntity(10, 10, 2);
+    const barricade = createBarricadeEntity(10, 10, 2, "wooden_plank", 0, [301, 302], 60);
     const bullet = createProjectileEntity(20, 20, 5, -3, 3);
 
     expect(world.size).toBe(2);
