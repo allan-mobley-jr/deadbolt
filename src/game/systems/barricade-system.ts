@@ -72,6 +72,15 @@ function pixelToTile(px: number): number {
   return Math.floor(px / TILE_SIZE);
 }
 
+/** Set damping on a Matter.js constraint (not exposed in the type definitions). */
+function setConstraintDamping(
+  constraint: MatterJS.ConstraintType,
+  damping: number,
+): void {
+  (constraint as MatterJS.ConstraintType & { damping?: number }).damping =
+    damping;
+}
+
 // ---------------------------------------------------------------------------
 // System factory
 // ---------------------------------------------------------------------------
@@ -236,25 +245,14 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
     }
 
     for (const entity of toDestroy) {
-      // Read all values defensively before any mutations
-      const barricade = entity.barricade;
-      const position = entity.position;
-      const physicsBodyId = entity.physicsBody?.bodyId;
-
-      if (!barricade || !position) {
-        console.warn(
-          "[BarricadeSystem] Skipping destruction — entity missing expected components",
-        );
-        prevHealthMap.delete(entity);
-        continue;
-      }
-
-      const entryPointIndex = barricade.entryPointIndex;
-      const sourceObjectType = barricade.sourceObjectType;
-      const positionCopy = { x: position.x, y: position.y };
+      // Safe to assert: entity came from barricadeEntities query which
+      // requires position, physicsBody, health, and barricade components.
+      const { entryPointIndex, sourceObjectType, constraintIds: cIds } = entity.barricade!;
+      const positionCopy = { x: entity.position!.x, y: entity.position!.y };
+      const physicsBodyId = entity.physicsBody!.bodyId;
 
       // Remove constraints from Matter.js world
-      for (const constraintId of barricade.constraintIds) {
+      for (const constraintId of cIds) {
         const constraint = constraintRegistry.get(constraintId);
         if (constraint) {
           try {
@@ -292,12 +290,10 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
       }
 
       // Reduce body friction so debris slides when pushed
-      if (physicsBodyId !== undefined) {
-        const body = ctx.bodyRegistry.get(physicsBodyId);
-        if (body) {
-          body.friction = def?.immovable ? 0.95 : 0.8;
-          body.frictionAir = def?.immovable ? 0.3 : 0.1;
-        }
+      const body = ctx.bodyRegistry.get(physicsBodyId);
+      if (body) {
+        body.friction = def?.immovable ? 0.95 : 0.8;
+        body.frictionAir = def?.immovable ? 0.3 : 0.1;
       }
 
       // Clean up health tracking
@@ -418,25 +414,17 @@ function tryPlaceBarricade(
   const constraintIds: number[] = [];
 
   try {
-    const constraintA = ctx.scene.matter.add.constraint(
-      anchorA,
-      objectBody,
-      0,
-      CONSTRAINT_STIFFNESS,
-    );
-    (constraintA as MatterJS.ConstraintType & { damping?: number }).damping = CONSTRAINT_DAMPING;
-    constraintRegistry.register(constraintA);
-    constraintIds.push(constraintA.id);
-
-    const constraintB = ctx.scene.matter.add.constraint(
-      anchorB,
-      objectBody,
-      0,
-      CONSTRAINT_STIFFNESS,
-    );
-    (constraintB as MatterJS.ConstraintType & { damping?: number }).damping = CONSTRAINT_DAMPING;
-    constraintRegistry.register(constraintB);
-    constraintIds.push(constraintB.id);
+    for (const anchorBody of [anchorA, anchorB]) {
+      const constraint = ctx.scene.matter.add.constraint(
+        anchorBody,
+        objectBody,
+        0,
+        CONSTRAINT_STIFFNESS,
+      );
+      setConstraintDamping(constraint, CONSTRAINT_DAMPING);
+      constraintRegistry.register(constraint);
+      constraintIds.push(constraint.id);
+    }
   } catch (err) {
     console.error(
       "[BarricadeSystem] Failed to create constraints:",

@@ -38,11 +38,16 @@ const HEALTH_BAR_WIDTH = 28;
 const HEALTH_BAR_HEIGHT = 4;
 const HEALTH_BAR_OFFSET_Y = -20;
 
-/** Barricade health bar colours by HP fraction tier. */
+/** Barricade health bar fill colours by HP fraction tier. */
 const HEALTH_COLOR_GOOD = 0x4ade80;    // green
 const HEALTH_COLOR_WARNING = 0xf59e0b; // amber
 const HEALTH_COLOR_DANGER = 0xef4444;  // red
 const HEALTH_BG_COLOR = 0x1a1a2e;      // dark background
+
+/** Barricade damage tint colours by HP fraction tier. */
+const BARRICADE_TINT_GOOD = 0x94a3b8;    // slate (default barricade colour)
+const BARRICADE_TINT_WARNING = 0xf59e0b; // amber
+const BARRICADE_TINT_DANGER = 0xef4444;  // red
 
 /** Snap indicator colour and opacity. */
 const SNAP_COLOR = 0x60a5fa;           // blue-400
@@ -51,11 +56,6 @@ const SNAP_RECT_SIZE = 36;
 
 /** Distance from player at which barricade health bars are visible. */
 const BARRICADE_VIEW_RANGE_SQ = 96 * 96;
-
-/** Barricade damage tint colours by HP fraction tier. */
-const BARRICADE_TINT_GOOD = 0x94a3b8;    // slate (default barricade colour)
-const BARRICADE_TINT_WARNING = 0xf59e0b; // amber
-const BARRICADE_TINT_DANGER = 0xef4444;  // red
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,6 +78,18 @@ function getVisualSize(key: string): number {
   const def = getObjectDef(key);
   if (def) return def.immovable ? IMMOVABLE_OBJECT_SIZE : OBJECT_SIZE;
   return PLAYER_SIZE;
+}
+
+/** Pick a colour from a three-tier palette based on HP fraction. */
+function colorByHpTier(
+  hpFraction: number,
+  good: number,
+  warning: number,
+  danger: number,
+): number {
+  if (hpFraction <= 0.33) return danger;
+  if (hpFraction <= 0.66) return warning;
+  return good;
 }
 
 function createVisual(
@@ -259,31 +271,23 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       for (const entity of barricadeEntities) {
         const ex = entity.position.x;
         const ey = entity.position.y;
+        const hpFraction =
+          entity.health.max > 0
+            ? entity.health.current / entity.health.max
+            : 0;
 
         // Apply damage tint to the sprite
         const sprite = sprites.get(entity);
         if (sprite) {
-          const hpFraction =
-            entity.health.max > 0
-              ? entity.health.current / entity.health.max
-              : 0;
-
-          let tint = BARRICADE_TINT_GOOD;
-          if (hpFraction <= 0.33) tint = BARRICADE_TINT_DANGER;
-          else if (hpFraction <= 0.66) tint = BARRICADE_TINT_WARNING;
-
-          sprite.setFillStyle(tint);
+          sprite.setFillStyle(
+            colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER),
+          );
         }
 
         // Only show health bars if player is close enough
         const dx = psx - ex;
         const dy = psy - ey;
         if (dx * dx + dy * dy > BARRICADE_VIEW_RANGE_SQ) continue;
-
-        const hpFraction =
-          entity.health.max > 0
-            ? entity.health.current / entity.health.max
-            : 0;
 
         // Background bar
         const barX = ex - HEALTH_BAR_WIDTH / 2;
@@ -292,10 +296,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         barricadeGfx.fillRect(barX, barY, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
 
         // Fill bar
-        let fillColor = HEALTH_COLOR_GOOD;
-        if (hpFraction <= 0.33) fillColor = HEALTH_COLOR_DANGER;
-        else if (hpFraction <= 0.66) fillColor = HEALTH_COLOR_WARNING;
-
+        const fillColor = colorByHpTier(hpFraction, HEALTH_COLOR_GOOD, HEALTH_COLOR_WARNING, HEALTH_COLOR_DANGER);
         barricadeGfx.fillStyle(fillColor, 1.0);
         barricadeGfx.fillRect(
           barX,

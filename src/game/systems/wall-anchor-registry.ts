@@ -86,31 +86,18 @@ export class WallAnchorRegistry {
       // Anchor positions depend on facing direction:
       // - north/south: opening runs east-west, anchors on left/right
       // - east/west: opening runs north-south, anchors on top/bottom
-      let ax1: number, ay1: number, ax2: number, ay2: number;
-      let orientation: "horizontal" | "vertical";
-
       const halfTile = TILE_SIZE / 2;
+      const isHorizontal =
+        ep.facingDirection === "north" || ep.facingDirection === "south";
+      const orientation = isHorizontal ? "horizontal" : "vertical";
 
-      switch (ep.facingDirection) {
-        case "north":
-        case "south":
-          // Opening runs east-west: anchors at left and right frame edges
-          ax1 = cx - halfTile;
-          ay1 = cy;
-          ax2 = cx + halfTile;
-          ay2 = cy;
-          orientation = "horizontal";
-          break;
-        case "east":
-        case "west":
-          // Opening runs north-south: anchors at top and bottom frame edges
-          ax1 = cx;
-          ay1 = cy - halfTile;
-          ax2 = cx;
-          ay2 = cy + halfTile;
-          orientation = "vertical";
-          break;
-      }
+      // Spread anchors along the opening axis
+      const offsetX = isHorizontal ? halfTile : 0;
+      const offsetY = isHorizontal ? 0 : halfTile;
+      const ax1 = cx - offsetX;
+      const ay1 = cy - offsetY;
+      const ax2 = cx + offsetX;
+      const ay2 = cy + offsetY;
 
       // Create static sensor bodies (no collision, just anchor points)
       const bodyOpts = {
