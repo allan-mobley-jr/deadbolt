@@ -40,3 +40,13 @@ export const barricadeEntities = world.with(
   "health",
   "barricade",
 );
+
+/** Zombie entities with AI and physics. */
+export const zombieEntities = world.with(
+  "position",
+  "velocity",
+  "physicsBody",
+  "health",
+  "aiState",
+  "zombieType",
+);

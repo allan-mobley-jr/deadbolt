@@ -9,6 +9,8 @@ import type {
   Interactable,
   ObjectProperties,
   Barricade,
+  AIState,
+  ZombieType,
 } from "./components";
 
 /**
@@ -33,4 +35,6 @@ export interface Entity {
   interactable?: Interactable;
   objectProperties?: ObjectProperties;
   barricade?: Barricade;
+  aiState?: AIState;
+  zombieType?: ZombieType;
 }

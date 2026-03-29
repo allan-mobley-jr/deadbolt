@@ -2,7 +2,9 @@ import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
 import type { ObjectCategory } from "@/types/procgen";
+import type { ZombieType } from "./components";
 import { createEmptyInventory } from "@/game/systems/inventory-utils";
+import { SHAMBLER_STATS, SHAMBLER_HEALTH } from "@/game/systems/zombie-ai-constants";
 
 // ---------------------------------------------------------------------------
 // Archetype types — narrowed Entity types with required component sets.
@@ -22,7 +24,13 @@ export type PlayerEntity = With<
 
 export type ZombieEntity = With<
   Entity,
-  "position" | "velocity" | "renderable" | "physicsBody" | "health"
+  | "position"
+  | "velocity"
+  | "renderable"
+  | "physicsBody"
+  | "health"
+  | "aiState"
+  | "zombieType"
 >;
 
 export type BarricadeEntity = With<
@@ -62,18 +70,39 @@ export function createPlayerEntity(
   });
 }
 
-/** Spawn a zombie entity at the given position. */
+/**
+ * Spawn a zombie entity at the given position.
+ *
+ * @param initialTickOffset — randomised tick counter for pathfinding stagger.
+ *   Different values for each zombie prevent all zombies from recalculating
+ *   paths on the same tick.
+ */
 export function createZombieEntity(
   x: number,
   y: number,
   bodyId: number,
+  stats: ZombieType = { ...SHAMBLER_STATS },
+  initialTickOffset: number = 0,
 ): ZombieEntity {
+  const hp = SHAMBLER_HEALTH;
   return world.add({
     position: { x, y },
     velocity: { vx: 0, vy: 0 },
     renderable: { spriteKey: "zombie" },
     physicsBody: { bodyId },
-    health: { current: 50, max: 50 },
+    health: { current: hp, max: hp },
+    aiState: {
+      state: "idle",
+      targetPosition: null,
+      path: [],
+      pathIndex: 0,
+      ticksSinceLastPathCalc: initialTickOffset % stats.pathRecalcInterval,
+      attackCooldownRemaining: 0,
+      staggerTimeRemaining: 0,
+      attackTargetBodyId: null,
+      previousHealth: hp,
+    },
+    zombieType: stats,
   });
 }
 

@@ -1,0 +1,606 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createZombieAISystem, resetZombieKills } from "./zombie-ai-system";
+import { createInputState, createClockState } from "./scene-context";
+import type { SceneContext } from "./scene-context";
+import { BodyRegistry } from "./body-registry";
+import { createGameEventBus } from "@/game/events/event-bus";
+import type { GameEventBus } from "@/game/events/event-bus";
+import { world, resetWorld } from "@/game/ecs/world";
+import {
+  createZombieEntity,
+  createPlayerEntity,
+  createBarricadeEntity,
+} from "@/game/ecs/archetypes";
+import { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
+import { SHAMBLER_STATS, ZOMBIE_AI } from "./zombie-ai-constants";
+import { TILE_SIZE } from "@/game/procgen/constants";
+
+const DT = 1 / 60;
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a small walkable grid for testing (10x10, all walkable).
+ * 0 = walkable, 1 = blocked.
+ */
+function createTestGrid(width = 10, height = 10): PathfindingGrid {
+  const matrix: number[][] = [];
+  for (let y = 0; y < height; y++) {
+    matrix.push(new Array(width).fill(0));
+  }
+  return new PathfindingGrid(matrix);
+}
+
+/** Create a grid with a wall blocking the middle row (except for one gap). */
+function createGridWithWall(): PathfindingGrid {
+  const matrix: number[][] = [];
+  for (let y = 0; y < 10; y++) {
+    if (y === 5) {
+      // Wall across the middle with a gap at x=5
+      const row = new Array(10).fill(1);
+      row[5] = 0;
+      matrix.push(row);
+    } else {
+      matrix.push(new Array(10).fill(0));
+    }
+  }
+  return new PathfindingGrid(matrix);
+}
+
+function createMockContext(
+  overrides: Partial<SceneContext> = {},
+): SceneContext {
+  return {
+    scene: {
+      matter: {
+        world: {
+          remove: () => {},
+        },
+      },
+    } as unknown as Phaser.Scene,
+    bodyRegistry: new BodyRegistry(),
+    inputState: createInputState(),
+    getAlpha: () => 0,
+    clockState: createClockState(),
+    eventBus: createGameEventBus(),
+    pathfindingGrid: createTestGrid(),
+    safehouseCenter: { x: 5, y: 5 },
+    ...overrides,
+  };
+}
+
+/** Helper to tile-center a position (like the real game does). */
+function tileCenter(tileX: number, tileY: number): { x: number; y: number } {
+  return {
+    x: tileX * TILE_SIZE + TILE_SIZE / 2,
+    y: tileY * TILE_SIZE + TILE_SIZE / 2,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("ZombieAISystem", () => {
+  let ctx: SceneContext;
+  let system: (dt: number) => void;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    system = createZombieAISystem(ctx);
+    resetZombieKills();
+  });
+
+  afterEach(() => {
+    resetWorld();
+  });
+
+  // -----------------------------------------------------------------------
+  // State transitions
+  // -----------------------------------------------------------------------
+
+  describe("state transitions", () => {
+    it("transitions from idle to pathing on first tick", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      expect(zombie.aiState.state).toBe("idle");
+      system(DT);
+      expect(zombie.aiState.state).toBe("pathing");
+    });
+
+    it("transitions to dead when health reaches zero", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current = 0;
+      system(DT);
+
+      // Entity should be removed from world
+      expect(world.entities.filter((e) => e.aiState)).toHaveLength(0);
+    });
+
+    it("transitions to staggered when health decreases", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current -= 10; // Take damage
+      system(DT);
+
+      expect(zombie.aiState.state).toBe("staggered");
+    });
+
+    it("transitions from staggered back to pathing after duration", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current -= 10; // Take damage
+      system(DT); // → staggered
+
+      expect(zombie.aiState.state).toBe("staggered");
+
+      // Run enough ticks for stagger to expire
+      const ticksNeeded = Math.ceil(SHAMBLER_STATS.staggerDuration / DT) + 1;
+      for (let i = 0; i < ticksNeeded; i++) {
+        system(DT);
+      }
+
+      expect(zombie.aiState.state).toBe("pathing");
+    });
+
+    it("transitions to attacking when near a barricade", () => {
+      // Place zombie right next to a barricade
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+
+      // Place zombie very close to barricade
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → pathing, then detect barricade
+      expect(zombie.aiState.state).toBe("attacking");
+      expect(zombie.aiState.attackTargetBodyId).toBe(barricade.physicsBody.bodyId);
+    });
+
+    it("transitions from attacking to pathing when barricade is destroyed", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → pathing → attacking
+      expect(zombie.aiState.state).toBe("attacking");
+
+      // Simulate barricade destruction (remove from world)
+      world.remove(barricade);
+      system(DT);
+
+      expect(zombie.aiState.state).toBe("pathing");
+    });
+
+    it("transitions to attacking when near the player", () => {
+      const pPos = tileCenter(3, 3);
+      createPlayerEntity(pPos.x, pPos.y, 10);
+
+      const zPos = {
+        x: pPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: pPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → pathing, detect player
+      expect(zombie.aiState.state).toBe("attacking");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Pathfinding
+  // -----------------------------------------------------------------------
+
+  describe("pathfinding", () => {
+    it("computes a path toward safehouse center", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing (forces path calc)
+
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
+    });
+
+    it("sets velocity toward the first waypoint", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing, calc path
+      system(DT); // follow path
+
+      // Zombie should be moving (velocity non-zero)
+      const speed = Math.sqrt(
+        zombie.velocity.vx ** 2 + zombie.velocity.vy ** 2,
+      );
+      expect(speed).toBeGreaterThan(0);
+      expect(speed).toBeLessThanOrEqual(SHAMBLER_STATS.moveSpeed + 0.01);
+    });
+
+    it("recalculates path after pathRecalcInterval ticks", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing (counter becomes 1 from pathing handler)
+
+      // After initial tick, counter = 1. Need pathRecalcInterval - 1 more
+      // ticks for counter to reach the threshold and trigger recalc.
+      for (let i = 0; i < SHAMBLER_STATS.pathRecalcInterval - 1; i++) {
+        system(DT);
+      }
+
+      // Path should have been recalculated (tick counter resets to 0)
+      expect(zombie.aiState.ticksSinceLastPathCalc).toBe(0);
+    });
+
+    it("staggers pathfinding across zombies with different offsets", () => {
+      // Spawn two zombies with different initial offsets
+      const pos1 = tileCenter(0, 0);
+      const pos2 = tileCenter(1, 0);
+      const z1 = createZombieEntity(pos1.x, pos1.y, 1, undefined, 0);
+      const z2 = createZombieEntity(pos2.x, pos2.y, 2, undefined, 20);
+
+      // After first tick, both transition to pathing but z2 has a 20-tick head start
+      system(DT);
+
+      // Both have paths now (idle→pathing forces immediate calc)
+      expect(z1.aiState.path.length).toBeGreaterThan(0);
+      expect(z2.aiState.path.length).toBeGreaterThan(0);
+
+      // But their tick counters should differ on subsequent ticks
+      for (let i = 0; i < 10; i++) system(DT);
+
+      expect(z1.aiState.ticksSinceLastPathCalc).not.toBe(
+        z2.aiState.ticksSinceLastPathCalc,
+      );
+    });
+
+    it("handles unreachable safehouse gracefully", () => {
+      // Create a grid where the zombie's start is isolated from everything
+      const matrix: number[][] = [];
+      for (let y = 0; y < 10; y++) {
+        matrix.push(new Array(10).fill(1)); // All blocked
+      }
+      // Only tile (0,0) is walkable — zombie is trapped
+      matrix[0][0] = 0;
+
+      const grid = new PathfindingGrid(matrix);
+      ctx = createMockContext({ pathfindingGrid: grid });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      // Should not crash — zombie just stands still (no valid path)
+      system(DT);
+      system(DT);
+
+      expect(zombie.aiState.state).toBe("pathing");
+      expect(zombie.velocity.vx).toBe(0);
+      expect(zombie.velocity.vy).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Attacking
+  // -----------------------------------------------------------------------
+
+  describe("attacking", () => {
+    it("deals damage to barricade health", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+      const initialHealth = barricade.health.current;
+
+      // Place zombie at attack range
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: bPos.y,
+      };
+      createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → pathing → attacking (first hit at cooldown 0)
+      system(DT); // attacking (damage applied on first available tick)
+
+      expect(barricade.health.current).toBeLessThan(initialHealth);
+    });
+
+    it("respects attack cooldown", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 200,
+      );
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: bPos.y,
+      };
+      createZombieEntity(zPos.x, zPos.y, 2);
+
+      // Run through initial ticks to get into attacking state and first hit
+      system(DT);
+      system(DT);
+      const healthAfterFirstHit = barricade.health.current;
+
+      // Run a few more ticks — cooldown should prevent immediate second hit
+      system(DT);
+      system(DT);
+      system(DT);
+      const healthAfterFewTicks = barricade.health.current;
+
+      // Should not have taken another full hit yet (cooldown is 1.5s = 90 ticks)
+      expect(healthAfterFewTicks).toBe(healthAfterFirstHit);
+    });
+
+    it("deals damage to player and emits health event", () => {
+      const events: Array<{ current: number; delta: number }> = [];
+      ctx.eventBus.on("player-health-changed", (e) => {
+        events.push({ current: e.current, delta: e.delta });
+      });
+
+      const pPos = tileCenter(3, 3);
+      const player = createPlayerEntity(pPos.x, pPos.y, 10);
+      const initialHealth = player.health.current;
+
+      const zPos = {
+        x: pPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: pPos.y,
+      };
+      createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → attacking
+      system(DT); // attack
+
+      expect(player.health.current).toBeLessThan(initialHealth);
+      expect(events.length).toBeGreaterThan(0);
+      expect(events[0].delta).toBe(-SHAMBLER_STATS.attackDamage);
+    });
+
+    it("sets velocity to zero while within attack range", () => {
+      const bPos = tileCenter(3, 3);
+      createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+
+      // Place zombie very close (within attack range)
+      const zPos = {
+        x: bPos.x + 5,
+        y: bPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → attacking
+      system(DT);
+
+      expect(zombie.velocity.vx).toBe(0);
+      expect(zombie.velocity.vy).toBe(0);
+    });
+
+    it("emits player-died when player health reaches zero", () => {
+      const diedEvents: Array<{ cause: string }> = [];
+      ctx.eventBus.on("player-died", (e) => {
+        diedEvents.push({ cause: e.cause });
+      });
+
+      const pPos = tileCenter(3, 3);
+      const player = createPlayerEntity(pPos.x, pPos.y, 10);
+      player.health.current = 1; // Nearly dead
+
+      const zPos = {
+        x: pPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: pPos.y,
+      };
+      createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // attack
+      system(DT);
+
+      expect(player.health.current).toBe(0);
+      expect(diedEvents.length).toBe(1);
+      expect(diedEvents[0].cause).toBe("zombie");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Stagger state
+  // -----------------------------------------------------------------------
+
+  describe("stagger", () => {
+    it("sets velocity to zero during stagger", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      // Ensure zombie has some velocity
+      zombie.velocity.vx = 40;
+      zombie.velocity.vy = 0;
+
+      zombie.health.current -= 10; // Take damage
+      system(DT); // → staggered
+
+      expect(zombie.velocity.vx).toBe(0);
+      expect(zombie.velocity.vy).toBe(0);
+    });
+
+    it("stagger duration matches zombie type config", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current -= 10;
+      system(DT); // → staggered
+
+      expect(zombie.aiState.staggerTimeRemaining).toBeCloseTo(
+        SHAMBLER_STATS.staggerDuration - DT,
+        4,
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Death
+  // -----------------------------------------------------------------------
+
+  describe("death", () => {
+    it("emits zombie-killed event on death", () => {
+      const killedEvents: Array<{ totalKills: number }> = [];
+      ctx.eventBus.on("zombie-killed", (e) => {
+        killedEvents.push({ totalKills: e.totalKills });
+      });
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current = 0;
+      system(DT); // → dead, removed
+
+      expect(killedEvents.length).toBe(1);
+      expect(killedEvents[0].totalKills).toBe(1);
+    });
+
+    it("removes zombie entity from world on death", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      const initialCount = world.entities.length;
+      system(DT); // idle → pathing
+      zombie.health.current = 0;
+      system(DT); // → dead, removed
+
+      expect(world.entities.length).toBe(initialCount - 1);
+    });
+
+    it("tracks cumulative kill count across multiple deaths", () => {
+      const killedEvents: Array<{ totalKills: number }> = [];
+      ctx.eventBus.on("zombie-killed", (e) => {
+        killedEvents.push({ totalKills: e.totalKills });
+      });
+
+      // Spawn and kill 3 zombies
+      for (let i = 0; i < 3; i++) {
+        const { x, y } = tileCenter(i, 0);
+        const z = createZombieEntity(x, y, i + 1);
+        system(DT); // idle → pathing
+        z.health.current = 0;
+        system(DT); // → dead
+      }
+
+      expect(killedEvents.length).toBe(3);
+      expect(killedEvents[0].totalKills).toBe(1);
+      expect(killedEvents[1].totalKills).toBe(2);
+      expect(killedEvents[2].totalKills).toBe(3);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Edge cases
+  // -----------------------------------------------------------------------
+
+  describe("edge cases", () => {
+    it("skips when pathfindingGrid is missing", () => {
+      ctx = createMockContext({ pathfindingGrid: undefined });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      // Should not throw
+      system(DT);
+      expect(zombie.aiState.state).toBe("idle");
+    });
+
+    it("skips when safehouseCenter is missing", () => {
+      ctx = createMockContext({ safehouseCenter: undefined });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT);
+      expect(zombie.aiState.state).toBe("idle");
+    });
+
+    it("handles no zombies in world gracefully", () => {
+      // Should not throw with empty world
+      system(DT);
+      system(DT);
+    });
+
+    it("handles zombie at exact safehouse center tile", () => {
+      const center = ctx.safehouseCenter!;
+      const { x, y } = tileCenter(center.x, center.y);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      system(DT);
+
+      // Zombie at target — should have zero velocity or very small
+      expect(zombie.aiState.state).toBe("pathing");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Multiple zombies
+  // -----------------------------------------------------------------------
+
+  describe("multiple zombies", () => {
+    it("processes all zombies each tick", () => {
+      const zombies = [];
+      for (let i = 0; i < 5; i++) {
+        const { x, y } = tileCenter(i, 0);
+        zombies.push(createZombieEntity(x, y, i + 1, undefined, i * 10));
+      }
+
+      system(DT);
+
+      // All should have transitioned from idle
+      for (const z of zombies) {
+        expect(z.aiState.state).not.toBe("idle");
+      }
+    });
+
+    it("allows independent state machines per zombie", () => {
+      const z1Pos = tileCenter(0, 0);
+      const z2Pos = tileCenter(1, 0);
+      const z1 = createZombieEntity(z1Pos.x, z1Pos.y, 1);
+      const z2 = createZombieEntity(z2Pos.x, z2Pos.y, 2);
+
+      system(DT); // Both idle → pathing
+
+      // Damage only z1
+      z1.health.current -= 10;
+      system(DT);
+
+      expect(z1.aiState.state).toBe("staggered");
+      expect(z2.aiState.state).toBe("pathing");
+    });
+  });
+});

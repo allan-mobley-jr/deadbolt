@@ -10,6 +10,9 @@ export type {
   Inventory,
   Interactable,
   ObjectProperties,
+  AIState,
+  AIStateName,
+  ZombieType,
 } from "./components";
 
 // Entity
@@ -43,4 +46,6 @@ export {
   damageableEntities,
   interactableEntities,
   inventoryEntities,
+  barricadeEntities,
+  zombieEntities,
 } from "./queries";

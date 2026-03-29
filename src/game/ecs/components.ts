@@ -126,6 +126,67 @@ export interface Barricade {
   currentDurability: number;
 }
 
+// ---------------------------------------------------------------------------
+// Zombie AI components (issue #23)
+// ---------------------------------------------------------------------------
+
+/** AI state machine state names. */
+export type AIStateName = 'idle' | 'pathing' | 'attacking' | 'staggered' | 'dead';
+
+/**
+ * Zombie AI state machine — holds the current state and all state-specific data.
+ *
+ * The state machine runs in the ZombieAISystem. States transition:
+ *   idle → pathing → attacking ↔ pathing
+ *                    staggered → pathing
+ *                    dead (terminal, entity removed)
+ *
+ * Any state can transition to dead when health <= 0.
+ * Any state except dead can transition to staggered when health decreases.
+ */
+export interface AIState {
+  /** Current state machine state. */
+  state: AIStateName;
+  /** Next waypoint in world pixels, or null if no path. */
+  targetPosition: { x: number; y: number } | null;
+  /** Remaining A* path in tile coordinates. */
+  path: Array<{ x: number; y: number }>;
+  /** Index into path array — the next waypoint to walk toward. */
+  pathIndex: number;
+  /** Tick counter for staggering pathfinding recalculations. */
+  ticksSinceLastPathCalc: number;
+  /** Seconds until next attack. */
+  attackCooldownRemaining: number;
+  /** Seconds remaining in stagger state. */
+  staggerTimeRemaining: number;
+  /** Body ID of the entity being attacked (barricade or player), or null. */
+  attackTargetBodyId: number | null;
+  /** Previous health value for damage detection. */
+  previousHealth: number;
+}
+
+/**
+ * Zombie variant definition — holds all per-type tunable stats.
+ *
+ * Adding a new zombie archetype (runner, brute, spitter) means creating
+ * a ZombieType with different stats. The AI system reads these values
+ * to parameterise all behaviour, making the state machine data-driven.
+ */
+export interface ZombieType {
+  /** Variant identifier. */
+  variant: 'shambler';
+  /** Maximum movement speed in pixels per second. */
+  moveSpeed: number;
+  /** Damage dealt per attack hit. */
+  attackDamage: number;
+  /** Seconds between attacks. */
+  attackCooldown: number;
+  /** Ticks between A* path recalculations. */
+  pathRecalcInterval: number;
+  /** Seconds the zombie is stunned after taking damage. */
+  staggerDuration: number;
+}
+
 /** Properties specific to placed world objects. */
 export interface ObjectProperties {
   /** Object type key (matches ObjectDefinition.type). */
