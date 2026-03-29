@@ -19,6 +19,11 @@ describe("useGameStore", () => {
     expect(state.totalKills).toBe(0);
     expect(state.killsByType).toEqual({});
     expect(state.paused).toBe(false);
+    expect(state.seed).toBeNull();
+    expect(state.barricadesBuilt).toBe(0);
+    expect(state.distanceTraveled).toBe(0);
+    expect(state.objectsUsed).toBe(0);
+    expect(state.runKey).toBe(0);
   });
 
   describe("updateClock", () => {
@@ -109,13 +114,15 @@ describe("useGameStore", () => {
     });
   });
 
-  describe("reset", () => {
+  describe("reset (basic)", () => {
     it("returns all fields to initial values", () => {
       useGameStore.getState().updateClock("night", 5, 50, 180, 1500);
       useGameStore.getState().setWaveStarted(4, 30);
       useGameStore.getState().setTotalKills(42);
       useGameStore.getState().incrementKillsByType("shambler");
       useGameStore.getState().setPaused(true);
+      useGameStore.getState().setSeed("test");
+      useGameStore.getState().setRunStats(10, 2000, 15);
 
       useGameStore.getState().reset();
 
@@ -126,6 +133,74 @@ describe("useGameStore", () => {
       expect(state.totalKills).toBe(0);
       expect(state.killsByType).toEqual({});
       expect(state.paused).toBe(false);
+      expect(state.seed).toBeNull();
+      expect(state.barricadesBuilt).toBe(0);
+      expect(state.distanceTraveled).toBe(0);
+      expect(state.objectsUsed).toBe(0);
+    });
+  });
+
+  describe("setSeed", () => {
+    it("stores the run seed", () => {
+      useGameStore.getState().setSeed("abc123");
+      expect(useGameStore.getState().seed).toBe("abc123");
+    });
+  });
+
+  describe("setRunStats", () => {
+    it("snapshots all run stats at once", () => {
+      useGameStore.getState().setRunStats(5, 1234.5, 10);
+      const state = useGameStore.getState();
+      expect(state.barricadesBuilt).toBe(5);
+      expect(state.distanceTraveled).toBe(1234.5);
+      expect(state.objectsUsed).toBe(10);
+    });
+  });
+
+  describe("incrementBarricadesBuilt", () => {
+    it("increments from zero", () => {
+      useGameStore.getState().incrementBarricadesBuilt();
+      expect(useGameStore.getState().barricadesBuilt).toBe(1);
+    });
+
+    it("increments multiple times", () => {
+      useGameStore.getState().incrementBarricadesBuilt();
+      useGameStore.getState().incrementBarricadesBuilt();
+      useGameStore.getState().incrementBarricadesBuilt();
+      expect(useGameStore.getState().barricadesBuilt).toBe(3);
+    });
+  });
+
+  describe("incrementRunKey", () => {
+    it("increments runKey for game remount", () => {
+      const before = useGameStore.getState().runKey;
+      useGameStore.getState().incrementRunKey();
+      expect(useGameStore.getState().runKey).toBe(before + 1);
+    });
+  });
+
+  describe("reset (run lifecycle)", () => {
+    it("preserves runKey across reset", () => {
+      const before = useGameStore.getState().runKey;
+      useGameStore.getState().incrementRunKey();
+      useGameStore.getState().incrementRunKey();
+      expect(useGameStore.getState().runKey).toBe(before + 2);
+
+      useGameStore.getState().reset();
+      expect(useGameStore.getState().runKey).toBe(before + 2);
+    });
+
+    it("clears seed and run stats on reset", () => {
+      useGameStore.getState().setSeed("test-seed");
+      useGameStore.getState().setRunStats(3, 500, 7);
+
+      useGameStore.getState().reset();
+
+      const state = useGameStore.getState();
+      expect(state.seed).toBeNull();
+      expect(state.barricadesBuilt).toBe(0);
+      expect(state.distanceTraveled).toBe(0);
+      expect(state.objectsUsed).toBe(0);
     });
   });
 
