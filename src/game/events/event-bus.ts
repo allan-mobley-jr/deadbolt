@@ -227,6 +227,40 @@ export interface MaterialStateChangedEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Fire (issue #29)
+// ---------------------------------------------------------------------------
+
+/** Emitted when an object ignites (starts burning). */
+export interface FireIgnitedEvent {
+  position: { x: number; y: number };
+  objectType: string;
+  /** The object type that caused the ignition, or null for external source. */
+  sourceObjectType: string | null;
+}
+
+/** Emitted when fire spreads from one object to another. */
+export interface FireSpreadEvent {
+  sourcePosition: { x: number; y: number };
+  targetPosition: { x: number; y: number };
+  targetObjectType: string;
+}
+
+/** Emitted when fire deals area-of-effect damage. */
+export interface FireDamageEvent {
+  position: { x: number; y: number };
+  damage: number;
+  targetType: "zombie" | "player";
+}
+
+/** Emitted when a burning object burns out and is destroyed. */
+export interface FireBurnoutEvent {
+  position: { x: number; y: number };
+  objectType: string;
+  /** True if the destroyed object was a barricade. */
+  wasBarricade: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -299,6 +333,12 @@ export interface GameEventMap {
 
   // Material state
   "material-state-changed": [event: MaterialStateChangedEvent];
+
+  // Fire (issue #29)
+  "fire-ignited": [event: FireIgnitedEvent];
+  "fire-spread": [event: FireSpreadEvent];
+  "fire-damage": [event: FireDamageEvent];
+  "fire-burnout": [event: FireBurnoutEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
