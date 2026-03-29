@@ -14,10 +14,12 @@ import { createCommandSystem } from "@/game/systems/command-system";
 import { createInteractionSystem } from "@/game/systems/interaction-system";
 import { createInventorySystem } from "@/game/systems/inventory-system";
 import { createBarricadeSystem } from "@/game/systems/barricade-system";
+import { createZombieAISystem, resetZombieKills } from "@/game/systems/zombie-ai-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
-import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
+import { createPlayerEntity, createObjectEntity, createZombieEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
+import { ZOMBIE_AI } from "@/game/systems/zombie-ai-constants";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
@@ -62,8 +64,9 @@ export default class GameScene extends Phaser.Scene {
     // --- Allow recovery if a prior cycle crashed (e.g. update before create) ---
     this.crashed = false;
 
-    // --- Reset ECS world from any prior run ---
+    // --- Reset ECS world and session counters from any prior run ---
     resetWorld();
+    resetZombieKills();
 
     // --- Camera / background ---
     this.cameras.main.setBackgroundColor("#1a1a2e");
@@ -110,6 +113,7 @@ export default class GameScene extends Phaser.Scene {
       wallAnchorRegistry,
       pathfindingGrid: this.worldData.pathfinding,
       entryPoints: this.worldData.safehouse.entryPointsToDefend,
+      safehouseCenter: this.worldData.safehouse.minimapPosition,
     };
 
     // Publish the bus so the React bridge can connect to it.
@@ -125,6 +129,9 @@ export default class GameScene extends Phaser.Scene {
       bodyRegistry,
     );
 
+    // --- Spawn initial test zombies from spawn zones ---
+    this.spawnInitialZombies(bodyRegistry);
+
     // --- Assemble fixed-tick systems (60 Hz) ---
     const systems: SystemFn[] = [
       createCommandSystem(ctx),
@@ -134,6 +141,7 @@ export default class GameScene extends Phaser.Scene {
       createBarricadeSystem(ctx),
       createDayNightSystem(ctx),
       createMovementSystem(ctx),
+      createZombieAISystem(ctx),
       createPhysicsSyncSystem(ctx),
     ];
 
@@ -244,6 +252,49 @@ export default class GameScene extends Phaser.Scene {
   // -----------------------------------------------------------------------
   // Object spawning
   // -----------------------------------------------------------------------
+
+  /**
+   * Spawn a small group of test zombies from the first available spawn zones.
+   *
+   * This is a temporary spawn mechanism for testing the zombie AI system.
+   * A full wave spawner will replace this in a future issue.
+   */
+  private spawnInitialZombies(bodyRegistry: BodyRegistry): void {
+    const spawnZones = this.worldData!.spawnZones;
+    if (!spawnZones || spawnZones.length === 0) {
+      console.warn("[GameScene] No spawn zones available — skipping zombie spawn");
+      return;
+    }
+
+    const MAX_INITIAL_ZOMBIES = 5;
+    let spawned = 0;
+
+    for (const zone of spawnZones) {
+      if (spawned >= MAX_INITIAL_ZOMBIES) break;
+      if (zone.spawnPoints.length === 0) continue;
+
+      // Pick the first available spawn point in each zone
+      const point = zone.spawnPoints[0];
+      const px = point.x * TILE_SIZE + TILE_SIZE / 2;
+      const py = point.y * TILE_SIZE + TILE_SIZE / 2;
+
+      const body = this.matter.add.rectangle(
+        px, py,
+        ZOMBIE_AI.BODY_SIZE, ZOMBIE_AI.BODY_SIZE,
+        {
+          friction: 0.1,
+          frictionAir: 0.05,
+          restitution: 0.1,
+        },
+      );
+      body.inertia = Infinity;
+      body.inverseInertia = 0;
+      bodyRegistry.register(body);
+
+      createZombieEntity(px, py, body.id, undefined, spawned);
+      spawned++;
+    }
+  }
 
   /**
    * Convert PlacedObjects from all buildings into ECS entities with
