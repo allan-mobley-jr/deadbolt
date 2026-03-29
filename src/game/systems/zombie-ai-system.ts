@@ -57,6 +57,23 @@ function pixelToTile(px: number): number {
   return Math.floor(px / TILE_SIZE);
 }
 
+/**
+ * Find the barricade with the lowest currentDurability.
+ * Returns the barricade entity or null if no barricades exist.
+ * Used by brute AI for both pathfinding and attack target selection.
+ */
+function findWeakestBarricade(): Entity | null {
+  let weakest: Entity | null = null;
+  let lowestDurability = Infinity;
+  for (const barricade of barricadeEntities) {
+    if (barricade.barricade.currentDurability < lowestDurability) {
+      lowestDurability = barricade.barricade.currentDurability;
+      weakest = barricade;
+    }
+  }
+  return weakest;
+}
+
 /** Convert tile coordinate to world pixel center. */
 function tileToPx(tile: number): number {
   return tile * TILE_SIZE + TILE_SIZE / 2;
@@ -226,17 +243,10 @@ function runPathingState(
 
   // --- Brute: target the weakest barricade globally ---
   // Brutes actively seek the weakest barricade regardless of proximity.
-  // They enter attacking when within an extended detection range of their target.
+  // They enter attacking when within detection range of their target.
   if (stats.variant === "brute") {
-    let weakestBarricade: Entity | null = null;
-    let lowestDurability = Infinity;
-    for (const barricade of barricadeEntities) {
-      if (barricade.barricade.currentDurability < lowestDurability) {
-        lowestDurability = barricade.barricade.currentDurability;
-        weakestBarricade = barricade;
-      }
-    }
-    if (weakestBarricade?.position) {
+    const weakestBarricade = findWeakestBarricade();
+    if (weakestBarricade?.position && weakestBarricade.physicsBody) {
       const d = distSq(
         entity.position.x, entity.position.y,
         weakestBarricade.position.x, weakestBarricade.position.y,
@@ -244,7 +254,7 @@ function runPathingState(
       const bDetectSq = ZOMBIE_AI.BARRICADE_DETECTION_RANGE * ZOMBIE_AI.BARRICADE_DETECTION_RANGE;
       if (d <= bDetectSq) {
         ai.state = "attacking";
-        ai.attackTargetBodyId = weakestBarricade.physicsBody!.bodyId;
+        ai.attackTargetBodyId = weakestBarricade.physicsBody.bodyId;
         ai.attackCooldownRemaining = 0;
       }
     }
@@ -465,14 +475,7 @@ function computePath(
   let target = { x: safehouseCenter.x, y: safehouseCenter.y };
 
   if (entity.zombieType.variant === "brute") {
-    let weakestBarricade: Entity | null = null;
-    let lowestDurability = Infinity;
-    for (const barricade of barricadeEntities) {
-      if (barricade.barricade.currentDurability < lowestDurability) {
-        lowestDurability = barricade.barricade.currentDurability;
-        weakestBarricade = barricade;
-      }
-    }
+    const weakestBarricade = findWeakestBarricade();
     if (weakestBarricade?.position) {
       target = {
         x: pixelToTile(weakestBarricade.position.x),

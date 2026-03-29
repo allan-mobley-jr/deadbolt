@@ -933,6 +933,28 @@ describe("ZombieAISystem", () => {
       expect(runner.aiState.state).toBe("pathing");
     });
 
+    it("ignores barricade at exactly the vault threshold (boundary)", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+      // Durability exactly at threshold — runner should still vault
+      barricade.barricade.currentDurability = RUNNER_STATS.vaultDurabilityThreshold;
+      barricade.health.current = RUNNER_STATS.vaultDurabilityThreshold;
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const runner = createZombieEntity(
+        zPos.x, zPos.y, 2, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+
+      system(DT);
+      expect(runner.aiState.state).toBe("pathing");
+    });
+
     it("attacks barricades above vault threshold normally", () => {
       const bPos = tileCenter(3, 3);
       const barricade = createBarricadeEntity(
@@ -1043,33 +1065,36 @@ describe("ZombieAISystem", () => {
     it("targets the weakest barricade rather than the nearest", () => {
       // Place two barricades: a strong one nearby and a weak one further away
       const strongPos = tileCenter(3, 3);
-      const strongBarricade = createBarricadeEntity(
+      createBarricadeEntity(
         strongPos.x, strongPos.y, 10,
         "metal_sheet", 0, [100, 101], 200,
       );
-      strongBarricade.barricade.currentDurability = 200;
 
-      const weakPos = tileCenter(3, 5);
+      const weakPos = tileCenter(3, 7);
       const weakBarricade = createBarricadeEntity(
         weakPos.x, weakPos.y, 11,
         "wooden_plank", 1, [102, 103], 60,
       );
       weakBarricade.barricade.currentDurability = 20;
 
-      // Place brute close to strong barricade but equidistant in detection range
-      const brutePos = {
-        x: strongPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.3,
-        y: strongPos.y,
-      };
+      // Place brute close to strong barricade
+      const brutePos = tileCenter(3, 2);
       const brute = createZombieEntity(
         brutePos.x, brutePos.y, 3, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
       );
 
       system(DT); // idle → pathing (brute should path toward weak barricade)
 
-      // The brute's computed path target should be toward the weak barricade
-      // Verify by checking that it pathfinds (has a path)
       expect(brute.aiState.path.length).toBeGreaterThan(0);
+
+      // Verify path endpoint is closer to the weak barricade tile (3,7)
+      // than to the strong barricade tile (3,3)
+      const lastWaypoint = brute.aiState.path[brute.aiState.path.length - 1];
+      const distToWeak =
+        Math.abs(lastWaypoint.x - 3) + Math.abs(lastWaypoint.y - 7);
+      const distToStrong =
+        Math.abs(lastWaypoint.x - 3) + Math.abs(lastWaypoint.y - 3);
+      expect(distToWeak).toBeLessThanOrEqual(distToStrong);
     });
 
     it("falls back to safehouse center when no barricades exist", () => {

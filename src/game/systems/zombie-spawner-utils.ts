@@ -36,8 +36,17 @@ const ALL_VARIANTS: readonly ZombieVariant[] = [
 /**
  * Return the list of zombie variants available for a given night number.
  * Only includes variants whose unlock night ≤ dayNumber.
+ *
+ * Invalid dayNumber values (NaN, negative, zero) are clamped to 1
+ * with a warning so the spawner always produces at least shamblers.
  */
 export function getAvailableVariants(dayNumber: number): ZombieVariant[] {
+  if (!Number.isFinite(dayNumber) || dayNumber < 1) {
+    console.warn(
+      `[zombie-spawner-utils] getAvailableVariants called with invalid dayNumber: ${dayNumber}. Defaulting to 1.`,
+    );
+    dayNumber = 1;
+  }
   return ALL_VARIANTS.filter(
     (v) => dayNumber >= ARCHETYPE_UNLOCK_NIGHT[v],
   );
@@ -54,7 +63,12 @@ export function selectVariant(
   available: ZombieVariant[],
   rng: () => number,
 ): ZombieVariant {
-  if (available.length === 0) return "shambler";
+  if (available.length === 0) {
+    console.warn(
+      "[zombie-spawner-utils] selectVariant called with empty available list — falling back to shambler.",
+    );
+    return "shambler";
+  }
   if (available.length === 1) return available[0];
 
   const totalWeight = available.reduce(
@@ -113,6 +127,10 @@ function createZombieBody(
   });
   body.inertia = Infinity;
   body.inverseInertia = 0;
+  // SAFETY: bodyRegistry.register only reads body.id for the internal map.
+  // The real Phaser MatterFactory.rectangle returns a full MatterJS.BodyType,
+  // but SpawnContext narrows the interface for testability. If register's
+  // contract changes, this cast must be revisited.
   ctx.bodyRegistry.register(body as unknown as MatterJS.BodyType);
   return body.id;
 }

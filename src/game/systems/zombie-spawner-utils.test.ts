@@ -87,6 +87,21 @@ describe("zombie-spawner-utils", () => {
       const variants = getAvailableVariants(5);
       expect(variants).toHaveLength(4);
     });
+
+    it("clamps dayNumber 0 to 1 and returns shambler", () => {
+      const variants = getAvailableVariants(0);
+      expect(variants).toEqual(["shambler"]);
+    });
+
+    it("clamps negative dayNumber to 1", () => {
+      const variants = getAvailableVariants(-5);
+      expect(variants).toEqual(["shambler"]);
+    });
+
+    it("clamps NaN dayNumber to 1", () => {
+      const variants = getAvailableVariants(NaN);
+      expect(variants).toEqual(["shambler"]);
+    });
   });
 
   // -----------------------------------------------------------------------
