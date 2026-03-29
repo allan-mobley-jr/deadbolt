@@ -849,4 +849,63 @@ describe("RenderSyncSystem", () => {
       expect(snapRect.setVisible).toHaveBeenCalledWith(false);
     });
   });
+
+  describe("burning tint", () => {
+    it("applies fire tint to non-barricade burning entities", () => {
+      const { ctx, addRectangle } = createMockContext();
+      const mockSprite = createMockRect(100, 100);
+      addRectangle.mockReturnValue(mockSprite);
+      const system = createRenderSyncSystem(ctx);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "sofa" },
+        material: {
+          category: "fabric" as const,
+          flammability: 0.95,
+          conductivity: 0.0,
+          explosivePotential: 0,
+          state: "burning" as const,
+        },
+      });
+
+      system(DT); // Creates visual
+      system(DT); // Updates with tint
+
+      // setFillStyle should have been called with a fire-blended colour
+      expect(mockSprite.setFillStyle).toHaveBeenCalled();
+      const lastCall = mockSprite.setFillStyle.mock.calls.at(-1);
+      expect(lastCall![0]).toBeTypeOf("number");
+    });
+
+    it("does not apply fire tint to inert entities", () => {
+      const { ctx, addRectangle } = createMockContext();
+      const mockSprite = createMockRect(100, 100);
+      addRectangle.mockReturnValue(mockSprite);
+      const system = createRenderSyncSystem(ctx);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "sofa" },
+        material: {
+          category: "fabric" as const,
+          flammability: 0.95,
+          conductivity: 0.0,
+          explosivePotential: 0,
+          state: "inert" as const,
+        },
+      });
+
+      system(DT); // Creates visual (may call setFillStyle for initial colour)
+      mockSprite.setFillStyle.mockClear();
+      system(DT); // Update tick
+
+      // setFillStyle should NOT be called again for a non-burning, non-barricade entity
+      expect(mockSprite.setFillStyle).not.toHaveBeenCalled();
+    });
+  });
 });

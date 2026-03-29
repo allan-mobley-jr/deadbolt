@@ -557,6 +557,44 @@ describe("FireSystem — AoE damage", () => {
     expect(damageEvents[0]).toMatchObject({ targetType: "zombie" });
   });
 
+  it("emits fire-damage event with targetType 'player'", () => {
+    const ctx = createMockContext();
+    const system = createFireSystem(ctx);
+
+    const source = spawnGasCan(ctx, 100, 100);
+    spawnPlayer(ctx, 130, 100);
+    source.material.state = "burning";
+
+    const damageEvents = collectEvents<{ targetType: string; damage: number }>(
+      ctx.eventBus,
+      "fire-damage",
+    );
+    tickN(ctx, system, FIRE.DAMAGE_TICK_INTERVAL + 1);
+
+    const playerEvents = damageEvents.filter((e) => e.targetType === "player");
+    expect(playerEvents).toHaveLength(1);
+    expect(playerEvents[0].damage).toBeGreaterThan(0);
+  });
+
+  it("does not emit fire-damage event for player during i-frames", () => {
+    const ctx = createMockContext();
+    const system = createFireSystem(ctx);
+
+    const source = spawnGasCan(ctx, 100, 100);
+    const player = spawnPlayer(ctx, 130, 100);
+    player.combatState.iFramesRemaining = 1.0;
+    source.material.state = "burning";
+
+    const damageEvents = collectEvents<{ targetType: string }>(
+      ctx.eventBus,
+      "fire-damage",
+    );
+    tickN(ctx, system, FIRE.DAMAGE_TICK_INTERVAL + 1);
+
+    const playerEvents = damageEvents.filter((e) => e.targetType === "player");
+    expect(playerEvents).toHaveLength(0);
+  });
+
   it("does not let health go below zero", () => {
     const ctx = createMockContext();
     const system = createFireSystem(ctx);
@@ -725,6 +763,88 @@ describe("FireSystem — barricade destruction", () => {
       expect.stringContaining("[FireSystem] Failed to remove constraint"),
       expect.any(Error),
     );
+
+    errorSpy.mockRestore();
+  });
+
+  it("does NOT unblock pathfinding when another healthy barricade exists at the same entry point", () => {
+    const mockPathfindingGrid = {
+      setWalkable: vi.fn().mockReturnValue(true),
+    };
+    const mockEntryPoints = [
+      {
+        barricaded: true,
+        position: { x: 3, y: 3 },
+        orientation: "horizontal" as const,
+      },
+    ];
+    const ctx = createMockContext({
+      pathfindingGrid:
+        mockPathfindingGrid as unknown as NonNullable<SceneContext["pathfindingGrid"]>,
+      entryPoints:
+        mockEntryPoints as unknown as NonNullable<SceneContext["entryPoints"]>,
+    });
+    const system = createFireSystem(ctx);
+
+    // Create two barricades at the same entry point
+    const bodyId1 = registerMockBody(ctx);
+    const burningBarricade = createBarricadeEntity(
+      100, 100, bodyId1,
+      "wooden_plank", 0, [], 60,
+    );
+    const bodyId2 = registerMockBody(ctx);
+    createBarricadeEntity(
+      100, 132, bodyId2,
+      "wooden_plank", 0, [], 60,
+    );
+
+    burningBarricade.material.state = "burning";
+
+    const burnDuration =
+      FIRE.BASE_BURN_DURATION +
+      (1 - 0.9) * FIRE.FLAMMABILITY_DURATION_SCALE;
+    const burnTicks = Math.ceil(burnDuration / DT) + 1;
+    tickN(ctx, system, burnTicks);
+
+    // The burning barricade should be gone
+    expect(world.entities).not.toContain(burningBarricade);
+    // But pathfinding should NOT have been unblocked
+    expect(mockPathfindingGrid.setWalkable).not.toHaveBeenCalled();
+    // Entry point should still be barricaded
+    expect(mockEntryPoints[0].barricaded).toBe(true);
+  });
+
+  it("unregisters physics body even when world.remove throws", () => {
+    const ctx = createMockContext();
+    const system = createFireSystem(ctx);
+
+    // Make world.remove throw
+    const matterRemove = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+    matterRemove.mockImplementation(() => {
+      throw new Error("physics body removal failed");
+    });
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const gasCan = spawnGasCan(ctx, 100, 100);
+    const bodyId = gasCan.physicsBody!.bodyId;
+    gasCan.material.state = "burning";
+
+    // Verify body is registered
+    expect(ctx.bodyRegistry.get(bodyId)).toBeDefined();
+
+    const burnTicks = Math.ceil(FIRE.FUEL_BURN_DURATION / DT) + 1;
+    tickN(ctx, system, burnTicks);
+
+    // Body should still be unregistered despite the throw
+    expect(ctx.bodyRegistry.get(bodyId)).toBeUndefined();
+    // Error should have been logged
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[FireSystem] Failed to remove physics body"),
+      expect.any(Error),
+    );
+    // Entity should still be removed from ECS
+    expect(world.entities).not.toContain(gasCan);
 
     errorSpy.mockRestore();
   });

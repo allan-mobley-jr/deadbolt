@@ -4,7 +4,7 @@ import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext, ClockState } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { createGameEventBus } from "@/game/events/event-bus";
-import { resetWorld } from "@/game/ecs/world";
+import { world, resetWorld } from "@/game/ecs/world";
 import { createPlayerEntity } from "@/game/ecs/archetypes";
 import { LIGHTING } from "./day-night-constants";
 
@@ -357,5 +357,61 @@ describe("LightingSystem", () => {
 
     const system = createLightingSystem(ctx);
     expect(() => system(DT)).not.toThrow();
+  });
+
+  it("erases fire light holes for burning material entities during night", () => {
+    const { ctx, renderTexture } = createMockContext({
+      phase: "night",
+      timeRemainingInPhase: 45,
+      phaseDuration: 90,
+    });
+
+    createPlayerEntity(100, 200, 1);
+
+    // Add a burning material entity to the world
+    world.add({
+      position: { x: 300, y: 400 },
+      material: {
+        category: "wood" as const,
+        flammability: 0.9,
+        conductivity: 0.0,
+        explosivePotential: 0,
+        state: "burning" as const,
+      },
+    });
+
+    const system = createLightingSystem(ctx);
+    system(DT);
+
+    // overlay.erase should be called at least twice:
+    // once for the player visibility circle, once for the fire light
+    expect(renderTexture.erase.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not erase fire light for inert material entities during night", () => {
+    const { ctx, renderTexture } = createMockContext({
+      phase: "night",
+      timeRemainingInPhase: 45,
+      phaseDuration: 90,
+    });
+
+    createPlayerEntity(100, 200, 1);
+
+    world.add({
+      position: { x: 300, y: 400 },
+      material: {
+        category: "wood" as const,
+        flammability: 0.9,
+        conductivity: 0.0,
+        explosivePotential: 0,
+        state: "inert" as const,
+      },
+    });
+
+    const system = createLightingSystem(ctx);
+    system(DT);
+
+    // overlay.erase should be called exactly once: for the player visibility circle
+    expect(renderTexture.erase).toHaveBeenCalledTimes(1);
   });
 });
