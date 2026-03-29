@@ -205,7 +205,7 @@ export interface DamageDealtEvent {
 export interface PlayerHitEvent {
   position: { x: number; y: number };
   damage: number;
-  /** Normalised direction from attacker to player (for directional screen flash). */
+  /** Normalised direction from player toward attacker (for directional screen flash). */
   sourceDirection: { x: number; y: number };
 }
 

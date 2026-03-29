@@ -250,13 +250,14 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
         if (d <= HIT_RADIUS_SQ) {
           // ---- 5. Apply damage ----
           const prevHp = zombie.health.current;
-          zombie.health.current = Math.max(0, prevHp - swingDamage);
+          const actualDamage = Math.round(swingDamage);
+          zombie.health.current = Math.max(0, prevHp - actualDamage);
           swingHitSet.add(zombie.physicsBody.bodyId);
 
           // Emit damage event for floating numbers
           safeEmit(ctx.eventBus, "damage-dealt", {
             position: { x: zombie.position.x, y: zombie.position.y },
-            damage: Math.round(swingDamage),
+            damage: actualDamage,
             targetType: "zombie",
           });
 
@@ -320,7 +321,7 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
             pos.x, pos.y,
             COMBAT.PLAYER_KNOCKBACK_FORCE,
           );
-          // Source direction is zombie → player (opposite of knockback push)
+          // Source direction is player → zombie (toward the attacker)
           sourceDirX = -nx;
           sourceDirY = -ny;
         }
