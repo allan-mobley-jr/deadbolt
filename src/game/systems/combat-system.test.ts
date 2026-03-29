@@ -4,13 +4,8 @@ import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { createGameEventBus } from "@/game/events/event-bus";
-import type {
-  MeleeSwingEvent,
-  DamageDealtEvent,
-  PlayerHitEvent,
-  PlayerHealthChangedEvent,
-} from "@/game/events/event-bus";
-import { world, resetWorld } from "@/game/ecs/world";
+import type { GameEventMap } from "@/game/events/event-bus";
+import { resetWorld } from "@/game/ecs/world";
 import { createPlayerEntity, createZombieEntity } from "@/game/ecs/archetypes";
 import {
   SHAMBLER_STATS,
@@ -381,7 +376,7 @@ describe("CombatSystem", () => {
 
   it("emits melee-swing event on attack", () => {
     spawnPlayer(ctx, 100, 100);
-    const handler = vi.fn<[MeleeSwingEvent], void>();
+    const handler = vi.fn<(...args: GameEventMap["melee-swing"]) => void>();
     ctx.eventBus.on("melee-swing", handler);
 
     triggerAttack(ctx, 200, 100);
@@ -399,7 +394,7 @@ describe("CombatSystem", () => {
   it("emits damage-dealt event when zombie is hit", () => {
     spawnPlayer(ctx, 100, 100);
     spawnZombie(ctx, 100 + COMBAT.BASE_MELEE_RANGE, 100);
-    const handler = vi.fn<[DamageDealtEvent], void>();
+    const handler = vi.fn<(...args: GameEventMap["damage-dealt"]) => void>();
     ctx.eventBus.on("damage-dealt", handler);
 
     triggerAttack(ctx, 200, 100);
@@ -416,7 +411,7 @@ describe("CombatSystem", () => {
     const player = spawnPlayer(ctx, 100, 100);
     const zombie = spawnZombie(ctx, 80, 100);
     zombie.aiState.state = "attacking";
-    const handler = vi.fn<[PlayerHitEvent], void>();
+    const handler = vi.fn<(...args: GameEventMap["player-hit"]) => void>();
     ctx.eventBus.on("player-hit", handler);
 
     // Simulate zombie damage
@@ -434,7 +429,7 @@ describe("CombatSystem", () => {
 
   it("emits corrected player-health-changed during i-frame revert", () => {
     const player = spawnPlayer(ctx, 100, 100);
-    const handler = vi.fn<[PlayerHealthChangedEvent], void>();
+    const handler = vi.fn<(...args: GameEventMap["player-health-changed"]) => void>();
     ctx.eventBus.on("player-health-changed", handler);
 
     // Set i-frames active

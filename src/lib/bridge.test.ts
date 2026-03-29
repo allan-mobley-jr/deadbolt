@@ -167,6 +167,7 @@ describe("bridge", () => {
       safeEmit(bus, "zombie-killed", {
         position: { x: 100, y: 200 },
         totalKills: 5,
+        variant: "shambler",
       });
 
       expect(useGameStore.getState().totalKills).toBe(5);
@@ -175,6 +176,7 @@ describe("bridge", () => {
       safeEmit(bus, "zombie-killed", {
         position: { x: 150, y: 250 },
         totalKills: 6,
+        variant: "runner",
       });
 
       expect(useGameStore.getState().totalKills).toBe(6);
