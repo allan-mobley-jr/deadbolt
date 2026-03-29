@@ -25,6 +25,8 @@ export interface InputState {
   interactPressed: boolean;
   /** Quick-select key index pressed this tick (0-4 for keys 1-5), or -1 if none. */
   quickSelectPressed: number;
+  /** True only on the tick the primary button transitions from up to down. */
+  attackPressed: boolean;
   /** True while the primary mouse button is held down. */
   pointerDown: boolean;
   /** True only on the tick the primary button transitions from down to up. */
@@ -100,6 +102,7 @@ export function createInputState(): InputState {
     aimY: 0,
     interactPressed: false,
     quickSelectPressed: -1,
+    attackPressed: false,
     pointerDown: false,
     pointerReleased: false,
     pointerWorldX: 0,

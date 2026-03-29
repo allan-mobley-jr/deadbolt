@@ -12,6 +12,7 @@
 import EventEmitter from "eventemitter3";
 import type { DayPhase } from "@/game/systems/day-night-constants";
 import type { SizeCategory } from "@/game/procgen/object-defs";
+import type { ZombieVariant } from "@/game/ecs/components";
 
 // ---------------------------------------------------------------------------
 // Event payload types — Game → UI
@@ -76,6 +77,8 @@ export interface WaveEndedEvent {
 export interface ZombieKilledEvent {
   position: { x: number; y: number };
   totalKills: number;
+  /** Zombie variant for per-type kill tracking. */
+  variant: ZombieVariant;
 }
 
 /** Emitted when the player places a barricade. */
@@ -177,6 +180,36 @@ export interface NoiseGeneratedEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Combat (issue #26)
+// ---------------------------------------------------------------------------
+
+/** Emitted when the player starts a melee swing (for visual feedback). */
+export interface MeleeSwingEvent {
+  position: { x: number; y: number };
+  /** Aim angle in radians. */
+  aimAngle: number;
+  /** Swing reach in pixels (for visual arc size). */
+  range: number;
+  /** Equipped item type, or null for bare hands. */
+  itemType: string | null;
+}
+
+/** Emitted when the player deals damage to a zombie. */
+export interface DamageDealtEvent {
+  position: { x: number; y: number };
+  damage: number;
+  targetType: "zombie";
+}
+
+/** Emitted when the player takes damage from a zombie. */
+export interface PlayerHitEvent {
+  position: { x: number; y: number };
+  damage: number;
+  /** Normalised direction from player toward attacker (for directional screen flash). */
+  sourceDirection: { x: number; y: number };
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -222,6 +255,11 @@ export interface GameEventMap {
   "wave-started": [event: WaveStartedEvent];
   "wave-ended": [event: WaveEndedEvent];
   "zombie-killed": [event: ZombieKilledEvent];
+
+  // Combat (player melee)
+  "melee-swing": [event: MeleeSwingEvent];
+  "damage-dealt": [event: DamageDealtEvent];
+  "player-hit": [event: PlayerHitEvent];
 
   // Building / items
   "barricade-placed": [event: BarricadePlacedEvent];

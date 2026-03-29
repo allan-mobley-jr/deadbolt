@@ -21,7 +21,7 @@ import type { With } from "miniplex";
 import type { SceneContext } from "./scene-context";
 import type { SystemFn } from "./system-runner";
 import type { Entity } from "@/game/ecs/entity";
-import type { AIState, ZombieType } from "@/game/ecs/components";
+import type { AIState, ZombieType, ZombieVariant } from "@/game/ecs/components";
 import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
 import type { TileCoord } from "@/types/procgen";
 import { world } from "@/game/ecs/world";
@@ -85,9 +85,25 @@ function tileToPx(tile: number): number {
 
 let totalKills = 0;
 
+/** Per-variant kill counters for run statistics. */
+const killsByType: Record<ZombieVariant, number> = {
+  shambler: 0,
+  runner: 0,
+  brute: 0,
+  horde: 0,
+};
+
 /** Reset kills (called on game restart). */
 export function resetZombieKills(): void {
   totalKills = 0;
+  for (const key of Object.keys(killsByType) as ZombieVariant[]) {
+    killsByType[key] = 0;
+  }
+}
+
+/** Get a snapshot of kills broken down by zombie variant. */
+export function getKillsByType(): Readonly<Record<ZombieVariant, number>> {
+  return { ...killsByType };
 }
 
 // ---------------------------------------------------------------------------
@@ -413,10 +429,12 @@ function handleDeath(
   entity.velocity.vy = 0;
 
   totalKills++;
+  killsByType[entity.zombieType.variant]++;
 
   safeEmit(ctx.eventBus, "zombie-killed", {
     position: { x: entity.position.x, y: entity.position.y },
     totalKills,
+    variant: entity.zombieType.variant,
   });
 
   toRemove.push(entity);

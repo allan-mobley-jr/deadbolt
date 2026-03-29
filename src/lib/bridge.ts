@@ -93,7 +93,18 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
   });
 
   onBus("zombie-killed", (e) => {
-    useGameStore.getState().setTotalKills(e.totalKills);
+    const store = useGameStore.getState();
+    store.setTotalKills(e.totalKills);
+    store.incrementKillsByType(e.variant);
+  });
+
+  onBus("player-hit", (e) => {
+    useUIStore.getState().addNotification({
+      id: `hit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      message: `Took ${e.damage} damage!`,
+      type: "danger",
+      timestamp: Date.now(),
+    });
   });
 
   onBus("player-died", () => {

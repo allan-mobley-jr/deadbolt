@@ -915,6 +915,7 @@ describe("WaveSystem", () => {
         eventBus.emit("zombie-killed", {
           position: { x: 100, y: 100 },
           totalKills: i + 1,
+          variant: "shambler",
         });
       }
 
@@ -938,6 +939,7 @@ describe("WaveSystem", () => {
         eventBus.emit("zombie-killed", {
           position: { x: 0, y: 0 },
           totalKills: i + 1,
+          variant: "shambler",
         });
       }
 
@@ -952,10 +954,12 @@ describe("WaveSystem", () => {
       eventBus.emit("zombie-killed", {
         position: { x: 50, y: 50 },
         totalKills: 6,
+        variant: "shambler",
       });
       eventBus.emit("zombie-killed", {
         position: { x: 60, y: 60 },
         totalKills: 7,
+        variant: "shambler",
       });
 
       // Dawn ends wave
@@ -982,6 +986,7 @@ describe("WaveSystem", () => {
         eventBus.emit("zombie-killed", {
           position: { x: 0, y: 0 },
           totalKills: i + 1,
+          variant: "shambler",
         });
       }
       setPhase(clockState, "dawn");
@@ -1008,6 +1013,7 @@ describe("WaveSystem", () => {
         eventBus.emit("zombie-killed", {
           position: { x: 0, y: 0 },
           totalKills: i + 5,
+          variant: "shambler",
         });
       }
       setPhase(clockState, "dawn");

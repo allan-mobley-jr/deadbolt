@@ -167,6 +167,7 @@ describe("bridge", () => {
       safeEmit(bus, "zombie-killed", {
         position: { x: 100, y: 200 },
         totalKills: 5,
+        variant: "shambler",
       });
 
       expect(useGameStore.getState().totalKills).toBe(5);
@@ -175,9 +176,56 @@ describe("bridge", () => {
       safeEmit(bus, "zombie-killed", {
         position: { x: 150, y: 250 },
         totalKills: 6,
+        variant: "runner",
       });
 
       expect(useGameStore.getState().totalKills).toBe(6);
+
+      bridge.disconnect();
+    });
+
+    it("increments killsByType on zombie-killed event", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "zombie-killed", {
+        position: { x: 100, y: 200 },
+        totalKills: 1,
+        variant: "shambler",
+      });
+
+      expect(useGameStore.getState().killsByType.shambler).toBe(1);
+
+      safeEmit(bus, "zombie-killed", {
+        position: { x: 150, y: 250 },
+        totalKills: 2,
+        variant: "runner",
+      });
+      safeEmit(bus, "zombie-killed", {
+        position: { x: 160, y: 260 },
+        totalKills: 3,
+        variant: "runner",
+      });
+
+      const { killsByType } = useGameStore.getState();
+      expect(killsByType.shambler).toBe(1);
+      expect(killsByType.runner).toBe(2);
+
+      bridge.disconnect();
+    });
+
+    it("adds danger notification on player-hit event", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "player-hit", {
+        position: { x: 100, y: 100 },
+        damage: 15,
+        sourceDirection: { x: -1, y: 0 },
+      });
+
+      const notifications = useUIStore.getState().notifications;
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].message).toContain("15");
+      expect(notifications[0].type).toBe("danger");
 
       bridge.disconnect();
     });

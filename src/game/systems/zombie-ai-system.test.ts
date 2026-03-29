@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createZombieAISystem, resetZombieKills } from "./zombie-ai-system";
+import { createZombieAISystem, resetZombieKills, getKillsByType } from "./zombie-ai-system";
 import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
@@ -697,6 +697,100 @@ describe("ZombieAISystem", () => {
       expect(killedEvents[0].totalKills).toBe(1);
       expect(killedEvents[1].totalKills).toBe(2);
       expect(killedEvents[2].totalKills).toBe(3);
+    });
+
+    it("increments killsByType for the correct variant on death", () => {
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing
+      zombie.health.current = 0;
+      system(DT); // → dead, removed
+
+      const kills = getKillsByType();
+      expect(kills.shambler).toBe(1);
+      expect(kills.runner).toBe(0);
+      expect(kills.brute).toBe(0);
+      expect(kills.horde).toBe(0);
+    });
+
+    it("tracks kills independently per variant", () => {
+      // Kill a shambler
+      const pos1 = tileCenter(0, 0);
+      const z1 = createZombieEntity(pos1.x, pos1.y, 1);
+      system(DT);
+      z1.health.current = 0;
+      system(DT);
+
+      // Kill a runner
+      const pos2 = tileCenter(1, 0);
+      const z2 = createZombieEntity(
+        pos2.x, pos2.y, 2, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+      system(DT);
+      z2.health.current = 0;
+      system(DT);
+
+      // Kill a brute
+      const pos3 = tileCenter(2, 0);
+      const z3 = createZombieEntity(
+        pos3.x, pos3.y, 3, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+      system(DT);
+      z3.health.current = 0;
+      system(DT);
+
+      const kills = getKillsByType();
+      expect(kills.shambler).toBe(1);
+      expect(kills.runner).toBe(1);
+      expect(kills.brute).toBe(1);
+      expect(kills.horde).toBe(0);
+    });
+
+    it("emits variant field in zombie-killed event", () => {
+      const killedVariants: string[] = [];
+      ctx.eventBus.on("zombie-killed", (e) => {
+        killedVariants.push(e.variant);
+      });
+
+      // Kill a runner
+      const pos1 = tileCenter(0, 0);
+      const z1 = createZombieEntity(
+        pos1.x, pos1.y, 1, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+      system(DT);
+      z1.health.current = 0;
+      system(DT);
+
+      expect(killedVariants).toEqual(["runner"]);
+    });
+
+    it("resetZombieKills clears all killsByType counters", () => {
+      // Kill a shambler and a runner
+      const pos1 = tileCenter(0, 0);
+      const z1 = createZombieEntity(pos1.x, pos1.y, 1);
+      system(DT);
+      z1.health.current = 0;
+      system(DT);
+
+      const pos2 = tileCenter(1, 0);
+      const z2 = createZombieEntity(
+        pos2.x, pos2.y, 2, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+      system(DT);
+      z2.health.current = 0;
+      system(DT);
+
+      expect(getKillsByType().shambler).toBe(1);
+      expect(getKillsByType().runner).toBe(1);
+
+      resetZombieKills();
+
+      const kills = getKillsByType();
+      expect(kills.shambler).toBe(0);
+      expect(kills.runner).toBe(0);
+      expect(kills.brute).toBe(0);
+      expect(kills.horde).toBe(0);
     });
   });
 

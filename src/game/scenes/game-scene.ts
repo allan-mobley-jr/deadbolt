@@ -15,6 +15,7 @@ import { createInteractionSystem } from "@/game/systems/interaction-system";
 import { createInventorySystem } from "@/game/systems/inventory-system";
 import { createBarricadeSystem } from "@/game/systems/barricade-system";
 import { createZombieAISystem, resetZombieKills } from "@/game/systems/zombie-ai-system";
+import { createCombatSystem } from "@/game/systems/combat-system";
 import { createWaveSystem } from "@/game/systems/wave-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
@@ -141,6 +142,7 @@ export default class GameScene extends Phaser.Scene {
       createWaveSystem(ctx),
       createMovementSystem(ctx),
       createZombieAISystem(ctx),
+      createCombatSystem(ctx),
       createPhysicsSyncSystem(ctx),
     ];
 

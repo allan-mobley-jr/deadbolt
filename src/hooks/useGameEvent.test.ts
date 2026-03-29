@@ -35,6 +35,7 @@ describe("useGameEvent", () => {
     safeEmit(bus, "zombie-killed", {
       position: { x: 100, y: 200 },
       totalKills: 1,
+      variant: "shambler",
     });
 
     expect(handler).not.toHaveBeenCalled();
@@ -86,7 +87,7 @@ describe("useGameEvent", () => {
     );
 
     // Verify subscription on bus1
-    safeEmit(bus1, "zombie-killed", { position: { x: 0, y: 0 }, totalKills: 1 });
+    safeEmit(bus1, "zombie-killed", { position: { x: 0, y: 0 }, totalKills: 1, variant: "shambler" });
     expect(handler).toHaveBeenCalledTimes(1);
 
     handler.mockClear();
@@ -95,11 +96,11 @@ describe("useGameEvent", () => {
     rerender({ currentBus: bus2 });
 
     // bus1 should no longer fire handler
-    safeEmit(bus1, "zombie-killed", { position: { x: 10, y: 10 }, totalKills: 2 });
+    safeEmit(bus1, "zombie-killed", { position: { x: 10, y: 10 }, totalKills: 2, variant: "shambler" });
     expect(handler).not.toHaveBeenCalled();
 
     // bus2 should fire handler
-    safeEmit(bus2, "zombie-killed", { position: { x: 20, y: 20 }, totalKills: 3 });
+    safeEmit(bus2, "zombie-killed", { position: { x: 20, y: 20 }, totalKills: 3, variant: "shambler" });
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ totalKills: 3 }));
   });

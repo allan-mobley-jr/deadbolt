@@ -86,12 +86,14 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
 
       // ---- Pointer / drag state ----
       const currentPointerDown = pointer.isDown;
+      inputState.attackPressed = currentPointerDown && !prevPointerDown;
       inputState.pointerDown = currentPointerDown;
       inputState.pointerReleased = !currentPointerDown && prevPointerDown;
       prevPointerDown = currentPointerDown;
       inputState.pointerWorldX = worldPoint.x;
       inputState.pointerWorldY = worldPoint.y;
     } else {
+      inputState.attackPressed = false;
       inputState.pointerDown = false;
       inputState.pointerReleased = false;
     }
