@@ -7,6 +7,8 @@ import {
   getGame,
   setActiveBus,
   getActiveBus,
+  setActiveSeed,
+  getActiveSeed,
 } from "@/game/PhaserGame";
 import { createGameEventBus } from "@/game/events/event-bus";
 import BootScene from "@/game/scenes/boot-scene";
@@ -177,6 +179,42 @@ describe("event bus accessors", () => {
 
     destroyGame();
     expect(getActiveBus()).toBeNull();
+
+    container.remove();
+  });
+});
+
+describe("seed accessors", () => {
+  afterEach(() => {
+    setActiveSeed(null);
+  });
+
+  it("getActiveSeed returns null before any seed is set", () => {
+    expect(getActiveSeed()).toBeNull();
+  });
+
+  it("setActiveSeed makes getActiveSeed return the seed", () => {
+    setActiveSeed("test-seed-abc");
+    expect(getActiveSeed()).toBe("test-seed-abc");
+  });
+
+  it("setActiveSeed(null) clears the seed", () => {
+    setActiveSeed("some-seed");
+    setActiveSeed(null);
+    expect(getActiveSeed()).toBeNull();
+  });
+
+  it("destroyGame clears activeSeed", () => {
+    const container = document.createElement("div");
+    container.id = "seed-test";
+    document.body.appendChild(container);
+
+    createGame("seed-test");
+    setActiveSeed("run-seed-123");
+    expect(getActiveSeed()).toBe("run-seed-123");
+
+    destroyGame();
+    expect(getActiveSeed()).toBeNull();
 
     container.remove();
   });
