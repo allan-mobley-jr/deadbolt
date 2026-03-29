@@ -7,11 +7,10 @@ import type { SceneContext } from "./scene-context";
 import { createInputState, createClockState } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { ConstraintRegistry } from "./constraint-registry";
-import { WallAnchorRegistry, SNAP_RADIUS } from "./wall-anchor-registry";
+import { WallAnchorRegistry } from "./wall-anchor-registry";
 import { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
-import { world } from "@/game/ecs/world";
 import { resetWorld } from "@/game/ecs/world";
-import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
+import { createGameEventBus } from "@/game/events/event-bus";
 import type { GameEventBus } from "@/game/events/event-bus";
 import {
   createPlayerEntity,
@@ -127,9 +126,7 @@ function createMockContext(): {
   };
 
   const mockMatterAdd = {
-    constraint: vi.fn((_bodyA: unknown, _bodyB: unknown, _len: number, _stiff: number) => {
-      return mockConstraint();
-    }),
+    constraint: vi.fn(() => mockConstraint()),
     rectangle: vi.fn(),
   };
 
@@ -404,7 +401,7 @@ describe("BarricadeSystem", () => {
 
   describe("damage tracking", () => {
     it("emits barricade-damaged when health decreases", () => {
-      const { ctx, bodyRegistry, eventBus, constraintRegistry } = createMockContext();
+      const { ctx, bodyRegistry, eventBus } = createMockContext();
 
       const playerBody = mockBody();
       bodyRegistry.register(playerBody);
