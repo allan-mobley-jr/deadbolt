@@ -23,7 +23,7 @@ import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
-import { setActiveBus } from "@/game/PhaserGame";
+import { setActiveBus, setActiveSeed } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import { getObjectDef } from "@/game/procgen/object-defs";
@@ -130,7 +130,10 @@ export default class GameScene extends Phaser.Scene {
       this.frozen = true;
     });
 
-    // --- Notify UI of run start (seed for death screen display) ---
+    // --- Store seed for UI access (pull-based, avoids bridge timing race) ---
+    setActiveSeed(this.worldData!.config.seed);
+
+    // --- Also emit run-started for any listeners already connected ---
     safeEmit(ctx.eventBus, "run-started", {
       seed: this.worldData!.config.seed,
     });
