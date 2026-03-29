@@ -323,14 +323,13 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           if (constraint) {
             try {
               ctx.scene.matter.world.removeConstraint(constraint);
-              ctx.constraintRegistry.unregister(constraintId);
             } catch (err) {
               console.error(
                 `[FireSystem] Failed to remove constraint ${constraintId}:`,
                 err,
               );
-              // Do NOT unregister -- constraint is still in the physics world
             }
+            ctx.constraintRegistry.unregister(constraintId);
           }
         }
 
@@ -346,7 +345,12 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           if (!hasOtherBarricades) {
             const tileX = pixelToTile(positionCopy.x);
             const tileY = pixelToTile(positionCopy.y);
-            ctx.pathfindingGrid.setWalkable(tileX, tileY, true);
+            const updated = ctx.pathfindingGrid.setWalkable(tileX, tileY, true);
+            if (!updated) {
+              console.warn(
+                `[FireSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
+              );
+            }
 
             if (ctx.entryPoints?.[entryPointIndex]) {
               ctx.entryPoints[entryPointIndex].barricaded = false;

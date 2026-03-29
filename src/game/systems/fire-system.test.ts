@@ -686,6 +686,92 @@ describe("FireSystem — barricade destruction", () => {
       wasBarricade: true,
     });
   });
+
+  it("unregisters constraint even when removeConstraint throws", () => {
+    const ctx = createMockContext();
+    const system = createFireSystem(ctx);
+
+    // Register mock constraint
+    const constraintId = 500;
+    const mockConstraint = { id: constraintId } as unknown as MatterJS.ConstraintType;
+    ctx.constraintRegistry!.register(mockConstraint);
+
+    // Make removeConstraint throw
+    const removeConstraint = ctx.scene.matter.world
+      .removeConstraint as ReturnType<typeof vi.fn>;
+    removeConstraint.mockImplementation(() => {
+      throw new Error("physics engine error");
+    });
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const bodyId = registerMockBody(ctx);
+    const barricade = createBarricadeEntity(
+      100, 100, bodyId,
+      "wooden_plank", 0, [constraintId], 60,
+    );
+    barricade.material.state = "burning";
+
+    const burnDuration =
+      FIRE.BASE_BURN_DURATION +
+      (1 - 0.9) * FIRE.FLAMMABILITY_DURATION_SCALE;
+    const burnTicks = Math.ceil(burnDuration / DT) + 1;
+    tickN(ctx, system, burnTicks);
+
+    // Constraint should be unregistered despite the throw
+    expect(ctx.constraintRegistry!.get(constraintId)).toBeUndefined();
+    // Error should have been logged
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[FireSystem] Failed to remove constraint"),
+      expect.any(Error),
+    );
+
+    errorSpy.mockRestore();
+  });
+
+  it("warns when setWalkable returns false (out of grid bounds)", () => {
+    const mockPathfindingGrid = {
+      setWalkable: vi.fn().mockReturnValue(false),
+    };
+    const mockEntryPoints = [
+      {
+        barricaded: true,
+        position: { x: 3, y: 3 },
+        orientation: "horizontal" as const,
+      },
+    ];
+    const ctx = createMockContext({
+      pathfindingGrid:
+        mockPathfindingGrid as unknown as NonNullable<SceneContext["pathfindingGrid"]>,
+      entryPoints:
+        mockEntryPoints as unknown as NonNullable<SceneContext["entryPoints"]>,
+    });
+    const system = createFireSystem(ctx);
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const bodyId = registerMockBody(ctx);
+    const barricade = createBarricadeEntity(
+      100, 100, bodyId,
+      "wooden_plank", 0, [], 60,
+    );
+    barricade.material.state = "burning";
+
+    const burnDuration =
+      FIRE.BASE_BURN_DURATION +
+      (1 - 0.9) * FIRE.FLAMMABILITY_DURATION_SCALE;
+    const burnTicks = Math.ceil(burnDuration / DT) + 1;
+    tickN(ctx, system, burnTicks);
+
+    expect(mockPathfindingGrid.setWalkable).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[FireSystem] Failed to unblock pathfinding"),
+    );
+    // Entry point should still be marked unbarricaded even when setWalkable fails
+    expect(mockEntryPoints[0].barricaded).toBe(false);
+
+    warnSpy.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------
