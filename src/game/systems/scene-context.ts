@@ -23,6 +23,8 @@ export interface InputState {
   quickSelectPressed: number;
   /** True while the primary mouse button is held down. */
   pointerDown: boolean;
+  /** True only on the tick the primary button transitions from down to up. */
+  pointerReleased: boolean;
   /** World-space X of the pointer (valid when pointerDown is true). */
   pointerWorldX: number;
   /** World-space Y of the pointer (valid when pointerDown is true). */
@@ -83,6 +85,7 @@ export function createInputState(): InputState {
     interactPressed: false,
     quickSelectPressed: -1,
     pointerDown: false,
+    pointerReleased: false,
     pointerWorldX: 0,
     pointerWorldY: 0,
   };

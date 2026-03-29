@@ -26,6 +26,9 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
   /** Track previous E key state for edge detection. */
   let prevInteractDown = false;
 
+  /** Track previous pointer state for release edge detection. */
+  let prevPointerDown = false;
+
   /** Track previous number key states for edge detection. */
   const prevNumDown = [false, false, false, false, false];
 
@@ -82,11 +85,15 @@ export function createInputSystem(ctx: SceneContext): SystemFn {
       inputState.aimY = worldPoint.y;
 
       // ---- Pointer / drag state ----
-      inputState.pointerDown = pointer.isDown;
+      const currentPointerDown = pointer.isDown;
+      inputState.pointerDown = currentPointerDown;
+      inputState.pointerReleased = !currentPointerDown && prevPointerDown;
+      prevPointerDown = currentPointerDown;
       inputState.pointerWorldX = worldPoint.x;
       inputState.pointerWorldY = worldPoint.y;
     } else {
       inputState.pointerDown = false;
+      inputState.pointerReleased = false;
     }
   };
 }

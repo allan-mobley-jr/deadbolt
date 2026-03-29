@@ -90,6 +90,23 @@ export interface BarricadeBrokenEvent {
   position: { x: number; y: number };
 }
 
+/** Emitted when an object enters or leaves a barricade snap zone. */
+export interface BarricadeSnapEvent {
+  entryPointIndex: number;
+  snapCenter: { x: number; y: number };
+  orientation: "horizontal" | "vertical";
+  /** True when object is within snap bounds, false when it leaves. */
+  snapping: boolean;
+}
+
+/** Emitted when a barricade takes damage (for visual feedback). */
+export interface BarricadeDamagedEvent {
+  position: { x: number; y: number };
+  /** Current health as a fraction of max (0-1). */
+  healthFraction: number;
+  entryPointIndex: number;
+}
+
 /** Emitted when the player picks up an item. */
 export interface ItemPickedUpEvent {
   itemType: string;
@@ -209,6 +226,8 @@ export interface GameEventMap {
   // Building / items
   "barricade-placed": [event: BarricadePlacedEvent];
   "barricade-broken": [event: BarricadeBrokenEvent];
+  "barricade-snap": [event: BarricadeSnapEvent];
+  "barricade-damaged": [event: BarricadeDamagedEvent];
   "item-picked-up": [event: ItemPickedUpEvent];
   "active-slot-changed": [event: ActiveSlotChangedEvent];
   "inventory-full": [event: InventoryFullEvent];
