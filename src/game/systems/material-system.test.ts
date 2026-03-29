@@ -809,3 +809,209 @@ describe("MaterialRegistry.getEntityByBodyId", () => {
     expect(reg.getEntityByBodyId(99999)).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Adjacency edge cases (coverage gaps)
+// ---------------------------------------------------------------------------
+
+describe("MaterialRegistry adjacency edge cases", () => {
+  it("adjacency map is rebuilt from scratch each tick (no stale data)", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const gasCan = spawnGasCan(ctx, 100, 100);
+    const plank = spawnWoodenPlank(ctx, 132, 100);
+
+    // Tick 1: bodies colliding
+    mockPairs = [
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+    ];
+    system(DT);
+    expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(1);
+    expect(reg.getAdjacentEntities(plank.physicsBody.bodyId)).toHaveLength(1);
+
+    // Tick 2: bodies separated — no collision pairs
+    mockPairs = [];
+    system(DT);
+    expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(0);
+    expect(reg.getAdjacentEntities(plank.physicsBody.bodyId)).toHaveLength(0);
+  });
+
+  it("entity touching 3+ entities reports all neighbors", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const wire = spawnWireSpool(ctx, 100, 100);
+    const metal = spawnMetalSheet(ctx, 110, 100);
+    const plank = spawnWoodenPlank(ctx, 90, 100);
+    const gasCan = spawnGasCan(ctx, 100, 110);
+
+    // Wire touches all three other entities simultaneously
+    mockPairs = [
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId } },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: gasCan.physicsBody.bodyId } },
+    ];
+
+    system(DT);
+
+    const neighbors = reg.getAdjacentEntities(wire.physicsBody.bodyId);
+    expect(neighbors).toHaveLength(3);
+    const categories = neighbors.map((n) => n.material.category).sort();
+    expect(categories).toEqual(["fuel", "metal", "wood"]);
+
+    // Each neighbor also sees wire
+    expect(reg.getAdjacentEntities(metal.physicsBody.bodyId)).toHaveLength(1);
+    expect(reg.getAdjacentEntities(plank.physicsBody.bodyId)).toHaveLength(1);
+    expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(1);
+  });
+
+  it("duplicate collision pairs do not create duplicate adjacency entries", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const gasCan = spawnGasCan(ctx, 100, 100);
+    const plank = spawnWoodenPlank(ctx, 110, 100);
+
+    // Same pair reported multiple times (and in both directions)
+    mockPairs = [
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: plank.physicsBody.bodyId }, bodyB: { id: gasCan.physicsBody.bodyId } },
+    ];
+
+    system(DT);
+
+    expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(1);
+    expect(reg.getAdjacentEntities(plank.physicsBody.bodyId)).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Missing engine graceful degradation
+// ---------------------------------------------------------------------------
+
+describe("MaterialSystem missing engine", () => {
+  /** Create a mock context where Matter.js engine is undefined. */
+  function createNoEngineContext(): SceneContext {
+    return createMockContext({
+      scene: {
+        matter: {
+          world: { remove: vi.fn() },
+          add: { rectangle: vi.fn() },
+        },
+      } as unknown as Phaser.Scene,
+    });
+  }
+
+  it("runs without crashing when Matter.js engine is missing", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createNoEngineContext();
+    const system = createMaterialSystem(ctx);
+    spawnGasCan(ctx, 100, 100);
+
+    expect(() => system(DT)).not.toThrow();
+    expect(() => system(DT)).not.toThrow();
+
+    warnSpy.mockRestore();
+  });
+
+  it("warns exactly once when engine is missing", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createNoEngineContext();
+    const system = createMaterialSystem(ctx);
+    spawnGasCan(ctx, 100, 100);
+
+    system(DT);
+    system(DT);
+    system(DT);
+
+    const engineWarnings = warnSpy.mock.calls.filter((args) =>
+      String(args[0]).includes("[MaterialSystem]"),
+    );
+    expect(engineWarnings).toHaveLength(1);
+    expect(engineWarnings[0][0]).toContain("engine not found");
+
+    warnSpy.mockRestore();
+  });
+
+  it("adjacency is empty (not stale) when engine is missing", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createNoEngineContext();
+    const system = createMaterialSystem(ctx);
+
+    const wire = spawnWireSpool(ctx, 100, 100);
+    const metal = spawnMetalSheet(ctx, 110, 100);
+
+    system(DT);
+
+    // Even though both entities exist, adjacency should be empty
+    // because no collision pairs are readable without the engine
+    expect(ctx.materialRegistry!.getAdjacentEntities(wire.physicsBody.bodyId)).toHaveLength(0);
+    expect(ctx.materialRegistry!.getAdjacentEntities(metal.physicsBody.bodyId)).toHaveLength(0);
+
+    warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Threshold boundary values
+// ---------------------------------------------------------------------------
+
+describe("MaterialRegistry threshold boundaries", () => {
+  it("includes entity with flammability exactly at FLAMMABILITY_THRESHOLD", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    // wire_spool has flammability: 0.1 which equals FLAMMABILITY_THRESHOLD
+    const wire = spawnWireSpool(ctx, 100, 100);
+    expect(wire.material.flammability).toBe(MATERIAL.FLAMMABILITY_THRESHOLD);
+
+    system(DT);
+
+    const results = reg.getFlammableInRadius(100, 100, 200);
+    expect(results).toHaveLength(1);
+    expect(results[0].entity.material.category).toBe("electronic");
+  });
+
+  it("excludes entity with flammability below FLAMMABILITY_THRESHOLD", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    // car_battery has flammability: 0.0 which is below threshold
+    const battery = spawnCarBattery(ctx, 100, 100);
+    expect(battery.material.flammability).toBeLessThan(MATERIAL.FLAMMABILITY_THRESHOLD);
+
+    system(DT);
+
+    const results = reg.getFlammableInRadius(100, 100, 200);
+    expect(results).toHaveLength(0);
+  });
+
+  it("includes entity with explosivePotential exactly at EXPLOSIVE_THRESHOLD", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    // fridge has explosivePotential: 0.1 which equals EXPLOSIVE_THRESHOLD
+    const bodyId = registerMockBody(ctx);
+    const fridge = createObjectEntity(
+      100, 100, bodyId,
+      "fridge", ObjectCategory.Furniture, false,
+      { durability: 0.8, flammability: 0.1, conductivity: 0.4 },
+      8,
+    );
+    expect(fridge.material.explosivePotential).toBe(MATERIAL.EXPLOSIVE_THRESHOLD);
+
+    system(DT);
+
+    const results = reg.getExplosiveInRadius(100, 100, 200);
+    expect(results).toHaveLength(1);
+    expect(results[0].entity.material.category).toBe("electronic");
+  });
+});
