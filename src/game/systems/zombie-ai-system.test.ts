@@ -395,6 +395,28 @@ describe("ZombieAISystem", () => {
       expect(barricade.health.current).toBeLessThan(initialHealth);
     });
 
+    it("shambler deals exactly attackDamage × 1 to barricades (not multiplied)", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 500,
+      );
+      const initialHealth = barricade.health.current;
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: bPos.y,
+      };
+      createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → attacking
+      system(DT); // attack (first hit)
+
+      const expectedDamage =
+        SHAMBLER_STATS.attackDamage * SHAMBLER_STATS.barricadeDamageMultiplier;
+      expect(barricade.health.current).toBe(initialHealth - expectedDamage);
+    });
+
     it("respects attack cooldown", () => {
       const bPos = tileCenter(3, 3);
       const barricade = createBarricadeEntity(
@@ -955,6 +977,35 @@ describe("ZombieAISystem", () => {
       expect(runner.aiState.state).toBe("pathing");
     });
 
+    it("continues moving past a vaulted barricade", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+      // Durability below vault threshold — runner should vault
+      barricade.barricade.currentDurability = 15;
+      barricade.health.current = 15;
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const runner = createZombieEntity(
+        zPos.x, zPos.y, 2, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+
+      system(DT); // idle → pathing (skip barricade, vault)
+      expect(runner.aiState.state).toBe("pathing");
+
+      system(DT); // follow path
+      // Runner should still be moving (non-zero velocity)
+      const speed = Math.sqrt(
+        runner.velocity.vx ** 2 + runner.velocity.vy ** 2,
+      );
+      expect(speed).toBeGreaterThan(0);
+    });
+
     it("attacks barricades above vault threshold normally", () => {
       const bPos = tileCenter(3, 3);
       const barricade = createBarricadeEntity(
@@ -1095,6 +1146,54 @@ describe("ZombieAISystem", () => {
       const distToStrong =
         Math.abs(lastWaypoint.x - 3) + Math.abs(lastWaypoint.y - 3);
       expect(distToWeak).toBeLessThanOrEqual(distToStrong);
+    });
+
+    it("re-targets next weakest barricade when current target is destroyed", () => {
+      // Barricade A: weak (durability 20) — initial target
+      const posA = tileCenter(3, 3);
+      const barricadeA = createBarricadeEntity(
+        posA.x, posA.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+      barricadeA.barricade.currentDurability = 20;
+
+      // Barricade B: stronger (durability 80) — should become next target
+      const posB = tileCenter(3, 7);
+      createBarricadeEntity(
+        posB.x, posB.y, 11,
+        "wooden_plank", 1, [102, 103], 80,
+      );
+
+      // Place brute near barricade A
+      const brutePos = {
+        x: posA.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: posA.y,
+      };
+      const brute = createZombieEntity(
+        brutePos.x, brutePos.y, 3, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+
+      system(DT); // idle → attacking barricade A
+      expect(brute.aiState.state).toBe("attacking");
+      expect(brute.aiState.attackTargetBodyId).toBe(barricadeA.physicsBody.bodyId);
+
+      // Destroy barricade A
+      world.remove(barricadeA);
+      system(DT); // attacking → pathing (target gone)
+      expect(brute.aiState.state).toBe("pathing");
+
+      // Run enough ticks for path recalc (force recompute)
+      for (let i = 0; i < BRUTE_STATS.pathRecalcInterval + 1; i++) {
+        system(DT);
+      }
+
+      // Brute should now path toward barricade B (the remaining one)
+      expect(brute.aiState.path.length).toBeGreaterThan(0);
+      const lastWaypoint = brute.aiState.path[brute.aiState.path.length - 1];
+      const distToB = Math.abs(lastWaypoint.x - 3) + Math.abs(lastWaypoint.y - 7);
+      // Should be closer to B than to safehouse center (5,5)
+      const distToSafehouse = Math.abs(lastWaypoint.x - 5) + Math.abs(lastWaypoint.y - 5);
+      expect(distToB).toBeLessThanOrEqual(distToSafehouse);
     });
 
     it("falls back to safehouse center when no barricades exist", () => {
