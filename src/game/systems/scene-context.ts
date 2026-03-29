@@ -6,7 +6,7 @@ import type { DayPhase } from "./day-night-constants";
 import { DAY_NIGHT, getPhaseDuration } from "./day-night-constants";
 import type { GameEventBus } from "@/game/events/event-bus";
 import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
-import type { EntryPoint, TileCoord } from "@/types/procgen";
+import type { EntryPoint, SpawnZone, TileCoord } from "@/types/procgen";
 
 /**
  * Snapshot of normalised input state, written by InputSystem each fixed tick
@@ -87,6 +87,8 @@ export interface SceneContext {
   entryPoints?: EntryPoint[];
   /** Safehouse center in tile coordinates — pathfinding target for zombies. */
   safehouseCenter?: TileCoord;
+  /** Zombie spawn zones from procedural generation (edge + far-building). */
+  spawnZones?: SpawnZone[];
 }
 
 /** Create a zeroed-out input state. */
