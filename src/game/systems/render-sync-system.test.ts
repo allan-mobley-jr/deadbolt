@@ -594,6 +594,100 @@ describe("RenderSyncSystem", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Zombie death flash
+  // -------------------------------------------------------------------------
+
+  describe("zombie death flash", () => {
+    it("applies white tint to sprite during death flash duration", () => {
+      const { ctx, addRectangle } = createMockContext();
+      const mockRect = createMockRect();
+      addRectangle.mockReturnValue(mockRect);
+      const system = createRenderSyncSystem(ctx);
+
+      // Create a zombie entity with aiState in 'dead' state
+      const zombie = world.add({
+        position: { x: 50, y: 50 },
+        renderable: { spriteKey: "zombie_shambler" },
+        aiState: {
+          state: "dead" as const,
+          targetPosition: null,
+          path: [],
+          pathIndex: 0,
+          ticksSinceLastPathCalc: 0,
+          attackCooldownRemaining: 0,
+          staggerTimeRemaining: 0,
+          attackTargetBodyId: null,
+          previousHealth: 0,
+        },
+      });
+
+      // First tick to create the sprite
+      system(DT);
+      expect(addRectangle).toHaveBeenCalled();
+
+      // Emit zombie-killed event at the zombie's position
+      ctx.eventBus.emit("zombie-killed", {
+        position: { x: 50, y: 50 },
+        variant: "shambler",
+        totalKills: 1,
+      });
+
+      // Remove the entity (simulating ZombieAISystem deferred removal)
+      world.remove(zombie);
+
+      // Next tick: death flash should keep sprite alive and tint it white
+      system(DT);
+
+      expect(mockRect.setFillStyle).toHaveBeenCalledWith(0xffffff);
+      expect(mockRect.destroy).not.toHaveBeenCalled();
+    });
+
+    it("destroys sprite after death flash duration expires", () => {
+      const { ctx, addRectangle } = createMockContext();
+      const mockRect = createMockRect();
+      addRectangle.mockReturnValue(mockRect);
+      const system = createRenderSyncSystem(ctx);
+
+      // Create a zombie entity with aiState in 'dead' state
+      const zombie = world.add({
+        position: { x: 50, y: 50 },
+        renderable: { spriteKey: "zombie_shambler" },
+        aiState: {
+          state: "dead" as const,
+          targetPosition: null,
+          path: [],
+          pathIndex: 0,
+          ticksSinceLastPathCalc: 0,
+          attackCooldownRemaining: 0,
+          staggerTimeRemaining: 0,
+          attackTargetBodyId: null,
+          previousHealth: 0,
+        },
+      });
+
+      // First tick to create the sprite
+      system(DT);
+
+      // Emit zombie-killed and remove entity
+      ctx.eventBus.emit("zombie-killed", {
+        position: { x: 50, y: 50 },
+        variant: "shambler",
+        totalKills: 1,
+      });
+      world.remove(zombie);
+
+      // Tick through the full death flash duration (0.12s ≈ 8 ticks at 60Hz)
+      const flashTicks = Math.ceil(0.12 / DT) + 1;
+      for (let i = 0; i < flashTicks; i++) {
+        system(DT);
+      }
+
+      // Sprite should be destroyed after flash expires
+      expect(mockRect.destroy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Barricade visual feedback
   // -------------------------------------------------------------------------
 

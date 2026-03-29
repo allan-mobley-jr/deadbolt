@@ -293,9 +293,10 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     }
 
     // --- Clean up sprites for removed entities ---
+    // Skip entities with active death flashes so the flash can render
     const activeEntities = new Set<Entity>(renderableEntities);
     for (const [entity, sprite] of sprites) {
-      if (!activeEntities.has(entity)) {
+      if (!activeEntities.has(entity) && !deathFlashes.has(entity)) {
         sprite.destroy();
         sprites.delete(entity);
       }
@@ -517,6 +518,11 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       const remaining = timeLeft - _dt;
       if (remaining <= 0) {
         deathFlashes.delete(entity);
+        // Sprite was preserved past entity removal for the flash — destroy it now
+        if (sprite) {
+          sprite.destroy();
+          sprites.delete(entity);
+        }
       } else {
         deathFlashes.set(entity, remaining);
       }

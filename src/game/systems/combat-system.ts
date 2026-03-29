@@ -136,7 +136,14 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
       if (activeSensorId !== null) {
         const sensorBody = ctx.bodyRegistry.get(activeSensorId);
         if (sensorBody) {
-          ctx.scene.matter.world.remove(sensorBody);
+          try {
+            ctx.scene.matter.world.remove(sensorBody);
+          } catch (err) {
+            console.error(
+              `[CombatSystem] Failed to remove orphan sensor body (id=${activeSensorId}):`,
+              err,
+            );
+          }
         }
         ctx.bodyRegistry.unregister(activeSensorId);
         activeSensorId = null;
@@ -162,7 +169,14 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
     if (cs.swingTimeRemaining <= 0 && cs.sensorBodyId !== null) {
       const sensorBody = ctx.bodyRegistry.get(cs.sensorBodyId);
       if (sensorBody) {
-        ctx.scene.matter.world.remove(sensorBody);
+        try {
+          ctx.scene.matter.world.remove(sensorBody);
+        } catch (err) {
+          console.error(
+            `[CombatSystem] Failed to remove expired sensor body (id=${cs.sensorBodyId}):`,
+            err,
+          );
+        }
       }
       ctx.bodyRegistry.unregister(cs.sensorBodyId);
       cs.sensorBodyId = null;

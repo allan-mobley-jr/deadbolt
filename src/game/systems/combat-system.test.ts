@@ -524,6 +524,59 @@ describe("CombatSystem", () => {
     expect(zombie.health.current).toBe(0);
   });
 
+  it("continues cleanup when world.remove throws during orphan sensor cleanup", () => {
+    const player = spawnPlayer(ctx, 100, 100);
+
+    // Start a swing
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+    ctx.inputState.attackPressed = false;
+
+    const sensorId = player.combatState.sensorBodyId!;
+    expect(ctx.bodyRegistry.get(sensorId)).toBeDefined();
+
+    // Make world.remove throw
+    const worldRemove = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+    worldRemove.mockImplementation(() => {
+      throw new Error("scene destroyed");
+    });
+
+    // Remove the player entity (simulate permadeath)
+    world.remove(player);
+
+    // Next tick should clean up without throwing
+    expect(() => system(DT)).not.toThrow();
+
+    // Sensor should be unregistered despite the throw
+    expect(ctx.bodyRegistry.get(sensorId)).toBeUndefined();
+  });
+
+  it("continues cleanup when world.remove throws during swing expiry", () => {
+    const player = spawnPlayer(ctx, 100, 100);
+
+    // Start a swing
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+    ctx.inputState.attackPressed = false;
+
+    const sensorId = player.combatState.sensorBodyId!;
+    expect(sensorId).toBeDefined();
+
+    // Make world.remove throw
+    const worldRemove = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
+    worldRemove.mockImplementation(() => {
+      throw new Error("scene destroyed");
+    });
+
+    // Advance past swing duration to trigger expiry cleanup
+    // Add one extra tick to handle floating-point edge cases
+    tickSeconds(system, COMBAT.SWING_DURATION + DT);
+
+    // State should be cleaned up despite the throw
+    expect(player.combatState.sensorBodyId).toBeNull();
+    expect(ctx.bodyRegistry.get(sensorId)).toBeUndefined();
+  });
+
   it("can hit multiple zombies in a single swing", () => {
     spawnPlayer(ctx, 100, 100);
     const z1 = spawnZombie(ctx, 100 + COMBAT.BASE_MELEE_RANGE, 95);
