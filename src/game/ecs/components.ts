@@ -166,16 +166,19 @@ export interface AIState {
   previousHealth: number;
 }
 
+/** All zombie variant identifiers. */
+export type ZombieVariant = 'shambler' | 'runner' | 'brute' | 'horde';
+
 /**
  * Zombie variant definition — holds all per-type tunable stats.
  *
- * Adding a new zombie archetype (runner, brute, spitter) means creating
- * a ZombieType with different stats. The AI system reads these values
- * to parameterise all behaviour, making the state machine data-driven.
+ * Each archetype (shambler, runner, brute, horde) is a ZombieType with
+ * different stat values. The AI system reads these values to parameterise
+ * all behaviour, making the state machine fully data-driven.
  */
 export interface ZombieType {
   /** Variant identifier. */
-  variant: 'shambler';
+  variant: ZombieVariant;
   /** Maximum movement speed in pixels per second. */
   moveSpeed: number;
   /** Damage dealt per attack hit. */
@@ -186,6 +189,22 @@ export interface ZombieType {
   pathRecalcInterval: number;
   /** Seconds the zombie is stunned after taking damage. */
   staggerDuration: number;
+  /**
+   * Multiplier applied to attackDamage when hitting barricades.
+   * Shambler/runner/horde = 1, brute = 3.
+   */
+  barricadeDamageMultiplier: number;
+  /**
+   * Barricade durability threshold for the vault mechanic.
+   * When a barricade's currentDurability is at or below this value,
+   * the zombie ignores it instead of attacking. 0 = no vaulting.
+   */
+  vaultDurabilityThreshold: number;
+  /**
+   * Physics body size in pixels for this variant.
+   * Used when creating the Matter.js body and for visual sizing.
+   */
+  bodySize: number;
 }
 
 /** Properties specific to placed world objects. */

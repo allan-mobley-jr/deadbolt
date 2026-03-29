@@ -17,9 +17,17 @@ import { createBarricadeSystem } from "@/game/systems/barricade-system";
 import { createZombieAISystem, resetZombieKills } from "@/game/systems/zombie-ai-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
-import { createPlayerEntity, createObjectEntity, createZombieEntity } from "@/game/ecs/archetypes";
+import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { ZOMBIE_AI } from "@/game/systems/zombie-ai-constants";
+import {
+  getAvailableVariants,
+  selectVariant,
+  spawnZombie,
+  spawnHordeCluster,
+} from "@/game/systems/zombie-spawner-utils";
+import type { SpawnContext } from "@/game/systems/zombie-spawner-utils";
+import { VARIANT_STATS } from "@/game/systems/zombie-ai-constants";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
@@ -256,8 +264,10 @@ export default class GameScene extends Phaser.Scene {
   /**
    * Spawn a small group of test zombies from the first available spawn zones.
    *
-   * This is a temporary spawn mechanism for testing the zombie AI system.
-   * A full wave spawner will replace this in a future issue.
+   * Selects zombie archetypes based on the current night number using the
+   * weighted variant selection system. Horde variants spawn as a cluster
+   * of 5-10 weak zombies. This is still a temporary spawn mechanism —
+   * a full wave spawner will replace it in a future issue.
    */
   private spawnInitialZombies(bodyRegistry: BodyRegistry): void {
     const spawnZones = this.worldData!.spawnZones;
@@ -269,30 +279,41 @@ export default class GameScene extends Phaser.Scene {
     const MAX_INITIAL_ZOMBIES = 5;
     let spawned = 0;
 
+    // Simple seeded RNG for deterministic variant selection (test spawner)
+    let rngState = 42;
+    const rng = (): number => {
+      rngState = (rngState * 1664525 + 1013904223) >>> 0;
+      return rngState / 0x100000000;
+    };
+
+    // Determine available variants based on current day number.
+    // The test spawner defaults to day 1. When the wave system is
+    // implemented, it will read ctx.clockState.dayNumber instead.
+    const dayNumber = 1;
+    const available = getAvailableVariants(dayNumber);
+
+    const spawnCtx: SpawnContext = {
+      matterAdd: this.matter.add,
+      bodyRegistry,
+    };
+
     for (const zone of spawnZones) {
       if (spawned >= MAX_INITIAL_ZOMBIES) break;
       if (zone.spawnPoints.length === 0) continue;
 
-      // Pick the first available spawn point in each zone
       const point = zone.spawnPoints[0];
       const px = point.x * TILE_SIZE + TILE_SIZE / 2;
       const py = point.y * TILE_SIZE + TILE_SIZE / 2;
 
-      const body = this.matter.add.rectangle(
-        px, py,
-        ZOMBIE_AI.BODY_SIZE, ZOMBIE_AI.BODY_SIZE,
-        {
-          friction: 0.1,
-          frictionAir: 0.05,
-          restitution: 0.1,
-        },
-      );
-      body.inertia = Infinity;
-      body.inverseInertia = 0;
-      bodyRegistry.register(body);
+      const variant = selectVariant(available, rng);
 
-      createZombieEntity(px, py, body.id, undefined, spawned);
-      spawned++;
+      if (variant === "horde") {
+        const cluster = spawnHordeCluster(spawnCtx, px, py, rng, spawned);
+        spawned += cluster.length;
+      } else {
+        spawnZombie(spawnCtx, variant, px, py, spawned);
+        spawned++;
+      }
     }
   }
 

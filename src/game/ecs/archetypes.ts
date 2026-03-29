@@ -2,9 +2,20 @@ import type { With } from "miniplex";
 import { world } from "./world";
 import type { Entity } from "./entity";
 import type { ObjectCategory } from "@/types/procgen";
-import type { ZombieType } from "./components";
+import type { ZombieType, ZombieVariant } from "./components";
 import { createEmptyInventory } from "@/game/systems/inventory-utils";
 import { SHAMBLER_STATS, SHAMBLER_HEALTH } from "@/game/systems/zombie-ai-constants";
+
+// ---------------------------------------------------------------------------
+// Sprite key mapping — variant → render key for visual differentiation
+// ---------------------------------------------------------------------------
+
+const ZOMBIE_SPRITE_KEYS: Readonly<Record<ZombieVariant, string>> = {
+  shambler: "zombie",
+  runner: "zombie_runner",
+  brute: "zombie_brute",
+  horde: "zombie_horde",
+};
 
 // ---------------------------------------------------------------------------
 // Archetype types — narrowed Entity types with required component sets.
@@ -91,7 +102,7 @@ export function createZombieEntity(
   return world.add({
     position: { x, y },
     velocity: { vx: 0, vy: 0 },
-    renderable: { spriteKey: "zombie" },
+    renderable: { spriteKey: ZOMBIE_SPRITE_KEYS[stats.variant] ?? "zombie" },
     physicsBody: { bodyId },
     health: { current: hp, max: hp },
     aiState: {

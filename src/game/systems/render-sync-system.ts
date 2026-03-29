@@ -12,10 +12,13 @@ import type { BarricadeSnapEvent } from "@/game/events/event-bus";
 
 /** Colour map for sprite keys (temporary until real sprites exist). */
 const SPRITE_COLOURS: Record<string, number> = {
-  player: 0x4ade80, // green
-  zombie: 0xef4444, // red
-  barricade: 0x94a3b8, // slate
-  bullet: 0xfacc15, // yellow
+  player: 0x4ade80,       // green
+  zombie: 0xef4444,       // red (shambler)
+  zombie_runner: 0xf97316, // orange
+  zombie_brute: 0x7c3aed, // purple
+  zombie_horde: 0xa3e635, // lime green
+  barricade: 0x94a3b8,    // slate
+  bullet: 0xfacc15,       // yellow
 };
 
 const FALLBACK_COLOUR = 0xffffff;
@@ -73,8 +76,17 @@ function spriteColour(key: string): number {
 const OBJECT_SIZE = 16;
 const IMMOVABLE_OBJECT_SIZE = 32;
 
+/** Visual sizes per zombie variant sprite key. */
+const ZOMBIE_VISUAL_SIZES: Record<string, number> = {
+  zombie: 20,        // shambler
+  zombie_runner: 18,  // slightly smaller
+  zombie_brute: 28,   // visually larger
+  zombie_horde: 12,   // small
+};
+
 function getVisualSize(key: string): number {
   if (key === "bullet") return 6;
+  if (ZOMBIE_VISUAL_SIZES[key] !== undefined) return ZOMBIE_VISUAL_SIZES[key];
   const def = getObjectDef(key);
   if (def) return def.immovable ? IMMOVABLE_OBJECT_SIZE : OBJECT_SIZE;
   return PLAYER_SIZE;
