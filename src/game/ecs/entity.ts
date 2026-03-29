@@ -8,6 +8,7 @@ import type {
   Inventory,
   Interactable,
   ObjectProperties,
+  Barricade,
 } from "./components";
 
 /**
@@ -31,4 +32,5 @@ export interface Entity {
   inventory?: Inventory;
   interactable?: Interactable;
   objectProperties?: ObjectProperties;
+  barricade?: Barricade;
 }
