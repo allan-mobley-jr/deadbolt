@@ -4,9 +4,10 @@ import type { SceneContext } from "./scene-context";
 import { playerEntities, renderableEntities, inventoryEntities, barricadeEntities, combatPlayerEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
 import { getObjectDef } from "@/game/procgen/object-defs";
-import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent, FireDamageEvent } from "@/game/events/event-bus";
+import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent, FireDamageEvent, ElectricityDamageEvent } from "@/game/events/event-bus";
 import { COMBAT } from "./combat-constants";
 import { FIRE } from "./fire-constants";
+import { ELECTRICITY } from "./electricity-constants";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -82,6 +83,9 @@ const DAMAGE_TEXT_DRIFT = 30;
 /** Fire damage number colour (orange to distinguish from melee red). */
 const FIRE_DAMAGE_TEXT_COLOUR = "#ff6b00";
 
+/** Electricity damage number colour (blue to distinguish from fire/melee). */
+const ELECTRICITY_DAMAGE_TEXT_COLOUR = "#4488ff";
+
 /** How long the zombie death flash lasts (seconds). */
 const DEATH_FLASH_DURATION = 0.12;
 
@@ -147,6 +151,22 @@ function blendWithFireTint(baseColor: number, elapsed: number): number {
   const r = Math.round(br + (fr - br) * pulse);
   const g = Math.round(bg + (fg - bg) * pulse);
   const b = Math.round(bb + (fb - bb) * pulse);
+  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+}
+
+/** Blend a base colour toward the electric tint based on a pulse factor (0-1). */
+function blendWithElectricTint(baseColor: number, elapsed: number): number {
+  const pulse =
+    0.5 + 0.5 * Math.sin(elapsed * ELECTRICITY.ELECTRIFIED_TINT_PULSE_RATE * Math.PI * 2);
+  const br = (baseColor >> 16) & 0xff;
+  const bg = (baseColor >> 8) & 0xff;
+  const bb = baseColor & 0xff;
+  const er = (ELECTRICITY.ELECTRIFIED_TINT_COLOR >> 16) & 0xff;
+  const eg = (ELECTRICITY.ELECTRIFIED_TINT_COLOR >> 8) & 0xff;
+  const eb = ELECTRICITY.ELECTRIFIED_TINT_COLOR & 0xff;
+  const r = Math.round(br + (er - br) * pulse);
+  const g = Math.round(bg + (eg - bg) * pulse);
+  const b = Math.round(bb + (eb - bb) * pulse);
   return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 }
 
@@ -263,6 +283,11 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     spawnDamageText(e.position.x, e.position.y, e.damage, FIRE_DAMAGE_TEXT_COLOUR);
   });
 
+  // Listen for electricity-damage events (blue floating numbers)
+  ctx.eventBus.on("electricity-damage", (e: ElectricityDamageEvent) => {
+    spawnDamageText(e.position.x, e.position.y, e.damage, ELECTRICITY_DAMAGE_TEXT_COLOUR);
+  });
+
   /**
    * Zombie death flash tracking.
    * Maps entity reference → remaining flash time.
@@ -326,11 +351,16 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       sprite.x = prev.x + (curr.x - prev.x) * alpha;
       sprite.y = prev.y + (curr.y - prev.y) * alpha;
 
-      // Burning tint: pulsing orange-red overlay on non-barricade burning entities.
+      // Material state tints on non-barricade entities.
       // Barricade tints are handled separately in the barricade health section.
+      // Burning takes visual priority over electrified.
       if (entity.material?.state === "burning" && !entity.barricade) {
         sprite.setFillStyle(
           blendWithFireTint(spriteColour(entity.renderable.spriteKey), totalElapsed),
+        );
+      } else if (entity.material?.state === "electrified" && !entity.barricade) {
+        sprite.setFillStyle(
+          blendWithElectricTint(spriteColour(entity.renderable.spriteKey), totalElapsed),
         );
       }
     }
@@ -436,6 +466,8 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
           const baseTint = colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER);
           if (entity.material?.state === "burning") {
             sprite.setFillStyle(blendWithFireTint(baseTint, totalElapsed));
+          } else if (entity.material?.state === "electrified") {
+            sprite.setFillStyle(blendWithElectricTint(baseTint, totalElapsed));
           } else {
             sprite.setFillStyle(baseTint);
           }
