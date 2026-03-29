@@ -15,6 +15,7 @@
 
 import type { GameEventBus, GameEventMap } from "@/game/events/event-bus";
 import { safeEmit } from "@/game/events/event-bus";
+import { getRunStats } from "@/game/systems/stats-system";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
@@ -74,6 +75,10 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     });
   });
 
+  onBus("run-started", (e) => {
+    useGameStore.getState().setSeed(e.seed);
+  });
+
   onBus("player-health-changed", (e) => {
     usePlayerStore.getState().updateHealth(e.current, e.max);
   });
@@ -108,6 +113,12 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
   });
 
   onBus("player-died", () => {
+    // Snapshot final run stats from the game-side stats system
+    const stats = getRunStats();
+    useGameStore
+      .getState()
+      .setRunStats(stats.barricadesBuilt, stats.distanceTraveled, stats.objectsUsed);
+
     usePlayerStore.getState().setDead();
     useUIStore.getState().openMenu("death");
   });
@@ -135,6 +146,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
   });
 
   onBus("barricade-placed", () => {
+    useGameStore.getState().incrementBarricadesBuilt();
     useUIStore.getState().addNotification({
       id: `barricade-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       message: "Barricade placed",
