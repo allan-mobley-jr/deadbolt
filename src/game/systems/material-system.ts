@@ -19,8 +19,19 @@ import type { With } from "miniplex";
 import type { SceneContext } from "./scene-context";
 import type { SystemFn } from "./system-runner";
 import type { Entity } from "@/game/ecs/entity";
+import type { MaterialState } from "@/game/ecs/components";
 import { materialEntities, materialPhysicsEntities } from "@/game/ecs/queries";
 import { MATERIAL } from "./material-constants";
+
+// ---------------------------------------------------------------------------
+// Narrowed entity types used throughout this module
+// ---------------------------------------------------------------------------
+
+/** Material entity with a position (spatial queries). */
+type MaterialEntity = With<Entity, "position" | "material">;
+
+/** Material entity with a position and physics body (adjacency queries). */
+type PhysicsMaterialEntity = With<Entity, "position" | "material" | "physicsBody">;
 
 // ---------------------------------------------------------------------------
 // Query result types
@@ -28,7 +39,7 @@ import { MATERIAL } from "./material-constants";
 
 /** A material entity paired with its distance from a query point. */
 export interface MaterialQueryResult {
-  entity: With<Entity, "position" | "material">;
+  entity: MaterialEntity;
   /** Euclidean distance in pixels from the query point. */
   distance: number;
 }
@@ -66,7 +77,7 @@ export class MaterialRegistry {
    * Reverse lookup: bodyId → entity for material entities with physics bodies.
    * Rebuilt each tick from the materialPhysicsEntities query.
    */
-  private bodyToEntity = new Map<number, With<Entity, "position" | "material" | "physicsBody">>();
+  private bodyToEntity = new Map<number, PhysicsMaterialEntity>();
 
   // -----------------------------------------------------------------------
   // Internal — called by the system each tick
@@ -101,20 +112,19 @@ export class MaterialRegistry {
         continue;
       }
 
-      let setA = this.adjacency.get(idA);
-      if (!setA) {
-        setA = new Set();
-        this.adjacency.set(idA, setA);
-      }
-      setA.add(idB);
-
-      let setB = this.adjacency.get(idB);
-      if (!setB) {
-        setB = new Set();
-        this.adjacency.set(idB, setB);
-      }
-      setB.add(idA);
+      this.addAdjacencyEdge(idA, idB);
+      this.addAdjacencyEdge(idB, idA);
     }
+  }
+
+  /** Add a directed adjacency edge from one body to another. */
+  private addAdjacencyEdge(from: number, to: number): void {
+    let neighbors = this.adjacency.get(from);
+    if (!neighbors) {
+      neighbors = new Set();
+      this.adjacency.set(from, neighbors);
+    }
+    neighbors.add(to);
   }
 
   // -----------------------------------------------------------------------
@@ -125,11 +135,11 @@ export class MaterialRegistry {
    * Get all material entities physically touching the entity with the
    * given body ID (via Matter.js collision pairs).
    */
-  getAdjacentEntities(bodyId: number): With<Entity, "position" | "material" | "physicsBody">[] {
+  getAdjacentEntities(bodyId: number): PhysicsMaterialEntity[] {
     const neighbors = this.adjacency.get(bodyId);
     if (!neighbors) return [];
 
-    const result: With<Entity, "position" | "material" | "physicsBody">[] = [];
+    const result: PhysicsMaterialEntity[] = [];
     for (const neighborId of neighbors) {
       const entity = this.bodyToEntity.get(neighborId);
       if (entity) result.push(entity);
@@ -141,7 +151,7 @@ export class MaterialRegistry {
    * Get adjacent entities filtered by conductivity threshold.
    * Returns only neighbors whose conductivity meets the conductive threshold.
    */
-  getConductiveNeighbors(bodyId: number): With<Entity, "position" | "material" | "physicsBody">[] {
+  getConductiveNeighbors(bodyId: number): PhysicsMaterialEntity[] {
     return this.getAdjacentEntities(bodyId).filter(
       (e) => e.material.conductivity >= MATERIAL.CONDUCTIVITY_THRESHOLD,
     );
@@ -162,7 +172,7 @@ export class MaterialRegistry {
     x: number,
     y: number,
     radius: number,
-    filter?: (entity: With<Entity, "position" | "material">) => boolean,
+    filter?: (entity: MaterialEntity) => boolean,
   ): MaterialQueryResult[] {
     const radiusSq = radius * radius;
     const results: MaterialQueryResult[] = [];
@@ -224,29 +234,30 @@ export class MaterialRegistry {
   // State queries
   // -----------------------------------------------------------------------
 
-  /** Get all material entities currently in the 'burning' state. */
-  getBurningEntities(): With<Entity, "position" | "material">[] {
-    const results: With<Entity, "position" | "material">[] = [];
+  /** Get all material entities currently in the given state. */
+  private getEntitiesByState(state: MaterialState): MaterialEntity[] {
+    const results: MaterialEntity[] = [];
     for (const entity of materialEntities) {
-      if (entity.material.state === "burning") results.push(entity);
+      if (entity.material.state === state) results.push(entity);
     }
     return results;
   }
 
+  /** Get all material entities currently in the 'burning' state. */
+  getBurningEntities(): MaterialEntity[] {
+    return this.getEntitiesByState("burning");
+  }
+
   /** Get all material entities currently in the 'electrified' state. */
-  getElectrifiedEntities(): With<Entity, "position" | "material">[] {
-    const results: With<Entity, "position" | "material">[] = [];
-    for (const entity of materialEntities) {
-      if (entity.material.state === "electrified") results.push(entity);
-    }
-    return results;
+  getElectrifiedEntities(): MaterialEntity[] {
+    return this.getEntitiesByState("electrified");
   }
 
   /**
    * Resolve a body ID to its material entity (if one exists).
    * Useful for collision callbacks that only have body references.
    */
-  getEntityByBodyId(bodyId: number): With<Entity, "position" | "material" | "physicsBody"> | undefined {
+  getEntityByBodyId(bodyId: number): PhysicsMaterialEntity | undefined {
     return this.bodyToEntity.get(bodyId);
   }
 }
