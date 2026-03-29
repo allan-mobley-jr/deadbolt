@@ -49,23 +49,33 @@ export function DeathScreen() {
   const seed = useGameStore((s) => s.seed);
 
   const handleTryAgain = useCallback(() => {
-    // Reset all stores (runKey preserved by useGameStore.reset)
-    useUIStore.getState().reset();
-    useGameStore.getState().reset();
-    usePlayerStore.getState().reset();
+    try {
+      // Reset all stores (runKey preserved by useGameStore.reset)
+      useUIStore.getState().reset();
+      useGameStore.getState().reset();
+      usePlayerStore.getState().reset();
 
-    // Increment runKey to trigger GameContainer remount → new game instance
-    useGameStore.getState().incrementRunKey();
+      // Increment runKey to trigger GameContainer remount → new game instance
+      useGameStore.getState().incrementRunKey();
+    } catch (err) {
+      console.error("[DeathScreen] Failed to restart game:", err);
+      window.location.reload();
+    }
   }, []);
 
   const handleReturnToMenu = useCallback(() => {
-    // Reset all stores
-    useUIStore.getState().reset();
-    useGameStore.getState().reset();
-    usePlayerStore.getState().reset();
+    try {
+      // Reset all stores
+      useUIStore.getState().reset();
+      useGameStore.getState().reset();
+      usePlayerStore.getState().reset();
 
-    // Navigate away — GameContainer unmount handles Phaser destruction
-    router.push("/");
+      // Navigate away — GameContainer unmount handles Phaser destruction
+      router.push("/");
+    } catch (err) {
+      console.error("[DeathScreen] Failed to return to menu:", err);
+      window.location.href = "/";
+    }
   }, [router]);
 
   if (activeMenu !== "death") return null;
