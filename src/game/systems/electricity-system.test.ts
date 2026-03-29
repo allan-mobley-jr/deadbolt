@@ -365,6 +365,71 @@ describe("ElectricitySystem — chain detection", () => {
     expect(wire.material.state).toBe("inert");
   });
 
+  it("cyclic adjacency graph does not cause infinite loop", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wireA = spawnWireSpool(ctx, 116, 100);
+    const wireB = spawnWireSpool(ctx, 132, 100);
+    const sheet = spawnMetalSheet(ctx, 124, 116);
+
+    // Form a cycle: battery ↔ wireA ↔ wireB ↔ sheet ↔ wireA
+    const pairs = [
+      pair(battery, wireA),
+      pair(wireA, wireB),
+      pair(wireB, sheet),
+      pair(sheet, wireA), // closes the cycle
+    ];
+    tickN(ctx, system, pairs, ELECTRICITY.CHAIN_RECALC_INTERVAL);
+
+    // All 4 entities should be electrified (BFS visited set prevents infinite loop)
+    expect(battery.material.state).toBe("electrified");
+    expect(wireA.material.state).toBe("electrified");
+    expect(wireB.material.state).toBe("electrified");
+    expect(sheet.material.state).toBe("electrified");
+    expect(battery.battery!.active).toBe(true);
+  });
+
+  it("emits material-state-changed with newState inert when chain breaks", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+
+    // Form chain first
+    const pairs = [pair(battery, wire)];
+    tickN(ctx, system, pairs, ELECTRICITY.CHAIN_RECALC_INTERVAL);
+    expect(battery.material.state).toBe("electrified");
+    expect(wire.material.state).toBe("electrified");
+
+    // Start collecting events AFTER chain formation
+    const stateChanges = collectEvents<{
+      objectType: string;
+      previousState: string;
+      newState: string;
+    }>(ctx.eventBus, "material-state-changed");
+
+    // Break contact — empty pairs
+    tickN(ctx, system, [], ELECTRICITY.CHAIN_RECALC_INTERVAL);
+
+    const inertEvents = stateChanges.filter((e) => e.newState === "inert");
+    expect(inertEvents.length).toBeGreaterThanOrEqual(2);
+    expect(inertEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          previousState: "electrified",
+          newState: "inert",
+          objectType: "car_battery",
+        }),
+        expect.objectContaining({
+          previousState: "electrified",
+          newState: "inert",
+          objectType: "wire_spool",
+        }),
+      ]),
+    );
+  });
+
   it("burning entity breaks the chain", () => {
     const ctx = createMockContext();
     const system = createElectricitySystem(ctx);
@@ -477,6 +542,37 @@ describe("ElectricitySystem — battery drain", () => {
     expect(depletedEvents.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("drain rate follows exact formula: BASE + connectedCount * PER_OBJECT", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+    const sheet = spawnMetalSheet(ctx, 132, 100);
+    const shelving = spawnMetalShelving(ctx, 148, 100);
+
+    const pairs = [
+      pair(battery, wire),
+      pair(wire, sheet),
+      pair(sheet, shelving),
+    ];
+
+    // Chain has 4 entities total → connectedCount = 3
+    const totalTicks = 60;
+    tickN(ctx, system, pairs, totalTicks);
+
+    // Chain forms when chainTickCounter reaches CHAIN_RECALC_INTERVAL
+    // (tick 6). Drain runs in the same tick the chain forms AND every
+    // subsequent tick. So ticks 1-5 have no drain (5 ticks), ticks
+    // 6-60 drain (55 ticks).
+    const drainingTicks = totalTicks - (ELECTRICITY.CHAIN_RECALC_INTERVAL - 1);
+    const expectedDrainRate =
+      ELECTRICITY.BASE_DRAIN_RATE + 3 * ELECTRICITY.PER_OBJECT_DRAIN_RATE;
+    const expectedDrain = expectedDrainRate * (drainingTicks * DT);
+    const expectedCharge = ELECTRICITY.INITIAL_CHARGE - expectedDrain;
+
+    expect(battery.battery!.charge).toBeCloseTo(expectedCharge, 2);
+  });
+
   it("charge never goes negative", () => {
     const ctx = createMockContext();
     const system = createElectricitySystem(ctx);
@@ -573,6 +669,145 @@ describe("ElectricitySystem — contact damage", () => {
     tickN(ctx, system, pairs, ticksNeeded + 1);
 
     expect(player.health.current).toBeLessThan(initialHP);
+  });
+
+  it("staggers zombie that is in attacking state", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+    const zombie = spawnZombie(ctx, 116, 100);
+
+    // Set zombie to attacking (not the usual pathing)
+    zombie.aiState.state = "attacking";
+
+    const pairs = [pair(battery, wire)];
+    const ticksNeeded = Math.max(
+      ELECTRICITY.CHAIN_RECALC_INTERVAL,
+      ELECTRICITY.DAMAGE_TICK_INTERVAL,
+    );
+    tickN(ctx, system, pairs, ticksNeeded + 1);
+
+    expect(zombie.aiState.state).toBe("staggered");
+    expect(zombie.aiState.staggerTimeRemaining).toBeGreaterThan(0);
+    expect(zombie.velocity.vx).toBe(0);
+    expect(zombie.velocity.vy).toBe(0);
+  });
+
+  it("zombie health does not go negative from electricity damage", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+    const zombie = spawnZombie(ctx, 116, 100);
+
+    // Set zombie to near-death
+    zombie.health.current = 0.001;
+
+    const pairs = [pair(battery, wire)];
+    const ticksNeeded = Math.max(
+      ELECTRICITY.CHAIN_RECALC_INTERVAL,
+      ELECTRICITY.DAMAGE_TICK_INTERVAL,
+    );
+    tickN(ctx, system, pairs, ticksNeeded + 1);
+
+    expect(zombie.health.current).toBe(0);
+  });
+
+  it("player health does not go negative from electricity damage", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+    const player = spawnPlayer(ctx, 116, 100);
+
+    // Set player to near-death
+    player.health.current = 0.001;
+
+    const pairs = [pair(battery, wire)];
+    const ticksNeeded = Math.max(
+      ELECTRICITY.CHAIN_RECALC_INTERVAL,
+      ELECTRICITY.DAMAGE_TICK_INTERVAL,
+    );
+    tickN(ctx, system, pairs, ticksNeeded + 1);
+
+    expect(player.health.current).toBe(0);
+  });
+
+  it("higher conductivity object deals more damage than lower conductivity", () => {
+    // Run two isolated scenarios sequentially (resetWorld between them)
+    // to prevent cross-context interference from the shared ECS world.
+    // Place zombie near the conductive object but far from the battery
+    // (>32px) so it only receives damage from one source.
+
+    // --- Scenario 1: wire_spool (conductivity 1.0) ---
+    const ctx1 = createMockContext();
+    const system1 = createElectricitySystem(ctx1);
+    const battery1 = spawnCarBattery(ctx1, 100, 100);
+    const wire1 = spawnWireSpool(ctx1, 200, 200);
+    const zombie1 = spawnZombie(ctx1, 200, 200);
+    const initialHP1 = zombie1.health.current;
+
+    const ticksNeeded = Math.max(
+      ELECTRICITY.CHAIN_RECALC_INTERVAL,
+      ELECTRICITY.DAMAGE_TICK_INTERVAL,
+    );
+    tickN(ctx1, system1, [pair(battery1, wire1)], ticksNeeded + 1);
+    const damage1 = initialHP1 - zombie1.health.current;
+
+    // Reset world before second scenario
+    resetWorld();
+
+    // --- Scenario 2: metal_sheet (conductivity 0.6) ---
+    const ctx2 = createMockContext();
+    const system2 = createElectricitySystem(ctx2);
+    const battery2 = spawnCarBattery(ctx2, 100, 100);
+    const sheet2 = spawnMetalSheet(ctx2, 200, 200);
+    const zombie2 = spawnZombie(ctx2, 200, 200);
+    const initialHP2 = zombie2.health.current;
+
+    tickN(ctx2, system2, [pair(battery2, sheet2)], ticksNeeded + 1);
+    const damage2 = initialHP2 - zombie2.health.current;
+
+    // Both should take some damage
+    expect(damage1).toBeGreaterThan(0);
+    expect(damage2).toBeGreaterThan(0);
+
+    // Higher conductivity (wire_spool 1.0) should deal more damage
+    expect(damage1).toBeGreaterThan(damage2);
+  });
+
+  it("damages multiple zombies in contact with electrified objects", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+
+    // Three zombies all near the wire (within contact radius)
+    const zombie1 = spawnZombie(ctx, 116, 100);
+    const zombie2 = spawnZombie(ctx, 118, 102);
+    const zombie3 = spawnZombie(ctx, 114, 98);
+
+    zombie1.aiState.state = "pathing";
+    zombie2.aiState.state = "pathing";
+    zombie3.aiState.state = "pathing";
+
+    const pairs = [pair(battery, wire)];
+    const ticksNeeded = Math.max(
+      ELECTRICITY.CHAIN_RECALC_INTERVAL,
+      ELECTRICITY.DAMAGE_TICK_INTERVAL,
+    );
+    tickN(ctx, system, pairs, ticksNeeded + 1);
+
+    // All three should be damaged
+    expect(zombie1.health.current).toBeLessThan(zombie1.health.max);
+    expect(zombie2.health.current).toBeLessThan(zombie2.health.max);
+    expect(zombie3.health.current).toBeLessThan(zombie3.health.max);
+
+    // All three should be staggered
+    expect(zombie1.aiState.state).toBe("staggered");
+    expect(zombie2.aiState.state).toBe("staggered");
+    expect(zombie3.aiState.state).toBe("staggered");
   });
 
   it("respects player i-frames (no damage during invulnerability)", () => {
@@ -695,6 +930,30 @@ describe("ElectricitySystem — edge cases", () => {
     expect(() => {
       tickN(ctx, system, [], ELECTRICITY.CHAIN_RECALC_INTERVAL);
     }).not.toThrow();
+  });
+
+  it("handles battery entity removed mid-operation gracefully", () => {
+    const ctx = createMockContext();
+    const system = createElectricitySystem(ctx);
+    const battery = spawnCarBattery(ctx, 100, 100);
+    const wire = spawnWireSpool(ctx, 116, 100);
+
+    // Form chain first
+    const pairs = [pair(battery, wire)];
+    tickN(ctx, system, pairs, ELECTRICITY.CHAIN_RECALC_INTERVAL);
+    expect(battery.material.state).toBe("electrified");
+    expect(wire.material.state).toBe("electrified");
+
+    // Remove the battery itself (not just a chain member)
+    world.remove(battery);
+
+    // System should not crash when the battery is gone
+    expect(() => {
+      tickN(ctx, system, [], ELECTRICITY.CHAIN_RECALC_INTERVAL * 2);
+    }).not.toThrow();
+
+    // Wire should revert to inert since the battery is gone
+    expect(wire.material.state).toBe("inert");
   });
 
   it("shared entity between two battery chains stays electrified", () => {
