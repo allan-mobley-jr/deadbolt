@@ -17,14 +17,29 @@
  * NO React imports — this is pure TypeScript.
  */
 
+import type { With } from "miniplex";
 import type { SceneContext } from "./scene-context";
 import type { SystemFn } from "./system-runner";
 import type { Entity } from "@/game/ecs/entity";
+import type { AIState, ZombieType } from "@/game/ecs/components";
+import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
+import type { TileCoord } from "@/types/procgen";
 import { world } from "@/game/ecs/world";
 import { zombieEntities, barricadeEntities, playerEntities } from "@/game/ecs/queries";
 import { safeEmit } from "@/game/events/event-bus";
 import { TILE_SIZE } from "@/game/procgen/constants";
 import { ZOMBIE_AI } from "./zombie-ai-constants";
+
+// ---------------------------------------------------------------------------
+// Local type alias matching the zombieEntities query result.
+// Narrower than the full ZombieEntity archetype (no `renderable` required)
+// because the AI system only touches movement, health, and AI components.
+// ---------------------------------------------------------------------------
+
+type ZombieAIEntity = With<
+  Entity,
+  "position" | "velocity" | "physicsBody" | "health" | "aiState" | "zombieType"
+>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,9 +110,7 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
     toRemove.length = 0;
 
     for (const entity of zombieEntities) {
-      const ai = entity.aiState;
-      const stats = entity.zombieType;
-      const health = entity.health;
+      const { aiState: ai, zombieType: stats, health } = entity;
 
       // --- Death check (any state) ---
       if (health.current <= 0) {
@@ -123,18 +136,18 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
           // zombies desynchronise their subsequent path recalculations.
           ai.state = "pathing";
           computePath(entity, ai, pathfindingGrid, safehouseCenter);
-          // Fall through — run pathing logic on the same tick so the zombie
+          // Fall through -- run pathing logic on the same tick so the zombie
           // begins moving immediately rather than standing idle for one tick.
         case "pathing":
-          runPathingState(entity, ai, stats, dt, pathfindingGrid, safehouseCenter, player);
+          runPathingState(entity, dt, pathfindingGrid, safehouseCenter, player);
           break;
 
         case "attacking":
-          runAttackingState(entity, ai, stats, dt, ctx, player);
+          runAttackingState(entity, dt, ctx, player);
           break;
 
         case "staggered":
-          runStaggeredState(entity, ai, stats, dt);
+          runStaggeredState(entity, dt);
           break;
 
         case "dead":
@@ -167,14 +180,14 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
 // ---------------------------------------------------------------------------
 
 function runPathingState(
-  entity: Entity & { position: NonNullable<Entity["position"]>; velocity: NonNullable<Entity["velocity"]>; aiState: NonNullable<Entity["aiState"]>; zombieType: NonNullable<Entity["zombieType"]> },
-  ai: NonNullable<Entity["aiState"]>,
-  stats: NonNullable<Entity["zombieType"]>,
+  entity: ZombieAIEntity,
   _dt: number,
-  pathfindingGrid: NonNullable<SceneContext["pathfindingGrid"]>,
-  safehouseCenter: NonNullable<SceneContext["safehouseCenter"]>,
+  pathfindingGrid: PathfindingGrid,
+  safehouseCenter: TileCoord,
   player: Entity | undefined,
 ): void {
+  const { aiState: ai, zombieType: stats } = entity;
+
   // --- Path recalculation (staggered) ---
   ai.ticksSinceLastPathCalc++;
 
@@ -195,22 +208,18 @@ function runPathingState(
     const threshSq = ZOMBIE_AI.WAYPOINT_THRESHOLD * ZOMBIE_AI.WAYPOINT_THRESHOLD;
 
     if (dSq <= threshSq) {
-      // Reached waypoint, advance
       ai.pathIndex++;
     } else {
-      // Move toward waypoint
       const dist = Math.sqrt(dSq);
       entity.velocity.vx = (dx / dist) * stats.moveSpeed;
       entity.velocity.vy = (dy / dist) * stats.moveSpeed;
     }
 
-    // Check if we've exhausted the path
     if (ai.pathIndex >= ai.path.length) {
       entity.velocity.vx = 0;
       entity.velocity.vy = 0;
     }
   } else {
-    // No path — stand still
     entity.velocity.vx = 0;
     entity.velocity.vy = 0;
   }
@@ -227,8 +236,7 @@ function runPathingState(
     if (d <= bDetectSq) {
       ai.state = "attacking";
       ai.attackTargetBodyId = barricade.physicsBody.bodyId;
-      ai.attackCooldownRemaining = 0; // First hit is immediate
-      // Move toward barricade instead of stopping
+      ai.attackCooldownRemaining = 0;
       break;
     }
   }
@@ -248,22 +256,21 @@ function runPathingState(
 }
 
 function runAttackingState(
-  entity: Entity & { position: NonNullable<Entity["position"]>; velocity: NonNullable<Entity["velocity"]>; aiState: NonNullable<Entity["aiState"]>; zombieType: NonNullable<Entity["zombieType"]>; health: NonNullable<Entity["health"]> },
-  ai: NonNullable<Entity["aiState"]>,
-  stats: NonNullable<Entity["zombieType"]>,
+  entity: ZombieAIEntity,
   dt: number,
   ctx: SceneContext,
   player: Entity | undefined,
 ): void {
+  const { aiState: ai, zombieType: stats } = entity;
+
   // Resolve target
   const targetBodyId = ai.attackTargetBodyId;
   if (targetBodyId === null) {
-    // No target — go back to pathing
     transitionToPathing(ai, stats);
     return;
   }
 
-  // Find the target entity — check barricades first, then player
+  // Find the target entity -- check barricades first, then player
   let targetEntity: Entity | undefined;
   let isBarricade = false;
 
@@ -279,13 +286,13 @@ function runAttackingState(
     targetEntity = player;
   }
 
-  // Target gone (barricade destroyed, etc.) — return to pathing
+  // Target gone (barricade destroyed, etc.) -- return to pathing
   if (!targetEntity?.position) {
     transitionToPathing(ai, stats);
     return;
   }
 
-  // Check range — if out of range, go back to pathing
+  // Check range -- if significantly out of range, return to pathing
   const range = isBarricade ? ZOMBIE_AI.BARRICADE_DETECTION_RANGE : ZOMBIE_AI.ATTACK_RANGE;
   const rangeSq = range * range;
   const d = distSq(
@@ -294,13 +301,13 @@ function runAttackingState(
   );
 
   if (d > rangeSq * 1.5) {
-    // Significantly out of range — return to pathing
     transitionToPathing(ai, stats);
     return;
   }
 
   // Move toward target at reduced speed to maintain contact pressure
-  if (d > ZOMBIE_AI.ATTACK_RANGE * ZOMBIE_AI.ATTACK_RANGE) {
+  const atkRangeSq = ZOMBIE_AI.ATTACK_RANGE * ZOMBIE_AI.ATTACK_RANGE;
+  if (d > atkRangeSq) {
     const dx = targetEntity.position.x - entity.position.x;
     const dy = targetEntity.position.y - entity.position.y;
     const dist = Math.sqrt(d);
@@ -314,11 +321,9 @@ function runAttackingState(
   // Attack cooldown
   ai.attackCooldownRemaining -= dt;
   if (ai.attackCooldownRemaining <= 0) {
-    // Deal damage
     if (targetEntity.health) {
       targetEntity.health.current = Math.max(0, targetEntity.health.current - stats.attackDamage);
 
-      // Emit player health event
       if (!isBarricade && targetEntity.playerControlled) {
         safeEmit(ctx.eventBus, "player-health-changed", {
           current: targetEntity.health.current,
@@ -326,7 +331,6 @@ function runAttackingState(
           delta: -stats.attackDamage,
         });
 
-        // Check for player death
         if (targetEntity.health.current <= 0) {
           safeEmit(ctx.eventBus, "player-died", {
             dayNumber: ctx.clockState.dayNumber,
@@ -342,30 +346,23 @@ function runAttackingState(
   }
 }
 
-function runStaggeredState(
-  entity: Entity & { velocity: NonNullable<Entity["velocity"]>; aiState: NonNullable<Entity["aiState"]> },
-  ai: NonNullable<Entity["aiState"]>,
-  stats: NonNullable<Entity["zombieType"]>,
-  dt: number,
-): void {
+function runStaggeredState(entity: ZombieAIEntity, dt: number): void {
   entity.velocity.vx = 0;
   entity.velocity.vy = 0;
 
-  ai.staggerTimeRemaining -= dt;
-  if (ai.staggerTimeRemaining <= 0) {
-    transitionToPathing(ai, stats);
+  entity.aiState.staggerTimeRemaining -= dt;
+  if (entity.aiState.staggerTimeRemaining <= 0) {
+    transitionToPathing(entity.aiState, entity.zombieType);
   }
 }
 
 function handleDeath(
-  entity: Entity & { position: NonNullable<Entity["position"]> },
+  entity: ZombieAIEntity,
   ctx: SceneContext,
   toRemove: Entity[],
 ): void {
-  if (entity.velocity) {
-    entity.velocity.vx = 0;
-    entity.velocity.vy = 0;
-  }
+  entity.velocity.vx = 0;
+  entity.velocity.vy = 0;
 
   totalKills++;
 
@@ -382,10 +379,7 @@ function handleDeath(
 // ---------------------------------------------------------------------------
 
 /** Transition to pathing state and force an immediate path recalculation. */
-function transitionToPathing(
-  ai: NonNullable<Entity["aiState"]>,
-  stats: NonNullable<Entity["zombieType"]>,
-): void {
+function transitionToPathing(ai: AIState, stats: ZombieType): void {
   ai.state = "pathing";
   ai.attackTargetBodyId = null;
   ai.path = [];
@@ -404,10 +398,10 @@ function transitionToPathing(
  * transition (initial path) and from the pathing handler (periodic recalc).
  */
 function computePath(
-  entity: Entity & { position: NonNullable<Entity["position"]> },
-  ai: NonNullable<Entity["aiState"]>,
-  pathfindingGrid: NonNullable<SceneContext["pathfindingGrid"]>,
-  safehouseCenter: NonNullable<SceneContext["safehouseCenter"]>,
+  entity: ZombieAIEntity,
+  ai: AIState,
+  pathfindingGrid: PathfindingGrid,
+  safehouseCenter: TileCoord,
 ): void {
   const startTileX = pixelToTile(entity.position.x);
   const startTileY = pixelToTile(entity.position.y);
@@ -455,7 +449,7 @@ function computePath(
  * Returns the first walkable tile found, or null if none within radius 5.
  */
 function findNearestWalkable(
-  grid: NonNullable<SceneContext["pathfindingGrid"]>,
+  grid: PathfindingGrid,
   cx: number,
   cy: number,
 ): { x: number; y: number } | null {
