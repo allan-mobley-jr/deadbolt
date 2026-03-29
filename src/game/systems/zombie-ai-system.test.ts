@@ -4,7 +4,6 @@ import { createInputState, createClockState } from "./scene-context";
 import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { createGameEventBus } from "@/game/events/event-bus";
-import type { GameEventBus } from "@/game/events/event-bus";
 import { world, resetWorld } from "@/game/ecs/world";
 import {
   createZombieEntity,
@@ -12,7 +11,7 @@ import {
   createBarricadeEntity,
 } from "@/game/ecs/archetypes";
 import { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
-import { SHAMBLER_STATS, ZOMBIE_AI } from "./zombie-ai-constants";
+import { SHAMBLER_STATS, SHAMBLER_HEALTH, ZOMBIE_AI } from "./zombie-ai-constants";
 import { TILE_SIZE } from "@/game/procgen/constants";
 
 const DT = 1 / 60;
@@ -95,6 +94,37 @@ describe("ZombieAISystem", () => {
 
   afterEach(() => {
     resetWorld();
+  });
+
+  // -----------------------------------------------------------------------
+  // Archetype completeness
+  // -----------------------------------------------------------------------
+
+  describe("createZombieEntity archetype", () => {
+    it("returns entity with all 7 required components", () => {
+      const zombie = createZombieEntity(100, 100, 1);
+
+      expect(zombie.position).toBeDefined();
+      expect(zombie.velocity).toBeDefined();
+      expect(zombie.renderable).toBeDefined();
+      expect(zombie.physicsBody).toBeDefined();
+      expect(zombie.health).toBeDefined();
+      expect(zombie.aiState).toBeDefined();
+      expect(zombie.zombieType).toBeDefined();
+    });
+
+    it("initialises with correct default values", () => {
+      const zombie = createZombieEntity(50, 75, 42);
+
+      expect(zombie.position).toEqual({ x: 50, y: 75 });
+      expect(zombie.velocity).toEqual({ vx: 0, vy: 0 });
+      expect(zombie.renderable.spriteKey).toBe("zombie");
+      expect(zombie.physicsBody.bodyId).toBe(42);
+      expect(zombie.health.current).toBe(SHAMBLER_HEALTH);
+      expect(zombie.health.max).toBe(SHAMBLER_HEALTH);
+      expect(zombie.aiState.state).toBe("idle");
+      expect(zombie.zombieType.variant).toBe("shambler");
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -278,6 +308,30 @@ describe("ZombieAISystem", () => {
       );
     });
 
+    it("routes around wall obstacle through gap", () => {
+      const grid = createGridWithWall();
+      ctx = createMockContext({
+        pathfindingGrid: grid,
+        // Safehouse is below the wall — zombie must path through the gap at x=5
+        safehouseCenter: { x: 5, y: 9 },
+      });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      system(DT); // idle → pathing (computes path)
+
+      // A valid path must exist (zombie can reach safehouse through the gap)
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
+
+      // Path must NOT go through the wall (row 5 is blocked except x=5)
+      const passesWallRow = zombie.aiState.path.filter((wp) => wp.y === 5);
+      for (const wp of passesWallRow) {
+        expect(wp.x).toBe(5); // Only the gap tile is allowed
+      }
+    });
+
     it("handles unreachable safehouse gracefully", () => {
       // Create a grid where the zombie's start is isolated from everything
       const matrix: number[][] = [];
@@ -299,6 +353,7 @@ describe("ZombieAISystem", () => {
       system(DT);
 
       expect(zombie.aiState.state).toBe("pathing");
+      // Path may contain degenerate entries but zombie cannot move
       expect(zombie.velocity.vx).toBe(0);
       expect(zombie.velocity.vy).toBe(0);
     });
@@ -447,6 +502,74 @@ describe("ZombieAISystem", () => {
 
       expect(zombie.velocity.vx).toBe(0);
       expect(zombie.velocity.vy).toBe(0);
+    });
+
+    it("transitions from attacking to staggered when taking damage", () => {
+      const bPos = tileCenter(3, 3);
+      createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 200,
+      );
+
+      // Place zombie within barricade detection range
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → pathing → attacking
+      expect(zombie.aiState.state).toBe("attacking");
+
+      // Take damage while attacking
+      zombie.health.current -= 10;
+      system(DT);
+
+      expect(zombie.aiState.state).toBe("staggered");
+      expect(zombie.velocity.vx).toBe(0);
+      expect(zombie.velocity.vy).toBe(0);
+    });
+
+    it("can attack again after recovering from stagger", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 500,
+      );
+
+      // Place zombie within barricade detection range
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const zombie = createZombieEntity(zPos.x, zPos.y, 2);
+
+      system(DT); // idle → pathing → attacking
+      system(DT); // attack (first hit applies)
+      const healthAfterFirstHit = barricade.health.current;
+
+      // Stagger the zombie
+      zombie.health.current -= 10;
+      system(DT);
+      expect(zombie.aiState.state).toBe("staggered");
+
+      // Wait for stagger to expire
+      const ticksNeeded = Math.ceil(SHAMBLER_STATS.staggerDuration / DT) + 1;
+      for (let i = 0; i < ticksNeeded; i++) {
+        system(DT);
+      }
+
+      // Zombie should recover and re-enter attacking (still near barricade)
+      expect(zombie.aiState.state).toBe("attacking");
+
+      // Run enough ticks for attack cooldown to expire and damage to apply
+      const cooldownTicks = Math.ceil(SHAMBLER_STATS.attackCooldown / DT) + 1;
+      for (let i = 0; i < cooldownTicks; i++) {
+        system(DT);
+      }
+
+      // Barricade should have taken additional damage
+      expect(barricade.health.current).toBeLessThan(healthAfterFirstHit);
     });
 
     it("stagger duration matches zombie type config", () => {
@@ -688,8 +811,13 @@ describe("ZombieAISystem", () => {
       system(DT); // idle → pathing
       system(DT);
 
-      // Zombie at target — should have zero velocity or very small
+      // Zombie at target — path exhausted, no movement
       expect(zombie.aiState.state).toBe("pathing");
+      expect(zombie.aiState.pathIndex).toBeGreaterThanOrEqual(
+        zombie.aiState.path.length,
+      );
+      expect(zombie.velocity.vx).toBe(0);
+      expect(zombie.velocity.vy).toBe(0);
     });
   });
 
