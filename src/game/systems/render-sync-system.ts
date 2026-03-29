@@ -1,7 +1,7 @@
 import type Phaser from "phaser";
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
-import { playerEntities, renderableEntities } from "@/game/ecs/queries";
+import { playerEntities, renderableEntities, inventoryEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
 import { getObjectDef } from "@/game/procgen/object-defs";
 
@@ -24,6 +24,13 @@ const PLAYER_SIZE = 24;
 
 /** Length of the aiming direction indicator line. */
 const AIM_LINE_LENGTH = 32;
+
+/** Size of the equipped item indicator square. */
+const EQUIP_INDICATOR_SIZE = 8;
+
+/** Offset from player centre for the equipped item indicator. */
+const EQUIP_OFFSET_X = 10;
+const EQUIP_OFFSET_Y = 10;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,6 +86,9 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
 
   /** Aim indicator graphics object (created lazily). */
   let aimGfx: Phaser.GameObjects.Graphics | null = null;
+
+  /** Equipped item indicator rectangle (created lazily). */
+  let equipGfx: Phaser.GameObjects.Rectangle | null = null;
 
   /** Whether camera follow has been wired. */
   let cameraFollowWired = false;
@@ -156,6 +166,39 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
             playerSprite.y + ny * AIM_LINE_LENGTH,
           );
           aimGfx.strokePath();
+        }
+
+        // --- Equipped item indicator ---
+        const invPlayer = inventoryEntities.entities[0];
+        if (invPlayer) {
+          const inv = invPlayer.inventory;
+          const activeSlot =
+            inv.activeSlot >= 0 ? inv.slots[inv.activeSlot] : null;
+
+          if (activeSlot && activeSlot.primary) {
+            const itemDef = getObjectDef(activeSlot.objectType);
+            const color = itemDef?.renderColor ?? FALLBACK_COLOUR;
+
+            if (!equipGfx) {
+              equipGfx = scene.add.rectangle(
+                0,
+                0,
+                EQUIP_INDICATOR_SIZE,
+                EQUIP_INDICATOR_SIZE,
+                color,
+              );
+              equipGfx.setDepth(Number.MAX_SAFE_INTEGER - 1);
+            }
+
+            equipGfx.setFillStyle(color);
+            equipGfx.setPosition(
+              playerSprite.x + EQUIP_OFFSET_X,
+              playerSprite.y + EQUIP_OFFSET_Y,
+            );
+            equipGfx.setVisible(true);
+          } else if (equipGfx) {
+            equipGfx.setVisible(false);
+          }
         }
       }
     }

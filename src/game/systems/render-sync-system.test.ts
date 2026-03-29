@@ -5,11 +5,24 @@ import type { SceneContext } from "./scene-context";
 import { BodyRegistry } from "./body-registry";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { world, resetWorld } from "@/game/ecs/world";
+import type { InventorySlotData } from "@/game/ecs/components";
 
 const DT = 1 / 60;
 
 function createMockRect(x = 0, y = 0) {
-  return { x, y, destroy: vi.fn() };
+  return {
+    x,
+    y,
+    destroy: vi.fn(),
+    setDepth: vi.fn().mockReturnThis(),
+    setFillStyle: vi.fn().mockReturnThis(),
+    setPosition: vi.fn(function (this: { x: number; y: number }, nx: number, ny: number) {
+      this.x = nx;
+      this.y = ny;
+      return this;
+    }),
+    setVisible: vi.fn().mockReturnThis(),
+  };
 }
 
 function createMockContext(alphaValue = 0.5): {
@@ -332,5 +345,245 @@ describe("RenderSyncSystem", () => {
       startFollow: ReturnType<typeof vi.fn>;
     };
     expect(cam.startFollow).toHaveBeenCalledTimes(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // Equipped item indicator (issue #21)
+  // -------------------------------------------------------------------------
+
+  describe("equipped item indicator", () => {
+    /**
+     * Helper: create a full player entity with inventory that satisfies
+     * both playerEntities and inventoryEntities queries.
+     */
+    function addPlayerWithInventory(
+      slots: Array<InventorySlotData | null>,
+      activeSlot = -1,
+    ) {
+      return world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+        inventory: {
+          slots,
+          activeSlot,
+          carryWeight: 0,
+          maxCarryWeight: 50,
+        },
+      });
+    }
+
+    it("does not create indicator when activeSlot is -1", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      const playerRect = createMockRect(100, 100);
+      addRectangle.mockReturnValue(playerRect);
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerWithInventory(
+        [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
+        -1,
+      );
+
+      system(DT);
+
+      // Only 1 rectangle call: the player sprite. No indicator.
+      expect(addRectangle).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not create indicator when active slot is empty", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      const playerRect = createMockRect(100, 100);
+      addRectangle.mockReturnValue(playerRect);
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerWithInventory(
+        [null, null, null, null, null, null, null, null],
+        0,
+      );
+
+      system(DT);
+
+      // Only the player sprite rectangle
+      expect(addRectangle).toHaveBeenCalledTimes(1);
+    });
+
+    it("creates indicator when active slot has a primary item", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerWithInventory(
+        [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
+        0,
+      );
+
+      system(DT);
+
+      // 2 rectangles: player sprite + equip indicator
+      expect(addRectangle).toHaveBeenCalledTimes(2);
+    });
+
+    it("positions indicator at player sprite + offset", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerWithInventory(
+        [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
+        0,
+      );
+
+      system(DT);
+
+      // EQUIP_OFFSET_X = 10, EQUIP_OFFSET_Y = 10
+      expect(equipRect.setPosition).toHaveBeenCalledWith(110, 110);
+    });
+
+    it("sets high depth on the indicator", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerWithInventory(
+        [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
+        0,
+      );
+
+      system(DT);
+
+      expect(equipRect.setDepth).toHaveBeenCalledWith(Number.MAX_SAFE_INTEGER - 1);
+    });
+
+    it("hides indicator when active slot becomes empty", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      const entity = addPlayerWithInventory(
+        [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
+        0,
+      );
+
+      // First tick: indicator created and visible
+      system(DT);
+      expect(equipRect.setVisible).toHaveBeenCalledWith(true);
+
+      // Remove item from slot
+      entity.inventory!.slots[0] = null;
+
+      // Second tick: indicator hidden
+      system(DT);
+      expect(equipRect.setVisible).toHaveBeenCalledWith(false);
+    });
+
+    it("hides indicator when active slot points to a continuation slot", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      // Slot 0 = primary, slot 1 = continuation. Active slot points to the continuation slot.
+      addPlayerWithInventory(
+        [
+          { objectType: "car_battery", sizeCategory: "medium", primary: true },
+          { objectType: "car_battery", sizeCategory: "medium", primary: false },
+          null, null, null, null, null, null,
+        ],
+        1, // pointing at continuation slot
+      );
+
+      // Need to establish equipGfx first via a valid tick
+      // Reset to primary slot temporarily
+      system(DT);
+      // equipGfx was not created because slot 1 is not primary
+      // The code checks `activeSlot && activeSlot.primary` — slot 1 exists but primary=false
+      expect(addRectangle).toHaveBeenCalledTimes(1); // only player sprite
+    });
+
+    it("reuses the indicator rectangle across ticks", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      addPlayerWithInventory(
+        [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
+        0,
+      );
+
+      system(DT);
+      system(DT);
+      system(DT);
+
+      // Only 2 total rectangle calls: 1 for player sprite, 1 for equip indicator
+      expect(addRectangle).toHaveBeenCalledTimes(2);
+    });
+
+    it("updates fill color when equipped item changes", () => {
+      const { ctx, addRectangle } = createMockContext(0);
+      let callCount = 0;
+      const playerRect = createMockRect(100, 100);
+      const equipRect = createMockRect(0, 0);
+      addRectangle.mockImplementation(() => {
+        callCount++;
+        return callCount === 1 ? playerRect : equipRect;
+      });
+      const system = createRenderSyncSystem(ctx);
+
+      const entity = addPlayerWithInventory(
+        [
+          { objectType: "wooden_plank", sizeCategory: "small", primary: true },
+          { objectType: "gas_can", sizeCategory: "small", primary: true },
+          null, null, null, null, null, null,
+        ],
+        0,
+      );
+
+      system(DT);
+
+      // Switch to slot 1 (gas_can)
+      entity.inventory!.activeSlot = 1;
+      system(DT);
+
+      // setFillStyle should have been called at least twice with different colors
+      const calls = equipRect.setFillStyle.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

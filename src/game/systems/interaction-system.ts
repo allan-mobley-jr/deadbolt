@@ -19,7 +19,13 @@ import {
 import { createObjectEntity } from "@/game/ecs/archetypes";
 import { getObjectDef } from "@/game/procgen/object-defs";
 import { safeEmit } from "@/game/events/event-bus";
-import type { InventorySlot } from "@/game/events/event-bus";
+import {
+  canAddItem,
+  addItem,
+  removeItem,
+  removeItemByType,
+  buildEventSlots,
+} from "./inventory-utils";
 
 // ---------------------------------------------------------------------------
 // Tuning constants
@@ -67,20 +73,6 @@ export function computeSpeedMultiplier(
   return 1 - fraction * (1 - MIN_SPEED_MULTIPLIER);
 }
 
-/**
- * Build an InventorySlot array from the inventory items for the
- * inventory-changed event.
- */
-function buildSlots(
-  items: Array<{ objectType: string; quantity: number }>,
-): InventorySlot[] {
-  return items.map((item, i) => ({
-    itemType: item.objectType,
-    quantity: item.quantity,
-    slotIndex: i,
-  }));
-}
-
 // ---------------------------------------------------------------------------
 // System factory
 // ---------------------------------------------------------------------------
@@ -102,10 +94,10 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
   let promptedEntity: Entity | null = null;
 
   // Buffer drop commands from UI
-  const pendingDrops: string[] = [];
+  const pendingDrops: Array<{ objectType?: string; slotIndex?: number }> = [];
 
   ctx.eventBus.on("cmd:drop-item", (e) => {
-    pendingDrops.push(e.objectType);
+    pendingDrops.push({ objectType: e.objectType, slotIndex: e.slotIndex });
   });
 
   return (_dt: number): void => {
@@ -162,60 +154,67 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
 
       if (!op.immovable && inter.interactionType === "pickup") {
         // --- Pickup ---
-        // Remove from world FIRST (fail-fast before mutating inventory).
-        // If removal throws, inventory stays untouched — no item duplication.
-        const def = getObjectDef(op.objectType);
-        const mass = def?.physics.mass ?? 1;
         const objectType = op.objectType;
-        let pickupSucceeded = false;
+        const def = getObjectDef(objectType);
 
-        try {
-          const bodyId = nearestEntity.physicsBody?.bodyId;
-          if (bodyId !== undefined) {
-            const body = ctx.bodyRegistry.get(bodyId);
-            if (body) {
-              ctx.scene.matter.world.remove(body);
+        // Check slot availability before attempting world removal
+        if (!canAddItem(inv, objectType)) {
+          const displayName = def?.displayName ?? objectType;
+          safeEmit(ctx.eventBus, "inventory-full", {
+            attemptedItemType: objectType,
+            displayName,
+          });
+        } else {
+          // Remove from world FIRST (fail-fast before mutating inventory).
+          // If removal throws, inventory stays untouched — no item duplication.
+          let pickupSucceeded = false;
+
+          try {
+            const bodyId = nearestEntity.physicsBody?.bodyId;
+            if (bodyId !== undefined) {
+              const body = ctx.bodyRegistry.get(bodyId);
+              if (body) {
+                ctx.scene.matter.world.remove(body);
+              }
+              ctx.bodyRegistry.unregister(bodyId);
             }
-            ctx.bodyRegistry.unregister(bodyId);
+            world.remove(nearestEntity);
+            pickupSucceeded = true;
+          } catch (err) {
+            console.error(
+              `[InteractionSystem] Pickup failed for ${objectType}:`,
+              err,
+            );
           }
-          world.remove(nearestEntity);
-          pickupSucceeded = true;
-        } catch (err) {
-          console.error(
-            `[InteractionSystem] Pickup failed for ${objectType}:`,
-            err,
-          );
-        }
 
-        // Prevent stale reference in drag/drop sections below
-        nearestEntity = null;
+          // Prevent stale reference in drag/drop sections below
+          nearestEntity = null;
 
-        if (pickupSucceeded) {
-          // Add to inventory (only after world removal succeeded)
-          const existing = inv.items.find(
-            (i) => i.objectType === objectType,
-          );
-          if (existing) {
-            existing.quantity += 1;
-          } else {
-            inv.items.push({ objectType, quantity: 1 });
+          if (pickupSucceeded) {
+            // Add to inventory slot(s) — addItem handles weight update.
+            // canAddItem was checked before world removal, so this should
+            // succeed. Guard against edge cases defensively.
+            const added = addItem(inv, objectType);
+            if (added) {
+              safeEmit(ctx.eventBus, "item-picked-up", {
+                itemType: objectType,
+                quantity: 1,
+              });
+              safeEmit(ctx.eventBus, "inventory-changed", {
+                slots: buildEventSlots(inv),
+                carryWeight: inv.carryWeight,
+                maxCarryWeight: inv.maxCarryWeight,
+              });
+            } else {
+              console.error(
+                `[InteractionSystem] addItem failed after world removal for ${objectType}`,
+              );
+            }
+
+            // Clear prompt regardless — entity was removed from world
+            safeEmit(ctx.eventBus, "interaction-prompt-clear", {});
+            promptedEntity = null;
           }
-          inv.carryWeight += mass;
-
-          // Emit events
-          safeEmit(ctx.eventBus, "item-picked-up", {
-            itemType: objectType,
-            quantity: 1,
-          });
-          safeEmit(ctx.eventBus, "inventory-changed", {
-            slots: buildSlots(inv.items),
-            carryWeight: inv.carryWeight,
-            maxCarryWeight: inv.maxCarryWeight,
-          });
-
-          // Clear prompt since entity is gone
-          safeEmit(ctx.eventBus, "interaction-prompt-clear", {});
-          promptedEntity = null;
         }
       } else {
         // --- Examine (for immovable or non-pickup objects) ---
@@ -273,21 +272,40 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
     // --- 4. Drop commands from UI ---
 
     while (pendingDrops.length > 0) {
-      const objectType = pendingDrops.pop()!;
-      const itemIndex = inv.items.findIndex(
-        (i) => i.objectType === objectType,
-      );
-      if (itemIndex === -1) continue;
+      const dropCmd = pendingDrops.pop()!;
+
+      // Resolve what to drop — validate definition BEFORE removing from
+      // inventory so the item is never lost on undefined-def errors.
+      let objectType: string | null = null;
+      let resolvedSlotIndex: number | undefined;
+
+      if (dropCmd.slotIndex !== undefined) {
+        const slot = inv.slots[dropCmd.slotIndex];
+        if (!slot) continue;
+        // Pass the slot index directly — removeItem handles
+        // continuation→primary resolution via backward search.
+        objectType = slot.objectType;
+        resolvedSlotIndex = dropCmd.slotIndex;
+      } else if (dropCmd.objectType !== undefined) {
+        objectType = dropCmd.objectType;
+      }
+
+      if (!objectType) continue;
 
       const def = getObjectDef(objectType);
       if (!def) {
         console.warn(
           `[InteractionSystem] Unknown object type for drop: ${objectType}`,
         );
-        continue;
+        continue; // Safe: inventory not yet mutated
       }
 
-      const mass = def.physics.mass;
+      // NOW remove from inventory (after validation)
+      if (resolvedSlotIndex !== undefined) {
+        removeItem(inv, resolvedSlotIndex);
+      } else if (!removeItemByType(inv, objectType)) {
+        continue; // Item not found in inventory
+      }
 
       // Compute drop position in front of player (based on aim direction)
       const aimDx = ctx.inputState.aimX - px;
@@ -300,7 +318,7 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         dropY = py + (aimDy / aimDist) * DROP_OFFSET;
       }
 
-      // Create world entity FIRST — if this fails, inventory stays intact.
+      // Create world entity — if this fails, re-add to inventory.
       // This prevents item loss in a permadeath roguelike.
       try {
         const bodySize = def.immovable ? 32 : 16;
@@ -336,16 +354,21 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
           `[InteractionSystem] Failed to spawn dropped object ${objectType}:`,
           err,
         );
-        continue; // Do NOT decrement inventory
+        // Re-add item to inventory to prevent loss
+        const reAdded = addItem(inv, objectType);
+        if (!reAdded) {
+          console.error(
+            `[InteractionSystem] CRITICAL: Failed to re-add ${objectType} to inventory after spawn failure — item lost!`,
+          );
+        }
+        // Emit inventory-changed so UI stays in sync
+        safeEmit(ctx.eventBus, "inventory-changed", {
+          slots: buildEventSlots(inv),
+          carryWeight: inv.carryWeight,
+          maxCarryWeight: inv.maxCarryWeight,
+        });
+        continue;
       }
-
-      // Reduce inventory only after world entity was created successfully
-      const item = inv.items[itemIndex];
-      item.quantity -= 1;
-      if (item.quantity <= 0) {
-        inv.items.splice(itemIndex, 1);
-      }
-      inv.carryWeight = Math.max(0, inv.carryWeight - mass);
 
       // Emit events
       safeEmit(ctx.eventBus, "object-dropped", {
@@ -353,7 +376,7 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
         position: { x: dropX, y: dropY },
       });
       safeEmit(ctx.eventBus, "inventory-changed", {
-        slots: buildSlots(inv.items),
+        slots: buildEventSlots(inv),
         carryWeight: inv.carryWeight,
         maxCarryWeight: inv.maxCarryWeight,
       });

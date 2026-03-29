@@ -14,6 +14,26 @@ import { ObjectCategory } from '@/types/procgen';
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Size category that determines how many inventory slots an item occupies.
+ *   small  → 1 slot
+ *   medium → 2 consecutive slots
+ *   large  → not carryable (push/drag only)
+ */
+export type SizeCategory = "small" | "medium" | "large";
+
+/** Return the number of inventory slots required by a size category. */
+export function getSizeSlots(category: SizeCategory): number {
+  switch (category) {
+    case "small":
+      return 1;
+    case "medium":
+      return 2;
+    case "large":
+      return 0; // large items cannot be carried
+  }
+}
+
 /** Physical properties for an object type. */
 export interface ObjectPhysicalProperties {
   /** Mass in kg. Drives Matter.js body mass and push/drag threshold. */
@@ -40,6 +60,8 @@ export interface ObjectDefinition {
   blocksMovement: boolean;
   /** Whether this object is too large/heavy to carry (push/drag only). */
   immovable: boolean;
+  /** Size category for inventory slot allocation. */
+  sizeCategory: SizeCategory;
   /** Loot value tier (0-10). Higher = rarer, placed farther from safehouse. */
   lootValue: number;
   /** Placeholder render color (hex) for the colored-shape renderer. */
@@ -70,6 +92,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 45, durability: 0.5, flammability: 0.9, conductivity: 0.0 },
     blocksMovement: true,
     immovable: true,
+    sizeCategory: 'large',
     lootValue: 1,
     renderColor: COLOR.FURNITURE,
   },
@@ -80,6 +103,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 5, durability: 0.3, flammability: 0.8, conductivity: 0.0 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'small',
     lootValue: 0,
     renderColor: COLOR.FURNITURE,
   },
@@ -90,6 +114,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 25, durability: 0.5, flammability: 0.7, conductivity: 0.0 },
     blocksMovement: true,
     immovable: false,
+    sizeCategory: 'medium',
     lootValue: 0,
     renderColor: COLOR.FURNITURE,
   },
@@ -100,6 +125,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 40, durability: 0.4, flammability: 0.7, conductivity: 0.0 },
     blocksMovement: true,
     immovable: true,
+    sizeCategory: 'large',
     lootValue: 0,
     renderColor: COLOR.FURNITURE,
   },
@@ -110,6 +136,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 35, durability: 0.3, flammability: 0.6, conductivity: 0.0 },
     blocksMovement: true,
     immovable: true,
+    sizeCategory: 'large',
     lootValue: 0,
     renderColor: COLOR.FURNITURE,
   },
@@ -122,6 +149,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 3, durability: 0.2, flammability: 1.0, conductivity: 0.1 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'small',
     lootValue: 6,
     renderColor: COLOR.LOOT,
   },
@@ -132,6 +160,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 15, durability: 0.7, flammability: 0.0, conductivity: 0.9 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'medium',
     lootValue: 7,
     renderColor: COLOR.LOOT,
   },
@@ -142,6 +171,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 8, durability: 0.4, flammability: 0.1, conductivity: 1.0 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'small',
     lootValue: 5,
     renderColor: COLOR.LOOT,
   },
@@ -152,6 +182,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 3, durability: 0.3, flammability: 0.9, conductivity: 0.0 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'small',
     lootValue: 3,
     renderColor: COLOR.LOOT,
   },
@@ -162,6 +193,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 10, durability: 0.8, flammability: 0.0, conductivity: 0.6 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'medium',
     lootValue: 4,
     renderColor: COLOR.LOOT,
   },
@@ -174,6 +206,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 80, durability: 0.8, flammability: 0.05, conductivity: 0.7 },
     blocksMovement: true,
     immovable: true,
+    sizeCategory: 'large',
     lootValue: 3,
     renderColor: COLOR.CONTAINER,
   },
@@ -184,6 +217,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 35, durability: 0.9, flammability: 0.0, conductivity: 0.8 },
     blocksMovement: true,
     immovable: true,
+    sizeCategory: 'large',
     lootValue: 2,
     renderColor: COLOR.CONTAINER,
   },
@@ -194,6 +228,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 1, durability: 0.1, flammability: 0.95, conductivity: 0.0 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'small',
     lootValue: 1,
     renderColor: COLOR.CONTAINER,
   },
@@ -204,6 +239,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 5, durability: 0.5, flammability: 0.1, conductivity: 0.4 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'small',
     lootValue: 1,
     renderColor: COLOR.CONTAINER,
   },
@@ -216,6 +252,7 @@ const OBJECT_DEFS: readonly ObjectDefinition[] = [
     physics: { mass: 10, durability: 0.6, flammability: 0.4, conductivity: 0.0 },
     blocksMovement: false,
     immovable: false,
+    sizeCategory: 'medium',
     lootValue: 2,
     renderColor: COLOR.DEBRIS,
   },

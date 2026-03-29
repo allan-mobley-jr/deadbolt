@@ -101,6 +101,19 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     useUIStore.getState().openMenu("death");
   });
 
+  onBus("active-slot-changed", (e) => {
+    usePlayerStore.getState().updateActiveSlot(e.activeSlot);
+  });
+
+  onBus("inventory-full", (e) => {
+    useUIStore.getState().addNotification({
+      id: `inv-full-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      message: `Inventory full — cannot pick up ${e.displayName}`,
+      type: "warning",
+      timestamp: Date.now(),
+    });
+  });
+
   onBus("item-picked-up", (e) => {
     useUIStore.getState().addNotification({
       id: `pickup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

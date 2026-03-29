@@ -12,6 +12,7 @@ import { createDayNightSystem } from "@/game/systems/day-night-system";
 import { createLightingSystem } from "@/game/systems/lighting-system";
 import { createCommandSystem } from "@/game/systems/command-system";
 import { createInteractionSystem } from "@/game/systems/interaction-system";
+import { createInventorySystem } from "@/game/systems/inventory-system";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus } from "@/game/events/event-bus";
@@ -110,6 +111,7 @@ export default class GameScene extends Phaser.Scene {
     const systems: SystemFn[] = [
       createCommandSystem(ctx),
       createInputSystem(ctx),
+      createInventorySystem(ctx),
       createInteractionSystem(ctx),
       createDayNightSystem(ctx),
       createMovementSystem(ctx),

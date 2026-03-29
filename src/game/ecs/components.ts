@@ -64,16 +64,37 @@ export interface Interactable {
   highlighted: boolean;
 }
 
+import type { SizeCategory } from "@/game/procgen/object-defs";
+
+/**
+ * Data for a single occupied inventory slot.
+ *
+ * Medium items span two consecutive slots: the first has `primary: true`,
+ * the second has `primary: false` with the same objectType. Only the
+ * primary slot counts for display and weight calculations.
+ */
+export interface InventorySlotData {
+  /** Object type key matching ObjectDefinition.type. */
+  objectType: string;
+  /** Size category from the object definition. */
+  sizeCategory: SizeCategory;
+  /** True for the first slot of a multi-slot item, false for continuation. */
+  primary: boolean;
+}
+
 /**
  * Player inventory — authoritative game state for carried items.
  *
- * The Zustand PlayerStore mirrors this for React display; the ECS
- * component is the source of truth during gameplay. Systems read
- * carryWeight to compute movement speed penalties.
+ * Fixed-size slot array where each object occupies 1 or 2 consecutive
+ * slots based on its size category. The Zustand PlayerStore mirrors
+ * this for React display; the ECS component is the source of truth
+ * during gameplay. Systems read carryWeight to compute speed penalties.
  */
 export interface Inventory {
-  /** Items currently carried by the player. */
-  items: Array<{ objectType: string; quantity: number }>;
+  /** Fixed-size slot array: null = empty, InventorySlotData = occupied. */
+  slots: Array<InventorySlotData | null>;
+  /** Index of the active quick-select slot (0-4), or -1 for none. */
+  activeSlot: number;
   /** Sum of carried item masses in kg. */
   carryWeight: number;
   /** Maximum carry capacity in kg. */

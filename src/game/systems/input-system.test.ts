@@ -20,6 +20,12 @@ function createMockKeys() {
     DOWN: mkKey(),
     LEFT: mkKey(),
     RIGHT: mkKey(),
+    E: mkKey(),
+    ONE: mkKey(),
+    TWO: mkKey(),
+    THREE: mkKey(),
+    FOUR: mkKey(),
+    FIVE: mkKey(),
   };
 }
 
@@ -158,5 +164,128 @@ describe("InputSystem", () => {
     system(1 / 60);
     expect(noKbCtx.inputState.moveX).toBe(0);
     expect(noKbCtx.inputState.moveY).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Interact key (E) — edge detection
+  // -------------------------------------------------------------------------
+
+  describe("interact key (E)", () => {
+    it("sets interactPressed on rising edge", () => {
+      const system = createInputSystem(ctx);
+      keys.E.isDown = true;
+      system(1 / 60);
+      expect(ctx.inputState.interactPressed).toBe(true);
+    });
+
+    it("does not repeat while E is held down", () => {
+      const system = createInputSystem(ctx);
+      keys.E.isDown = true;
+      system(1 / 60);
+      expect(ctx.inputState.interactPressed).toBe(true);
+
+      // Second tick with E still held
+      system(1 / 60);
+      expect(ctx.inputState.interactPressed).toBe(false);
+    });
+
+    it("re-triggers after release and re-press", () => {
+      const system = createInputSystem(ctx);
+
+      // Press
+      keys.E.isDown = true;
+      system(1 / 60);
+      expect(ctx.inputState.interactPressed).toBe(true);
+
+      // Release
+      keys.E.isDown = false;
+      system(1 / 60);
+      expect(ctx.inputState.interactPressed).toBe(false);
+
+      // Re-press
+      keys.E.isDown = true;
+      system(1 / 60);
+      expect(ctx.inputState.interactPressed).toBe(true);
+    });
+
+    it("defaults to false when keyboard is null", () => {
+      const { ctx: noKbCtx } = createMockContext(null);
+      const system = createInputSystem(noKbCtx);
+      system(1 / 60);
+      expect(noKbCtx.inputState.interactPressed).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Quick-select keys (1-5) — edge detection
+  // -------------------------------------------------------------------------
+
+  describe("quick-select keys (1-5)", () => {
+    it("defaults quickSelectPressed to -1 when no number key is pressed", () => {
+      const system = createInputSystem(ctx);
+      system(1 / 60);
+      expect(ctx.inputState.quickSelectPressed).toBe(-1);
+    });
+
+    it.each([
+      ["ONE", 0],
+      ["TWO", 1],
+      ["THREE", 2],
+      ["FOUR", 3],
+      ["FIVE", 4],
+    ] as const)(
+      "maps %s key press to quickSelectPressed = %d",
+      (keyName, expectedIndex) => {
+        const system = createInputSystem(ctx);
+        (keys[keyName] as { isDown: boolean }).isDown = true;
+        system(1 / 60);
+        expect(ctx.inputState.quickSelectPressed).toBe(expectedIndex);
+      },
+    );
+
+    it("does not repeat while a number key is held down", () => {
+      const system = createInputSystem(ctx);
+      keys.ONE.isDown = true;
+
+      system(1 / 60);
+      expect(ctx.inputState.quickSelectPressed).toBe(0);
+
+      // Second tick with ONE still held
+      system(1 / 60);
+      expect(ctx.inputState.quickSelectPressed).toBe(-1);
+    });
+
+    it("re-triggers after release and re-press", () => {
+      const system = createInputSystem(ctx);
+
+      keys.THREE.isDown = true;
+      system(1 / 60);
+      expect(ctx.inputState.quickSelectPressed).toBe(2);
+
+      keys.THREE.isDown = false;
+      system(1 / 60);
+      expect(ctx.inputState.quickSelectPressed).toBe(-1);
+
+      keys.THREE.isDown = true;
+      system(1 / 60);
+      expect(ctx.inputState.quickSelectPressed).toBe(2);
+    });
+
+    it("when multiple keys pressed simultaneously, last-writer-wins", () => {
+      const system = createInputSystem(ctx);
+      keys.ONE.isDown = true;
+      keys.FOUR.isDown = true;
+      system(1 / 60);
+      // Iteration order is ONE(0), TWO(1), THREE(2), FOUR(3), FIVE(4)
+      // Both ONE and FOUR are rising edges, so FOUR (index 3) overwrites ONE (index 0)
+      expect(ctx.inputState.quickSelectPressed).toBe(3);
+    });
+
+    it("defaults to -1 when keyboard is null", () => {
+      const { ctx: noKbCtx } = createMockContext(null);
+      const system = createInputSystem(noKbCtx);
+      system(1 / 60);
+      expect(noKbCtx.inputState.quickSelectPressed).toBe(-1);
+    });
   });
 });

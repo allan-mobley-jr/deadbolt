@@ -80,8 +80,8 @@ describe("bridge", () => {
       const bridge = connectBridge(bus);
 
       const slots = [
-        { itemType: "wood", quantity: 5, slotIndex: 0 },
-        { itemType: "nails", quantity: 12, slotIndex: 1 },
+        { itemType: "wood", slotIndex: 0, sizeCategory: "small" as const, primary: true },
+        { itemType: "nails", slotIndex: 1, sizeCategory: "small" as const, primary: true },
       ];
       safeEmit(bus, "inventory-changed", {
         slots,
@@ -92,6 +92,35 @@ describe("bridge", () => {
       const state = usePlayerStore.getState();
       expect(state.inventory).toEqual(slots);
       expect(state.carryWeight).toBe(15);
+
+      bridge.disconnect();
+    });
+
+    it("updates playerStore activeSlot on active-slot-changed", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "active-slot-changed", {
+        activeSlot: 2,
+        itemType: "wooden_plank",
+      });
+
+      expect(usePlayerStore.getState().activeSlot).toBe(2);
+
+      bridge.disconnect();
+    });
+
+    it("adds notification on inventory-full", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "inventory-full", {
+        attemptedItemType: "gas_can",
+        displayName: "Gas Can",
+      });
+
+      const notifications = useUIStore.getState().notifications;
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].message).toContain("Gas Can");
+      expect(notifications[0].type).toBe("warning");
 
       bridge.disconnect();
     });
