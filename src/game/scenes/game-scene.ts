@@ -19,7 +19,6 @@ import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
-import { ZOMBIE_AI } from "@/game/systems/zombie-ai-constants";
 import {
   getAvailableVariants,
   selectVariant,
@@ -27,7 +26,6 @@ import {
   spawnHordeCluster,
 } from "@/game/systems/zombie-spawner-utils";
 import type { SpawnContext } from "@/game/systems/zombie-spawner-utils";
-import { VARIANT_STATS } from "@/game/systems/zombie-ai-constants";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { setActiveBus } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";

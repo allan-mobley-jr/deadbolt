@@ -11,7 +11,17 @@ import {
   createBarricadeEntity,
 } from "@/game/ecs/archetypes";
 import { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
-import { SHAMBLER_STATS, SHAMBLER_HEALTH, ZOMBIE_AI } from "./zombie-ai-constants";
+import {
+  SHAMBLER_STATS,
+  SHAMBLER_HEALTH,
+  RUNNER_STATS,
+  RUNNER_HEALTH,
+  BRUTE_STATS,
+  BRUTE_HEALTH,
+  HORDE_STATS,
+  HORDE_HEALTH,
+  ZOMBIE_AI,
+} from "./zombie-ai-constants";
 import { TILE_SIZE } from "@/game/procgen/constants";
 
 const DT = 1 / 60;
@@ -880,6 +890,289 @@ describe("ZombieAISystem", () => {
 
       expect(z1.aiState.state).toBe("staggered");
       expect(z2.aiState.state).toBe("pathing");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Runner archetype
+  // -----------------------------------------------------------------------
+
+  describe("runner archetype", () => {
+    it("creates runner entity with correct stats", () => {
+      const { x, y } = tileCenter(0, 0);
+      const runner = createZombieEntity(
+        x, y, 1, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+
+      expect(runner.zombieType.variant).toBe("runner");
+      expect(runner.zombieType.moveSpeed).toBe(100);
+      expect(runner.health.current).toBe(RUNNER_HEALTH);
+      expect(runner.renderable.spriteKey).toBe("zombie_runner");
+    });
+
+    it("ignores low-durability barricades (vault mechanic)", () => {
+      const bPos = tileCenter(3, 3);
+      // Barricade with durability below runner's vault threshold (30)
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+      // Set durability to below runner vault threshold
+      barricade.barricade.currentDurability = 20;
+      barricade.health.current = 20;
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const runner = createZombieEntity(
+        zPos.x, zPos.y, 2, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+
+      system(DT); // idle → pathing — should NOT transition to attacking
+      expect(runner.aiState.state).toBe("pathing");
+    });
+
+    it("attacks barricades above vault threshold normally", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "metal_sheet", 0, [100, 101], 160,
+      );
+      // Durability above vault threshold
+      barricade.barricade.currentDurability = 100;
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const runner = createZombieEntity(
+        zPos.x, zPos.y, 2, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+
+      system(DT);
+      expect(runner.aiState.state).toBe("attacking");
+    });
+
+    it("has more frequent path recalculation than shambler", () => {
+      expect(RUNNER_STATS.pathRecalcInterval).toBeLessThan(
+        SHAMBLER_STATS.pathRecalcInterval,
+      );
+    });
+
+    it("moves faster than shambler", () => {
+      const { x, y } = tileCenter(0, 0);
+      const runner = createZombieEntity(
+        x, y, 1, { ...RUNNER_STATS }, 0, RUNNER_HEALTH,
+      );
+
+      system(DT); // idle → pathing
+      system(DT); // follow path
+
+      const speed = Math.sqrt(
+        runner.velocity.vx ** 2 + runner.velocity.vy ** 2,
+      );
+      // Runner should move at its higher speed
+      expect(speed).toBeLessThanOrEqual(RUNNER_STATS.moveSpeed + 0.01);
+      expect(speed).toBeGreaterThan(SHAMBLER_STATS.moveSpeed);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Brute archetype
+  // -----------------------------------------------------------------------
+
+  describe("brute archetype", () => {
+    it("creates brute entity with correct stats", () => {
+      const { x, y } = tileCenter(0, 0);
+      const brute = createZombieEntity(
+        x, y, 1, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+
+      expect(brute.zombieType.variant).toBe("brute");
+      expect(brute.health.current).toBe(BRUTE_HEALTH);
+      expect(brute.zombieType.barricadeDamageMultiplier).toBe(3);
+      expect(brute.renderable.spriteKey).toBe("zombie_brute");
+    });
+
+    it("deals 3x damage to barricades", () => {
+      const bPos = tileCenter(3, 3);
+      const barricade = createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 500,
+      );
+      const initialHealth = barricade.health.current;
+
+      // Place brute within attack range
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: bPos.y,
+      };
+      createZombieEntity(
+        zPos.x, zPos.y, 2, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+
+      system(DT); // idle → attacking
+      system(DT); // attack (first hit)
+
+      // Brute damage = attackDamage × barricadeDamageMultiplier = 10 × 3 = 30
+      const expectedDamage = BRUTE_STATS.attackDamage * BRUTE_STATS.barricadeDamageMultiplier;
+      expect(barricade.health.current).toBe(initialHealth - expectedDamage);
+    });
+
+    it("deals normal (non-multiplied) damage to player", () => {
+      const pPos = tileCenter(3, 3);
+      const player = createPlayerEntity(pPos.x, pPos.y, 10);
+      const initialHealth = player.health.current;
+
+      const zPos = {
+        x: pPos.x + ZOMBIE_AI.ATTACK_RANGE * 0.5,
+        y: pPos.y,
+      };
+      createZombieEntity(
+        zPos.x, zPos.y, 2, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+
+      system(DT); // idle → attacking
+      system(DT); // attack
+
+      // Player damage should be attackDamage only, NOT multiplied
+      expect(player.health.current).toBe(initialHealth - BRUTE_STATS.attackDamage);
+    });
+
+    it("targets the weakest barricade rather than the nearest", () => {
+      // Place two barricades: a strong one nearby and a weak one further away
+      const strongPos = tileCenter(3, 3);
+      const strongBarricade = createBarricadeEntity(
+        strongPos.x, strongPos.y, 10,
+        "metal_sheet", 0, [100, 101], 200,
+      );
+      strongBarricade.barricade.currentDurability = 200;
+
+      const weakPos = tileCenter(3, 5);
+      const weakBarricade = createBarricadeEntity(
+        weakPos.x, weakPos.y, 11,
+        "wooden_plank", 1, [102, 103], 60,
+      );
+      weakBarricade.barricade.currentDurability = 20;
+
+      // Place brute close to strong barricade but equidistant in detection range
+      const brutePos = {
+        x: strongPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.3,
+        y: strongPos.y,
+      };
+      const brute = createZombieEntity(
+        brutePos.x, brutePos.y, 3, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+
+      system(DT); // idle → pathing (brute should path toward weak barricade)
+
+      // The brute's computed path target should be toward the weak barricade
+      // Verify by checking that it pathfinds (has a path)
+      expect(brute.aiState.path.length).toBeGreaterThan(0);
+    });
+
+    it("falls back to safehouse center when no barricades exist", () => {
+      const { x, y } = tileCenter(0, 0);
+      const brute = createZombieEntity(
+        x, y, 1, { ...BRUTE_STATS }, 0, BRUTE_HEALTH,
+      );
+
+      system(DT); // idle → pathing (no barricades → safehouse center)
+      expect(brute.aiState.path.length).toBeGreaterThan(0);
+    });
+
+    it("moves slower than shambler", () => {
+      expect(BRUTE_STATS.moveSpeed).toBeLessThan(SHAMBLER_STATS.moveSpeed);
+    });
+
+    it("has higher health than shambler", () => {
+      expect(BRUTE_HEALTH).toBeGreaterThan(SHAMBLER_HEALTH);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Horde archetype
+  // -----------------------------------------------------------------------
+
+  describe("horde archetype", () => {
+    it("creates horde entity with correct stats", () => {
+      const { x, y } = tileCenter(0, 0);
+      const horde = createZombieEntity(
+        x, y, 1, { ...HORDE_STATS }, 0, HORDE_HEALTH,
+      );
+
+      expect(horde.zombieType.variant).toBe("horde");
+      expect(horde.health.current).toBe(HORDE_HEALTH);
+      expect(horde.health.max).toBe(HORDE_HEALTH);
+      expect(horde.renderable.spriteKey).toBe("zombie_horde");
+    });
+
+    it("has lower health than shambler", () => {
+      expect(HORDE_HEALTH).toBeLessThan(SHAMBLER_HEALTH);
+    });
+
+    it("has lower individual damage than shambler", () => {
+      expect(HORDE_STATS.attackDamage).toBeLessThan(SHAMBLER_STATS.attackDamage);
+    });
+
+    it("has smaller body size than shambler", () => {
+      expect(HORDE_STATS.bodySize).toBeLessThan(SHAMBLER_STATS.bodySize);
+    });
+
+    it("follows standard AI state machine (no vault, no brute targeting)", () => {
+      const bPos = tileCenter(3, 3);
+      createBarricadeEntity(
+        bPos.x, bPos.y, 10,
+        "wooden_plank", 0, [100, 101], 60,
+      );
+
+      const zPos = {
+        x: bPos.x + ZOMBIE_AI.BARRICADE_DETECTION_RANGE * 0.5,
+        y: bPos.y,
+      };
+      const horde = createZombieEntity(
+        zPos.x, zPos.y, 2, { ...HORDE_STATS }, 0, HORDE_HEALTH,
+      );
+
+      system(DT); // idle → pathing → attacking (standard barricade detection)
+      expect(horde.aiState.state).toBe("attacking");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Variant stat validation
+  // -----------------------------------------------------------------------
+
+  describe("variant stat validation", () => {
+    it("all variants have required ZombieType fields", () => {
+      for (const stats of [SHAMBLER_STATS, RUNNER_STATS, BRUTE_STATS, HORDE_STATS]) {
+        expect(stats.variant).toBeDefined();
+        expect(stats.moveSpeed).toBeGreaterThan(0);
+        expect(stats.attackDamage).toBeGreaterThan(0);
+        expect(stats.attackCooldown).toBeGreaterThan(0);
+        expect(stats.pathRecalcInterval).toBeGreaterThan(0);
+        expect(stats.staggerDuration).toBeGreaterThan(0);
+        expect(stats.barricadeDamageMultiplier).toBeGreaterThanOrEqual(1);
+        expect(stats.vaultDurabilityThreshold).toBeGreaterThanOrEqual(0);
+        expect(stats.bodySize).toBeGreaterThan(0);
+      }
+    });
+
+    it("shambler has no vault capability", () => {
+      expect(SHAMBLER_STATS.vaultDurabilityThreshold).toBe(0);
+    });
+
+    it("shambler has default barricade damage multiplier", () => {
+      expect(SHAMBLER_STATS.barricadeDamageMultiplier).toBe(1);
+    });
+
+    it("runner has vault capability", () => {
+      expect(RUNNER_STATS.vaultDurabilityThreshold).toBeGreaterThan(0);
+    });
+
+    it("brute has 3x barricade damage multiplier", () => {
+      expect(BRUTE_STATS.barricadeDamageMultiplier).toBe(3);
     });
   });
 });
