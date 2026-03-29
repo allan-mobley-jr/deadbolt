@@ -4,6 +4,7 @@ import {
   getObjectDef,
   getAllObjectDefs,
   getAllObjectTypes,
+  getSizeSlots,
 } from './object-defs';
 import { ObjectCategory } from '@/types/procgen';
 
@@ -145,6 +146,65 @@ describe('gameplay flags', () => {
   it('every definition has a render color', () => {
     for (const def of getAllObjectDefs()) {
       expect(def.renderColor).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Size categories (issue #21)
+// ---------------------------------------------------------------------------
+
+describe('getSizeSlots', () => {
+  it('returns 1 for small items', () => {
+    expect(getSizeSlots('small')).toBe(1);
+  });
+
+  it('returns 2 for medium items', () => {
+    expect(getSizeSlots('medium')).toBe(2);
+  });
+
+  it('returns 0 for large items (not carryable)', () => {
+    expect(getSizeSlots('large')).toBe(0);
+  });
+});
+
+describe('sizeCategory assignments', () => {
+  const smallItems = ['wooden_chair', 'gas_can', 'wire_spool', 'wooden_plank', 'cardboard_box', 'trash_can'];
+  const mediumItems = ['table', 'car_battery', 'metal_sheet', 'tire'];
+  const largeItems = ['bookshelf', 'sofa', 'bed', 'fridge', 'metal_shelving'];
+
+  it.each(smallItems)('%s is classified as small (1 slot)', (type) => {
+    expect(getObjectDef(type)!.sizeCategory).toBe('small');
+  });
+
+  it.each(mediumItems)('%s is classified as medium (2 slots)', (type) => {
+    expect(getObjectDef(type)!.sizeCategory).toBe('medium');
+  });
+
+  it.each(largeItems)('%s is classified as large (not carryable)', (type) => {
+    expect(getObjectDef(type)!.sizeCategory).toBe('large');
+  });
+
+  it('all immovable objects have sizeCategory large', () => {
+    for (const def of getAllObjectDefs()) {
+      if (def.immovable) {
+        expect(def.sizeCategory).toBe('large');
+      }
+    }
+  });
+
+  it('all large objects are immovable', () => {
+    for (const def of getAllObjectDefs()) {
+      if (def.sizeCategory === 'large') {
+        expect(def.immovable).toBe(true);
+      }
+    }
+  });
+
+  it('every definition has a valid sizeCategory', () => {
+    const validCategories = new Set(['small', 'medium', 'large']);
+    for (const def of getAllObjectDefs()) {
+      expect(validCategories.has(def.sizeCategory)).toBe(true);
     }
   });
 });
