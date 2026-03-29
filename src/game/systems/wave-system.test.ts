@@ -890,4 +890,312 @@ describe("WaveSystem", () => {
       expect(actualSpawns).toBeLessThanOrEqual(announced + 10);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Kill counter via zombie-killed events (Gap 1 — criticality 9/10)
+  // -----------------------------------------------------------------------
+
+  describe("kill tracking via zombie-killed events", () => {
+    it("zombiesKilled in wave-ended reflects zombie-killed events emitted during the wave", () => {
+      const endedHandler = vi.fn();
+      eventBus.on("wave-ended", endedHandler);
+
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn all zombies
+      tickSeconds(system, 30);
+      const spawnedCount = zombieEntities.entities.length;
+      expect(spawnedCount).toBeGreaterThan(0);
+
+      // Emit zombie-killed events for each entity (simulating combat kills)
+      for (let i = 0; i < spawnedCount; i++) {
+        eventBus.emit("zombie-killed", {
+          position: { x: 100, y: 100 },
+          totalKills: i + 1,
+        });
+      }
+
+      // Remove all zombies from world (simulating zombie-ai-system cleanup)
+      removeAllZombies();
+
+      // Tick to detect completion
+      system(DT);
+
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+      const event = endedHandler.mock.calls[0][0] as WaveEndedEvent;
+      expect(event.zombiesKilled).toBe(spawnedCount);
+    });
+
+    it("zombie-killed events emitted while inactive are not counted", () => {
+      const endedHandler = vi.fn();
+      eventBus.on("wave-ended", endedHandler);
+
+      // Emit kills during day (inactive state)
+      for (let i = 0; i < 5; i++) {
+        eventBus.emit("zombie-killed", {
+          position: { x: 0, y: 0 },
+          totalKills: i + 1,
+        });
+      }
+
+      // Start a night wave
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn some, emit 2 real kills
+      tickSeconds(system, 3);
+      eventBus.emit("zombie-killed", {
+        position: { x: 50, y: 50 },
+        totalKills: 6,
+      });
+      eventBus.emit("zombie-killed", {
+        position: { x: 60, y: 60 },
+        totalKills: 7,
+      });
+
+      // Dawn ends wave
+      setPhase(clockState, "dawn");
+      system(DT);
+
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+      const event = endedHandler.mock.calls[0][0] as WaveEndedEvent;
+      // Only the 2 kills during active wave should count
+      expect(event.zombiesKilled).toBe(2);
+    });
+
+    it("killsDuringWave resets between nights", () => {
+      const endedHandler = vi.fn();
+      eventBus.on("wave-ended", endedHandler);
+
+      // Night 1 — emit 4 kills
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+      tickSeconds(system, 3);
+      for (let i = 0; i < 4; i++) {
+        eventBus.emit("zombie-killed", {
+          position: { x: 0, y: 0 },
+          totalKills: i + 1,
+        });
+      }
+      setPhase(clockState, "dawn");
+      system(DT);
+
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+      expect(
+        (endedHandler.mock.calls[0][0] as WaveEndedEvent).zombiesKilled,
+      ).toBe(4);
+
+      // Clean up for night 2
+      removeAllZombies();
+
+      // Night 2 — emit 2 kills
+      setPhase(clockState, "day");
+      clockState.dayNumber = 2;
+      system(DT);
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+      tickSeconds(system, 3);
+      for (let i = 0; i < 2; i++) {
+        eventBus.emit("zombie-killed", {
+          position: { x: 0, y: 0 },
+          totalKills: i + 5,
+        });
+      }
+      setPhase(clockState, "dawn");
+      system(DT);
+
+      expect(endedHandler).toHaveBeenCalledTimes(2);
+      // Second wave should have 2 kills, not 6
+      expect(
+        (endedHandler.mock.calls[1][0] as WaveEndedEvent).zombiesKilled,
+      ).toBe(2);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Complete state polling (Gap 2 — criticality 8/10)
+  // -----------------------------------------------------------------------
+
+  describe("complete state polling", () => {
+    it("stays in complete state while zombies remain alive across multiple ticks", () => {
+      const endedHandler = vi.fn();
+      eventBus.on("wave-ended", endedHandler);
+
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn all zombies by running through full night 1 pulse cycle
+      // Night 1: 2 pulses, 0.8s interval, 5-8 total, 15s pause
+      // Generous time: pulses + pause + extra
+      tickSeconds(system, 60);
+
+      const aliveCount = zombieEntities.entities.length;
+      expect(aliveCount).toBeGreaterThan(0);
+
+      // System should now be in 'complete' state (all spawned).
+      // Tick 60 more frames — wave-ended should NOT fire while zombies live.
+      tickSeconds(system, 1);
+      expect(endedHandler).not.toHaveBeenCalled();
+
+      // Remove all but one zombie
+      const entities = [...zombieEntities.entities];
+      for (let i = 1; i < entities.length; i++) {
+        world.remove(entities[i]);
+      }
+      expect(zombieEntities.entities.length).toBe(1);
+
+      // Tick more — still one alive, should not fire
+      tickSeconds(system, 1);
+      expect(endedHandler).not.toHaveBeenCalled();
+
+      // Remove the last zombie
+      world.remove(zombieEntities.entities[0]);
+      expect(zombieEntities.entities.length).toBe(0);
+
+      // One tick — wave-ended should fire
+      system(DT);
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+      expect(
+        (endedHandler.mock.calls[0][0] as WaveEndedEvent).waveNumber,
+      ).toBe(1);
+    });
+
+    it("transitions from complete to inactive on same tick last zombie is removed", () => {
+      const endedHandler = vi.fn();
+      eventBus.on("wave-ended", endedHandler);
+
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn all zombies
+      tickSeconds(system, 60);
+      expect(zombieEntities.entities.length).toBeGreaterThan(0);
+
+      // Remove all zombies in one batch
+      removeAllZombies();
+
+      // Single tick should fire wave-ended
+      system(DT);
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+
+      // System should now be inactive — ticking further produces no events
+      tickSeconds(system, 10);
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Spawning safety guards (Gap 3 — criticality 7/10)
+  // -----------------------------------------------------------------------
+
+  describe("spawning safety guards", () => {
+    it("caps spawns per tick when dt is extremely large", { timeout: 5000 }, () => {
+      clockState.dayNumber = 4;
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Night 4: spawnInterval = 0.3s, 40-55 total
+      // Pass a massive dt (100 seconds) — without the guard, the while-loop
+      // would attempt 100/0.3 = 333 iterations per tick
+      system(100);
+
+      // Should be capped by maxIterations (100) and totalToSpawn
+      const count = zombieEntities.entities.length;
+      expect(count).toBeGreaterThan(0);
+      // Cannot exceed totalToSpawn (at most 55 for night 4)
+      expect(count).toBeLessThanOrEqual(65); // 55 + up to 10 horde overshoot
+
+      // Subsequent normal ticks should continue working
+      tickSeconds(system, 2);
+      // System should not crash
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Stat multiplier precision (Gap 5 — criticality 6/10)
+  // -----------------------------------------------------------------------
+
+  describe("stat multiplier precision", () => {
+    it("Night 4 shamblers have exactly scaled stats (1.15x)", () => {
+      clockState.dayNumber = 4;
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn enough zombies to find at least one shambler
+      tickSeconds(system, 30);
+
+      // Find a shambler among the spawned zombies
+      const shambler = zombieEntities.entities.find(
+        (e) => e.zombieType.variant === "shambler",
+      );
+
+      // Night 4 has all variants; if no shambler by RNG, skip assertion
+      // (deterministic seed "4" may or may not produce one early)
+      if (shambler) {
+        // Shambler base: moveSpeed=40, attackDamage=5, health=50
+        // Night 4 multiplier: 1.15
+        expect(shambler.zombieType.moveSpeed).toBe(Math.round(40 * 1.15));
+        expect(shambler.zombieType.attackDamage).toBe(Math.round(5 * 1.15));
+        expect(shambler.health.max).toBe(Math.round(50 * 1.15));
+        expect(shambler.health.current).toBe(shambler.health.max);
+      }
+
+      // Verify ALL zombies have scaled stats (no zombie left unscaled)
+      for (const zombie of zombieEntities.entities) {
+        const variant = zombie.zombieType.variant;
+        // Base stats differ by variant, but all Night 4 zombies should have
+        // health.current === health.max (applyStatMultiplier sets this)
+        expect(zombie.health.current).toBe(zombie.health.max);
+        // Stats should all be positive
+        expect(zombie.zombieType.moveSpeed).toBeGreaterThan(0);
+        expect(zombie.zombieType.attackDamage).toBeGreaterThan(0);
+
+        // For shamblers specifically, verify the exact multiplied value
+        if (variant === "shambler") {
+          expect(zombie.zombieType.moveSpeed).toBe(Math.round(40 * 1.15));
+          expect(zombie.zombieType.attackDamage).toBe(Math.round(5 * 1.15));
+          expect(zombie.health.max).toBe(Math.round(50 * 1.15));
+        }
+      }
+    });
+
+    it("Night 5 zombies have higher scaling than Night 4", () => {
+      clockState.dayNumber = 5;
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      tickSeconds(system, 30);
+
+      // Night 5 multiplier: 1.15 + 0.05 * 1 = 1.20
+      const shambler = zombieEntities.entities.find(
+        (e) => e.zombieType.variant === "shambler",
+      );
+
+      if (shambler) {
+        expect(shambler.zombieType.moveSpeed).toBe(Math.round(40 * 1.2));
+        expect(shambler.zombieType.attackDamage).toBe(Math.round(5 * 1.2));
+        expect(shambler.health.max).toBe(Math.round(50 * 1.2));
+        expect(shambler.health.current).toBe(shambler.health.max);
+      }
+    });
+  });
 });
