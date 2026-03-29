@@ -19,10 +19,19 @@ function formatTime(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-/** Convert pixel distance to a human-friendly meter string (32px = 1 tile ≈ 1m). */
+/** Pixels per tile for display conversion (32px = 1 tile ~ 1m). */
+const PIXELS_PER_TILE = 32;
+
+/** Convert pixel distance to a human-friendly meter string. */
 function formatDistance(pixels: number): string {
-  const meters = Math.round(pixels / 32);
-  return `${meters}m`;
+  return `${Math.round(pixels / PIXELS_PER_TILE)}m`;
+}
+
+/** Reset all Zustand stores to initial values for a fresh run. */
+function resetAllStores(): void {
+  useUIStore.getState().reset();
+  useGameStore.getState().reset();
+  usePlayerStore.getState().reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +48,6 @@ export function DeathScreen() {
   const router = useRouter();
   const activeMenu = useUIStore((s) => s.activeMenu);
 
-  // Run stats selectors
   const elapsedTotal = useGameStore((s) => s.elapsedTotal);
   const dayNumber = useGameStore((s) => s.dayNumber);
   const totalKills = useGameStore((s) => s.totalKills);
@@ -50,12 +58,7 @@ export function DeathScreen() {
 
   const handleTryAgain = useCallback(() => {
     try {
-      // Reset all stores (runKey preserved by useGameStore.reset)
-      useUIStore.getState().reset();
-      useGameStore.getState().reset();
-      usePlayerStore.getState().reset();
-
-      // Increment runKey to trigger GameContainer remount → new game instance
+      resetAllStores();
       useGameStore.getState().incrementRunKey();
     } catch (err) {
       console.error("[DeathScreen] Failed to restart game:", err);
@@ -65,12 +68,7 @@ export function DeathScreen() {
 
   const handleReturnToMenu = useCallback(() => {
     try {
-      // Reset all stores
-      useUIStore.getState().reset();
-      useGameStore.getState().reset();
-      usePlayerStore.getState().reset();
-
-      // Navigate away — GameContainer unmount handles Phaser destruction
+      resetAllStores();
       router.push("/");
     } catch (err) {
       console.error("[DeathScreen] Failed to return to menu:", err);
