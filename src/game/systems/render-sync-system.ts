@@ -4,8 +4,9 @@ import type { SceneContext } from "./scene-context";
 import { playerEntities, renderableEntities, inventoryEntities, barricadeEntities, combatPlayerEntities } from "@/game/ecs/queries";
 import type { Entity } from "@/game/ecs/entity";
 import { getObjectDef } from "@/game/procgen/object-defs";
-import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent } from "@/game/events/event-bus";
+import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent, FireDamageEvent } from "@/game/events/event-bus";
 import { COMBAT } from "./combat-constants";
+import { FIRE } from "./fire-constants";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -77,6 +78,9 @@ const DAMAGE_TEXT_LIFETIME = 0.8;
 
 /** Upward drift speed for damage numbers (pixels/second). */
 const DAMAGE_TEXT_DRIFT = 30;
+
+/** Fire damage number colour (orange to distinguish from melee red). */
+const FIRE_DAMAGE_TEXT_COLOUR = "#ff6b00";
 
 /** How long the zombie death flash lasts (seconds). */
 const DEATH_FLASH_DURATION = 0.12;
@@ -228,6 +232,21 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     damageTexts.push({ text, age: 0 });
   });
 
+  // Listen for fire-damage events (orange floating numbers)
+  ctx.eventBus.on("fire-damage", (e: FireDamageEvent) => {
+    const text = ctx.scene.add
+      .text(e.position.x, e.position.y - 16, String(Math.round(e.damage)), {
+        fontFamily: "monospace",
+        fontSize: DAMAGE_TEXT_FONT_SIZE,
+        color: FIRE_DAMAGE_TEXT_COLOUR,
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setDepth(Number.MAX_SAFE_INTEGER);
+    damageTexts.push({ text, age: 0 });
+  });
+
   /**
    * Zombie death flash tracking.
    * Maps entity reference → remaining flash time.
@@ -290,6 +309,25 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       const curr = entity.position;
       sprite.x = prev.x + (curr.x - prev.x) * alpha;
       sprite.y = prev.y + (curr.y - prev.y) * alpha;
+
+      // Burning tint: pulsing orange-red overlay on non-barricade burning entities.
+      // Barricade tints are handled separately in the barricade health section.
+      if (entity.material?.state === "burning" && !entity.barricade) {
+        const pulse =
+          0.6 + 0.4 * Math.sin(totalElapsed * FIRE.BURN_TINT_PULSE_RATE * Math.PI * 2);
+        // Blend between base colour and fire tint based on pulse
+        const baseColor = spriteColour(entity.renderable.spriteKey);
+        const br = ((baseColor >> 16) & 0xff);
+        const bg = ((baseColor >> 8) & 0xff);
+        const bb = (baseColor & 0xff);
+        const fr = ((FIRE.BURN_TINT_COLOR >> 16) & 0xff);
+        const fg = ((FIRE.BURN_TINT_COLOR >> 8) & 0xff);
+        const fb = (FIRE.BURN_TINT_COLOR & 0xff);
+        const r = Math.round(br + (fr - br) * pulse);
+        const g = Math.round(bg + (fg - bg) * pulse);
+        const b = Math.round(bb + (fb - bb) * pulse);
+        sprite.setFillStyle(((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff));
+      }
     }
 
     // --- Clean up sprites for removed entities ---
@@ -387,12 +425,28 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
             ? entity.health.current / entity.health.max
             : 0;
 
-        // Apply damage tint to the sprite
+        // Apply damage tint to the sprite (burning overrides damage colour)
         const sprite = sprites.get(entity);
         if (sprite) {
-          sprite.setFillStyle(
-            colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER),
-          );
+          if (entity.material?.state === "burning") {
+            const pulse =
+              0.6 + 0.4 * Math.sin(totalElapsed * FIRE.BURN_TINT_PULSE_RATE * Math.PI * 2);
+            const baseTint = colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER);
+            const br = ((baseTint >> 16) & 0xff);
+            const bg = ((baseTint >> 8) & 0xff);
+            const bb = (baseTint & 0xff);
+            const fr = ((FIRE.BURN_TINT_COLOR >> 16) & 0xff);
+            const fg = ((FIRE.BURN_TINT_COLOR >> 8) & 0xff);
+            const fb = (FIRE.BURN_TINT_COLOR & 0xff);
+            const r = Math.round(br + (fr - br) * pulse);
+            const g = Math.round(bg + (fg - bg) * pulse);
+            const b = Math.round(bb + (fb - bb) * pulse);
+            sprite.setFillStyle(((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff));
+          } else {
+            sprite.setFillStyle(
+              colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER),
+            );
+          }
         }
 
         // Only show health bars if player is close enough

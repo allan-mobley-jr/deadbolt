@@ -151,7 +151,8 @@ function tickN(
 /** Collect events of a given type emitted on the bus. */
 function collectEvents<T>(bus: GameEventBus, eventName: string): T[] {
   const events: T[] = [];
-  bus.on(eventName as keyof import("@/game/events/event-bus").GameEventMap, (e: T) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (bus as any).on(eventName, (e: T) => {
     events.push(e);
   });
   return events;
@@ -342,8 +343,10 @@ describe("FireSystem — spread", () => {
     // material-state-changed emitted for the newly ignited target
     expect(
       stateChanges.some(
-        (e: { objectType?: string; newState?: string }) =>
-          e.objectType === "wooden_plank" && e.newState === "burning",
+        (e) => {
+          const ev = e as { objectType?: string; newState?: string };
+          return ev.objectType === "wooden_plank" && ev.newState === "burning";
+        },
       ),
     ).toBe(true);
   });
