@@ -39,6 +39,9 @@ export interface GameStoreState {
   /** Total zombies killed across all waves. */
   totalKills: number;
 
+  /** Kills broken down by zombie variant type. */
+  killsByType: Record<string, number>;
+
   /** Whether the game is paused. */
   paused: boolean;
 }
@@ -62,6 +65,8 @@ export interface GameStoreActions {
   setWaveEnded: () => void;
   /** Set the total kill count (authoritative value from game events). */
   setTotalKills: (totalKills: number) => void;
+  /** Increment the kill count for a specific zombie variant. */
+  incrementKillsByType: (variant: string) => void;
   /** Set the paused state (used by bridge for UI → game commands). */
   setPaused: (paused: boolean) => void;
   /** Reset to initial state between game sessions. */
@@ -82,6 +87,7 @@ const initialState: GameStoreState = {
   waveNumber: 0,
   zombiesInWave: 0,
   totalKills: 0,
+  killsByType: {},
   paused: false,
 };
 
@@ -102,6 +108,14 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()(
     setWaveEnded: () => set({ waveActive: false }),
 
     setTotalKills: (totalKills) => set({ totalKills }),
+
+    incrementKillsByType: (variant) =>
+      set((state) => ({
+        killsByType: {
+          ...state.killsByType,
+          [variant]: (state.killsByType[variant] ?? 0) + 1,
+        },
+      })),
 
     setPaused: (paused) => set({ paused }),
 
