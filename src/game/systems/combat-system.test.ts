@@ -231,6 +231,25 @@ describe("CombatSystem", () => {
     expect(zombie.health.current).toBe(SHAMBLER_HEALTH - expectedDamage);
   });
 
+  it("falls back to base stats when equipped item has no object definition", () => {
+    const player = spawnPlayer(ctx, 100, 100);
+    // Equip a nonexistent item type — getObjectDef returns undefined
+    player.inventory.slots[0] = {
+      objectType: "nonexistent_fantasy_item",
+      sizeCategory: "small",
+      primary: true,
+    };
+    player.inventory.activeSlot = 0;
+
+    const zombie = spawnZombie(ctx, 100 + COMBAT.BASE_MELEE_RANGE, 100);
+
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+
+    // Should deal base damage (mass=0 because item def is undefined)
+    expect(zombie.health.current).toBe(SHAMBLER_HEALTH - COMBAT.BASE_MELEE_DAMAGE);
+  });
+
   it("deals base damage with bare hands (no equipped item)", () => {
     spawnPlayer(ctx, 100, 100);
     const zombie = spawnZombie(ctx, 100 + COMBAT.BASE_MELEE_RANGE, 100);
@@ -575,6 +594,51 @@ describe("CombatSystem", () => {
     // State should be cleaned up despite the throw
     expect(player.combatState.sensorBodyId).toBeNull();
     expect(ctx.bodyRegistry.get(sensorId)).toBeUndefined();
+  });
+
+  it("clamps zombie health to zero (not negative) on lethal hit", () => {
+    spawnPlayer(ctx, 100, 100);
+    // Zombie with 5 HP (less than BASE_MELEE_DAMAGE of 10)
+    const zombie = spawnZombie(ctx, 100 + COMBAT.BASE_MELEE_RANGE, 100, { ...SHAMBLER_STATS }, 5);
+
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+
+    expect(zombie.health.current).toBe(0);
+  });
+
+  it("does not start a new swing during an active swing", () => {
+    const player = spawnPlayer(ctx, 100, 100);
+
+    // First attack
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+    ctx.inputState.attackPressed = false;
+
+    const sensorIdFirst = player.combatState.sensorBodyId;
+    expect(sensorIdFirst).not.toBeNull();
+
+    // Try to attack again while swing is still active (before swing duration expires)
+    // Reset cooldown to 0 to ensure the cooldown isn't blocking — only swing guard
+    player.combatState.attackCooldownRemaining = 0;
+    triggerAttack(ctx, 200, 100);
+    system(DT);
+
+    // Sensor ID should remain the same (no new sensor created)
+    expect(player.combatState.sensorBodyId).toBe(sensorIdFirst);
+  });
+
+  it("applies knockback in correct direction when zombie is above player", () => {
+    spawnPlayer(ctx, 100, 100);
+    const zombie = spawnZombie(ctx, 100, 100 - COMBAT.BASE_MELEE_RANGE);
+
+    const zombieBody = ctx.bodyRegistry.get(zombie.physicsBody.bodyId);
+
+    triggerAttack(ctx, 100, 0); // Aim up
+    system(DT);
+
+    // Zombie should be pushed upward (negative Y)
+    expect(zombieBody!.force.y).toBeLessThan(0);
   });
 
   it("can hit multiple zombies in a single swing", () => {

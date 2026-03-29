@@ -17,6 +17,7 @@ describe("useGameStore", () => {
     expect(state.waveNumber).toBe(0);
     expect(state.zombiesInWave).toBe(0);
     expect(state.totalKills).toBe(0);
+    expect(state.killsByType).toEqual({});
     expect(state.paused).toBe(false);
   });
 
@@ -61,6 +62,40 @@ describe("useGameStore", () => {
     });
   });
 
+  describe("incrementKillsByType", () => {
+    it("increments count for a single variant from zero", () => {
+      useGameStore.getState().incrementKillsByType("shambler");
+      expect(useGameStore.getState().killsByType.shambler).toBe(1);
+    });
+
+    it("increments count for a variant that already has kills", () => {
+      useGameStore.getState().incrementKillsByType("runner");
+      useGameStore.getState().incrementKillsByType("runner");
+      expect(useGameStore.getState().killsByType.runner).toBe(2);
+    });
+
+    it("tracks multiple variants independently", () => {
+      useGameStore.getState().incrementKillsByType("shambler");
+      useGameStore.getState().incrementKillsByType("shambler");
+      useGameStore.getState().incrementKillsByType("runner");
+
+      const { killsByType } = useGameStore.getState();
+      expect(killsByType.shambler).toBe(2);
+      expect(killsByType.runner).toBe(1);
+      expect(killsByType.brute).toBeUndefined();
+      expect(killsByType.horde).toBeUndefined();
+    });
+
+    it("reset clears killsByType to empty object", () => {
+      useGameStore.getState().incrementKillsByType("shambler");
+      useGameStore.getState().incrementKillsByType("runner");
+
+      useGameStore.getState().reset();
+
+      expect(useGameStore.getState().killsByType).toEqual({});
+    });
+  });
+
   describe("setPaused", () => {
     it("sets paused to true", () => {
       useGameStore.getState().setPaused(true);
@@ -79,6 +114,7 @@ describe("useGameStore", () => {
       useGameStore.getState().updateClock("night", 5, 50, 180, 1500);
       useGameStore.getState().setWaveStarted(4, 30);
       useGameStore.getState().setTotalKills(42);
+      useGameStore.getState().incrementKillsByType("shambler");
       useGameStore.getState().setPaused(true);
 
       useGameStore.getState().reset();
@@ -88,6 +124,7 @@ describe("useGameStore", () => {
       expect(state.dayNumber).toBe(1);
       expect(state.waveActive).toBe(false);
       expect(state.totalKills).toBe(0);
+      expect(state.killsByType).toEqual({});
       expect(state.paused).toBe(false);
     });
   });
