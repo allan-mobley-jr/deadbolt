@@ -13,6 +13,7 @@ export type {
   AIState,
   AIStateName,
   ZombieType,
+  CombatState,
 } from "./components";
 
 // Entity
@@ -46,6 +47,7 @@ export {
   damageableEntities,
   interactableEntities,
   inventoryEntities,
+  combatPlayerEntities,
   barricadeEntities,
   zombieEntities,
 } from "./queries";

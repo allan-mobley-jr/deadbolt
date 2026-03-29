@@ -41,6 +41,16 @@ export const barricadeEntities = world.with(
   "barricade",
 );
 
+/** Player entities with combat state and physics (for combat system). */
+export const combatPlayerEntities = world.with(
+  "playerControlled",
+  "position",
+  "physicsBody",
+  "health",
+  "inventory",
+  "combatState",
+);
+
 /** Zombie entities with AI and physics. */
 export const zombieEntities = world.with(
   "position",

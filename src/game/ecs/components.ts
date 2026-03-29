@@ -206,6 +206,30 @@ export interface ZombieType {
   bodySize: number;
 }
 
+// ---------------------------------------------------------------------------
+// Player combat components (issue #26)
+// ---------------------------------------------------------------------------
+
+/**
+ * Player combat state — tracks melee swing cooldown, active sensor,
+ * invulnerability frames, and damage detection.
+ *
+ * Only present on the player entity. The combat system reads and writes
+ * these values each fixed tick.
+ */
+export interface CombatState {
+  /** Seconds remaining until the next melee swing is allowed. */
+  attackCooldownRemaining: number;
+  /** Seconds remaining in the active swing (sensor alive). 0 = no swing. */
+  swingTimeRemaining: number;
+  /** Body ID of the active melee sensor, or null if no swing in progress. */
+  sensorBodyId: number | null;
+  /** Seconds of invulnerability remaining after taking damage. 0 = vulnerable. */
+  iFramesRemaining: number;
+  /** Previous health value for detecting damage (mirrors AIState.previousHealth pattern). */
+  previousHealth: number;
+}
+
 /** Properties specific to placed world objects. */
 export interface ObjectProperties {
   /** Object type key (matches ObjectDefinition.type). */

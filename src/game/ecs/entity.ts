@@ -11,6 +11,7 @@ import type {
   Barricade,
   AIState,
   ZombieType,
+  CombatState,
 } from "./components";
 
 /**
@@ -37,4 +38,5 @@ export interface Entity {
   barricade?: Barricade;
   aiState?: AIState;
   zombieType?: ZombieType;
+  combatState?: CombatState;
 }

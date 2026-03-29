@@ -31,6 +31,7 @@ export type PlayerEntity = With<
   | "physicsBody"
   | "health"
   | "inventory"
+  | "combatState"
 >;
 
 export type ZombieEntity = With<
@@ -78,6 +79,13 @@ export function createPlayerEntity(
     physicsBody: { bodyId },
     health: { current: 100, max: 100 },
     inventory: createEmptyInventory(50),
+    combatState: {
+      attackCooldownRemaining: 0,
+      swingTimeRemaining: 0,
+      sensorBodyId: null,
+      iFramesRemaining: 0,
+      previousHealth: 100,
+    },
   });
 }
 
