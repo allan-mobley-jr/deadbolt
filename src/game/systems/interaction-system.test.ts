@@ -16,6 +16,7 @@ import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { ObjectCategory } from "@/types/procgen";
 import type { SystemFn } from "./system-runner";
 import { addItem, INVENTORY_SIZE } from "./inventory-utils";
+import * as inventoryUtils from "./inventory-utils";
 
 const DT = 1 / 60;
 
@@ -720,6 +721,35 @@ describe("InteractionSystem — drop", () => {
     expect(player.inventory!.slots[0]).toBeNull();
   });
 
+  it("drops the correct medium item when dropping by continuation slot with duplicates", () => {
+    const player = world.entities.find((e) => e.playerControlled)!;
+    const inv = player.inventory!;
+
+    // Place two car_batteries: A at slots [0,1], B at slots [2,3]
+    addItem(inv, "car_battery");
+    addItem(inv, "car_battery");
+
+    expect(inv.slots[0]?.primary).toBe(true);
+    expect(inv.slots[0]?.objectType).toBe("car_battery");
+    expect(inv.slots[2]?.primary).toBe(true);
+    expect(inv.slots[2]?.objectType).toBe("car_battery");
+
+    // Drop by slot 3 (continuation of Battery B) — must remove B, not A
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { slotIndex: 3 });
+    system(DT);
+
+    // Battery B (slots 2-3) should be removed
+    expect(inv.slots[2]).toBeNull();
+    expect(inv.slots[3]).toBeNull();
+
+    // Battery A (slots 0-1) must remain intact
+    expect(inv.slots[0]?.objectType).toBe("car_battery");
+    expect(inv.slots[0]?.primary).toBe(true);
+    expect(inv.slots[1]?.objectType).toBe("car_battery");
+    expect(inv.slots[1]?.primary).toBe(false);
+  });
+
   it("emits object-dropped event", () => {
     const handler = vi.fn();
     bus.on("object-dropped", handler);
@@ -936,6 +966,32 @@ describe("InteractionSystem — pickup failure resilience", () => {
     errorSpy.mockRestore();
   });
 
+  it("does not emit item-picked-up or inventory-changed when addItem fails after world removal", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+
+    const pickupHandler = vi.fn();
+    const invHandler = vi.fn();
+    ctx.eventBus.on("item-picked-up", pickupHandler);
+    ctx.eventBus.on("inventory-changed", invHandler);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Force addItem to fail (simulating edge case where inventory state
+    // changes between canAddItem check and addItem call)
+    const addItemSpy = vi
+      .spyOn(inventoryUtils, "addItem")
+      .mockReturnValueOnce(false);
+
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    expect(pickupHandler).not.toHaveBeenCalled();
+    expect(invHandler).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+
+    addItemSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
   it("does not emit inventory-changed when pickup fails", () => {
     spawnPickupable(ctx, 110, 100, "wooden_plank");
     const removeFn = ctx.scene.matter.world.remove as ReturnType<typeof vi.fn>;
@@ -1027,6 +1083,41 @@ describe("InteractionSystem — drop failure resilience", () => {
 
     expect(dropHandler).not.toHaveBeenCalled();
 
+    errorSpy.mockRestore();
+  });
+
+  it("logs critical error when re-add fails after spawn failure during drop", () => {
+    spawnPickupable(ctx, 110, 100, "wooden_plank");
+    ctx.inputState.interactPressed = true;
+    system(DT);
+
+    const player = world.entities.find((e) => e.playerControlled)!;
+    expect(countItems(player.inventory!.slots)).toBe(1);
+
+    // Make rectangle throw (spawn failure)
+    const rectFn = ctx.scene.matter.add.rectangle as ReturnType<typeof vi.fn>;
+    rectFn.mockImplementationOnce(() => {
+      throw new Error("body creation failed");
+    });
+
+    // Also make addItem fail on the re-add attempt
+    const addItemSpy = vi
+      .spyOn(inventoryUtils, "addItem")
+      .mockReturnValueOnce(false);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    ctx.inputState.interactPressed = false;
+    safeEmit(bus, "cmd:drop-item", { objectType: "wooden_plank" });
+    system(DT);
+
+    // Should log both the spawn failure and the re-add failure
+    const errorCalls = errorSpy.mock.calls.map((c) => String(c[0]));
+    expect(
+      errorCalls.some((msg) => msg.includes("Failed to spawn")),
+    ).toBe(true);
+    expect(errorCalls.some((msg) => msg.includes("CRITICAL"))).toBe(true);
+
+    addItemSpy.mockRestore();
     errorSpy.mockRestore();
   });
 

@@ -195,24 +195,23 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
             // canAddItem was checked before world removal, so this should
             // succeed. Guard against edge cases defensively.
             const added = addItem(inv, objectType);
-            if (!added) {
+            if (added) {
+              safeEmit(ctx.eventBus, "item-picked-up", {
+                itemType: objectType,
+                quantity: 1,
+              });
+              safeEmit(ctx.eventBus, "inventory-changed", {
+                slots: buildEventSlots(inv),
+                carryWeight: inv.carryWeight,
+                maxCarryWeight: inv.maxCarryWeight,
+              });
+            } else {
               console.error(
                 `[InteractionSystem] addItem failed after world removal for ${objectType}`,
               );
             }
 
-            // Emit events
-            safeEmit(ctx.eventBus, "item-picked-up", {
-              itemType: objectType,
-              quantity: 1,
-            });
-            safeEmit(ctx.eventBus, "inventory-changed", {
-              slots: buildEventSlots(inv),
-              carryWeight: inv.carryWeight,
-              maxCarryWeight: inv.maxCarryWeight,
-            });
-
-            // Clear prompt since entity is gone
+            // Clear prompt regardless — entity was removed from world
             safeEmit(ctx.eventBus, "interaction-prompt-clear", {});
             promptedEntity = null;
           }
@@ -283,19 +282,10 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
       if (dropCmd.slotIndex !== undefined) {
         const slot = inv.slots[dropCmd.slotIndex];
         if (!slot) continue;
-        // Resolve to primary slot for medium items
-        const primary = slot.primary
-          ? dropCmd.slotIndex
-          : inv.slots.findIndex(
-              (s, i) =>
-                i < dropCmd.slotIndex! &&
-                s !== null &&
-                s.primary &&
-                s.objectType === slot.objectType,
-            );
-        if (primary < 0) continue;
-        objectType = inv.slots[primary]!.objectType;
-        resolvedSlotIndex = primary;
+        // Pass the slot index directly — removeItem handles
+        // continuation→primary resolution via backward search.
+        objectType = slot.objectType;
+        resolvedSlotIndex = dropCmd.slotIndex;
       } else if (dropCmd.objectType !== undefined) {
         objectType = dropCmd.objectType;
       }
@@ -365,7 +355,12 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
           err,
         );
         // Re-add item to inventory to prevent loss
-        addItem(inv, objectType);
+        const reAdded = addItem(inv, objectType);
+        if (!reAdded) {
+          console.error(
+            `[InteractionSystem] CRITICAL: Failed to re-add ${objectType} to inventory after spawn failure — item lost!`,
+          );
+        }
         // Emit inventory-changed so UI stays in sync
         safeEmit(ctx.eventBus, "inventory-changed", {
           slots: buildEventSlots(inv),
