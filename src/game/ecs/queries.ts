@@ -70,3 +70,11 @@ export const materialPhysicsEntities = world.with(
   "material",
   "physicsBody",
 );
+
+/** Battery entities with position, material, and physics body (for electricity chains). */
+export const batteryEntities = world.with(
+  "position",
+  "material",
+  "physicsBody",
+  "battery",
+);
