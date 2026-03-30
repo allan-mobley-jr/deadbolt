@@ -42,6 +42,10 @@ export type { MaterialAssignment } from "./material-constants";
 export { createFireSystem, igniteEntity } from "./fire-system";
 export { FIRE } from "./fire-constants";
 
+// Explosion system
+export { createExplosionSystem } from "./explosion-system";
+export { EXPLOSION } from "./explosion-constants";
+
 // Electricity system
 export { createElectricitySystem } from "./electricity-system";
 export { ELECTRICITY } from "./electricity-constants";

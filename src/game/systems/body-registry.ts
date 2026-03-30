@@ -23,6 +23,11 @@ export class BodyRegistry {
     this.bodies.delete(bodyId);
   }
 
+  /** Return all registered bodies (for radial force application). */
+  getAll(): MatterJS.BodyType[] {
+    return Array.from(this.bodies.values());
+  }
+
   /** Drop all entries (used on run restart). */
   clear(): void {
     this.bodies.clear();
