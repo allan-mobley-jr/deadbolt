@@ -21,6 +21,7 @@ import { createStatsSystem, resetRunStats } from "@/game/systems/stats-system";
 import { createMaterialSystem, MaterialRegistry } from "@/game/systems/material-system";
 import { createFireSystem } from "@/game/systems/fire-system";
 import { createElectricitySystem } from "@/game/systems/electricity-system";
+import { createExplosionSystem } from "@/game/systems/explosion-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
@@ -46,6 +47,7 @@ export default class GameScene extends Phaser.Scene {
   private crashed = false;
   private frozen = false;
   private worldData: WorldData | null = null;
+  private tileMap: Phaser.Tilemaps.Tilemap | null = null;
 
   constructor() {
     super({ key: "GameScene" });
@@ -121,6 +123,8 @@ export default class GameScene extends Phaser.Scene {
       constraintRegistry,
       wallAnchorRegistry,
       materialRegistry,
+      tileGrid: this.worldData.layout.tiles,
+      tilemap: this.tileMap!,
       pathfindingGrid: this.worldData.pathfinding,
       entryPoints: this.worldData.safehouse.entryPointsToDefend,
       safehouseCenter: this.worldData.safehouse.minimapPosition,
@@ -169,6 +173,7 @@ export default class GameScene extends Phaser.Scene {
       createPhysicsSyncSystem(ctx),
       createMaterialSystem(ctx),
       createFireSystem(ctx),
+      createExplosionSystem(ctx),
       createElectricitySystem(ctx),
     ];
 
@@ -233,7 +238,8 @@ export default class GameScene extends Phaser.Scene {
   private buildTilemap(): void {
     const { widthTiles, heightTiles, tiles } = this.worldData!.layout;
 
-    // Create tilemap from the generated 2D tile grid.
+    // Create tilemap from the generated 2D tile grid and store reference
+    // for runtime tile mutations (explosion wall destruction).
     const map = this.make.tilemap({
       data: tiles,
       tileWidth: TILE_SIZE,
@@ -269,6 +275,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Convert colliding tiles to Matter.js static bodies.
     this.matter.world.convertTilemapLayer(layer);
+
+    // Store tilemap reference for runtime tile mutations.
+    this.tileMap = map;
 
     // Camera bounds match map dimensions.
     const mapWidth = widthTiles * TILE_SIZE;

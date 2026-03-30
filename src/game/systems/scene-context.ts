@@ -94,6 +94,10 @@ export interface SceneContext {
   spawnZones?: SpawnZone[];
   /** Material interaction query registry for fire, electricity, and explosion systems. */
   materialRegistry?: MaterialRegistry;
+  /** Mutable tile grid for runtime tile mutations (explosion wall destruction). tiles[y][x]. */
+  tileGrid?: number[][];
+  /** Phaser tilemap for visual tile updates (wall destruction). */
+  tilemap?: Phaser.Tilemaps.Tilemap;
 }
 
 /** Create a zeroed-out input state. */

@@ -291,6 +291,32 @@ export interface ElectricityChargeChangedEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Explosion (issue #31)
+// ---------------------------------------------------------------------------
+
+/** Emitted when an explosive object detonates. */
+export interface ExplosionDetonatedEvent {
+  position: { x: number; y: number };
+  objectType: string;
+  /** Explosive potential of the source (0-1), determines blast magnitude. */
+  explosivePotential: number;
+  /** Blast radius in pixels. */
+  radius: number;
+}
+
+/** Emitted when an explosion deals area damage. */
+export interface ExplosionDamageEvent {
+  position: { x: number; y: number };
+  damage: number;
+  targetType: "zombie" | "player" | "barricade" | "object";
+}
+
+/** Emitted when an explosion destroys a wall tile. */
+export interface ExplosionWallDestroyedEvent {
+  tilePosition: { x: number; y: number };
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -375,6 +401,11 @@ export interface GameEventMap {
   "electricity-damage": [event: ElectricityDamageEvent];
   "electricity-depleted": [event: ElectricityDepletedEvent];
   "electricity-charge-changed": [event: ElectricityChargeChangedEvent];
+
+  // Explosion (issue #31)
+  "explosion-detonated": [event: ExplosionDetonatedEvent];
+  "explosion-damage": [event: ExplosionDamageEvent];
+  "explosion-wall-destroyed": [event: ExplosionWallDestroyedEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
