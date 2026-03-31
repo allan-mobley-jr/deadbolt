@@ -22,6 +22,7 @@ import { createMaterialSystem, MaterialRegistry } from "@/game/systems/material-
 import { createFireSystem } from "@/game/systems/fire-system";
 import { createElectricitySystem } from "@/game/systems/electricity-system";
 import { createExplosionSystem } from "@/game/systems/explosion-system";
+import { createMinimapDataSystem } from "@/game/systems/minimap-data-system";
 import { createNoiseSystem, NoiseMap } from "@/game/systems/noise-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
@@ -150,6 +151,17 @@ export default class GameScene extends Phaser.Scene {
       seed: this.worldData!.config.seed,
     });
 
+    // --- Emit minimap bounds so the UI can scale its minimap canvas ---
+    const { widthTiles, heightTiles } = this.worldData!.layout;
+    safeEmit(ctx.eventBus, "minimap-init", {
+      mapWidth: widthTiles * TILE_SIZE,
+      mapHeight: heightTiles * TILE_SIZE,
+      safehouseCenter: {
+        x: spawnTile.x * TILE_SIZE + TILE_SIZE / 2,
+        y: spawnTile.y * TILE_SIZE + TILE_SIZE / 2,
+      },
+    });
+
     // --- Spawn world objects from procedural generation data ---
     this.spawnWorldObjects(bodyRegistry);
 
@@ -179,6 +191,7 @@ export default class GameScene extends Phaser.Scene {
       createFireSystem(ctx),
       createExplosionSystem(ctx),
       createElectricitySystem(ctx),
+      createMinimapDataSystem(ctx),
     ];
 
     this.gameLoop = new GameLoop(systems);

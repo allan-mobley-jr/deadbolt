@@ -14,3 +14,7 @@ export type {
   MenuId,
   Notification,
 } from "./useUIStore";
+
+// Minimap state (entity positions, map bounds)
+export { useMinimapStore } from "./useMinimapStore";
+export type { MinimapStoreState, MinimapStoreActions } from "./useMinimapStore";

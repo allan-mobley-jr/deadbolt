@@ -36,6 +36,8 @@ export interface GameStoreState {
   waveNumber: number;
   /** Number of zombies in the current wave. */
   zombiesInWave: number;
+  /** Number of zombies remaining alive in the current wave. */
+  zombiesRemainingInWave: number;
 
   /** Total zombies killed across all waves. */
   totalKills: number;
@@ -75,6 +77,8 @@ export interface GameStoreActions {
   setWaveStarted: (waveNumber: number, zombieCount: number) => void;
   /** Mark the current wave as ended. */
   setWaveEnded: () => void;
+  /** Decrement the remaining zombie count (called on each zombie kill during a wave). */
+  decrementZombiesRemaining: () => void;
   /** Set the total kill count (authoritative value from game events). */
   setTotalKills: (totalKills: number) => void;
   /** Increment the kill count for a specific zombie variant. */
@@ -106,6 +110,7 @@ const initialState: GameStoreState = {
   waveActive: false,
   waveNumber: 0,
   zombiesInWave: 0,
+  zombiesRemainingInWave: 0,
   totalKills: 0,
   killsByType: {},
   paused: false,
@@ -128,9 +133,14 @@ export const useGameStore = create<GameStoreState & GameStoreActions>()(
       set({ phase, dayNumber, timeRemainingInPhase, phaseDuration, elapsedTotal }),
 
     setWaveStarted: (waveNumber, zombieCount) =>
-      set({ waveActive: true, waveNumber, zombiesInWave: zombieCount }),
+      set({ waveActive: true, waveNumber, zombiesInWave: zombieCount, zombiesRemainingInWave: zombieCount }),
 
-    setWaveEnded: () => set({ waveActive: false }),
+    setWaveEnded: () => set({ waveActive: false, zombiesRemainingInWave: 0 }),
+
+    decrementZombiesRemaining: () =>
+      set((state) => ({
+        zombiesRemainingInWave: Math.max(0, state.zombiesRemainingInWave - 1),
+      })),
 
     setTotalKills: (totalKills) => set({ totalKills }),
 

@@ -20,6 +20,7 @@ import { NOISE } from "@/game/systems/noise-constants";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { useMinimapStore } from "@/stores/useMinimapStore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -102,6 +103,9 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     const store = useGameStore.getState();
     store.setTotalKills(e.totalKills);
     store.incrementKillsByType(e.variant);
+    if (store.waveActive) {
+      store.decrementZombiesRemaining();
+    }
   });
 
   onBus("player-hit", (e) => {
@@ -200,6 +204,16 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
       type: "info",
       timestamp: Date.now(),
     });
+  });
+
+  // --- Minimap data (issue #33) ---------------------------------------------
+
+  onBus("minimap-init", (e) => {
+    useMinimapStore.getState().setMapBounds(e.mapWidth, e.mapHeight, e.safehouseCenter);
+  });
+
+  onBus("minimap-update", (e) => {
+    useMinimapStore.getState().updatePositions(e.playerPosition, e.zombiePositions);
   });
 
   // --- Zustand → Game (command events from UI actions) ----------------------

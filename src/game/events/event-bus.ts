@@ -323,6 +323,23 @@ export interface ExplosionWallDestroyedEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Minimap (issue #33)
+// ---------------------------------------------------------------------------
+
+/** Emitted once at run start with map dimensions for minimap scaling. */
+export interface MinimapInitEvent {
+  mapWidth: number;
+  mapHeight: number;
+  safehouseCenter: { x: number; y: number };
+}
+
+/** Emitted at ~2 Hz with entity positions for the minimap. */
+export interface MinimapUpdateEvent {
+  playerPosition: { x: number; y: number };
+  zombiePositions: Array<{ x: number; y: number }>;
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -412,6 +429,10 @@ export interface GameEventMap {
   "explosion-detonated": [event: ExplosionDetonatedEvent];
   "explosion-damage": [event: ExplosionDamageEvent];
   "explosion-wall-destroyed": [event: ExplosionWallDestroyedEvent];
+
+  // Minimap (issue #33)
+  "minimap-init": [event: MinimapInitEvent];
+  "minimap-update": [event: MinimapUpdateEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
