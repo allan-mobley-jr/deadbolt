@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { connectBridge, type BridgeConnection } from "@/lib/bridge";
+import { safeEmit } from "@/game/events/event-bus";
 import { useGameStore } from "@/stores/useGameStore";
 import { useMinimapStore } from "@/stores/useMinimapStore";
+import { useSettingsStore } from "@/stores/useSettingsStore";
 
 export default function GameContainer() {
   const [error, setError] = useState<Error | null>(null);
@@ -44,6 +46,15 @@ export default function GameContainer() {
                 minimapInit.mapHeight,
                 minimapInit.safehouseCenter,
               );
+            }
+            // Push current settings to game systems on connect
+            const SETTINGS_KEYS = [
+              "masterVolume", "sfxVolume", "musicVolume",
+              "screenShake", "showFps", "graphicsQuality",
+            ] as const;
+            const settings = useSettingsStore.getState();
+            for (const key of SETTINGS_KEYS) {
+              safeEmit(bus, "cmd:settings-changed", { key, value: settings[key] });
             }
           } else if (retries++ < MAX_BRIDGE_RETRIES) {
             requestAnimationFrame(tryConnect);
