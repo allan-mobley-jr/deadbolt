@@ -262,7 +262,7 @@ describe("GameScene", () => {
       resumeAll: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
-    } as unknown as Phaser.Sound.BaseSoundManager;
+    } as unknown as Phaser.Sound.WebAudioSoundManager;
 
     scene.matter = {
       world: {

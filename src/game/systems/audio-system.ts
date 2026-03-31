@@ -34,6 +34,8 @@ interface MusicState {
   incomingSound: Phaser.Sound.BaseSound | null;
   fadeProgress: number; // 0 to 1
   targetVolume: number;
+  /** Volume of the outgoing track at crossfade start (for smooth fade-out). */
+  outgoingVolume: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +73,7 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
     incomingSound: null,
     fadeProgress: 0,
     targetVolume: AUDIO.DAY_MUSIC_VOLUME,
+    outgoingVolume: 0,
   };
 
   // --- Heartbeat state ---
@@ -78,6 +81,7 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
 
   // --- Concurrent SFX counters ---
   let activeExplosions = 0;
+  let activeFires = 0;
   let activeGroans = 0;
 
   // --- Zombie groan cooldowns (keyed by entity reference) ---
@@ -169,7 +173,16 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
       return;
     }
 
-    // Begin crossfade
+    // Clean up any in-progress crossfade to prevent sound leaks
+    if (music.incomingSound && "stop" in music.incomingSound) {
+      try {
+        (music.incomingSound as Phaser.Sound.WebAudioSound).stop();
+        music.incomingSound.destroy();
+      } catch { /* ignore */ }
+    }
+
+    // Begin crossfade — store outgoing volume for smooth fade-out
+    music.outgoingVolume = music.targetVolume;
     music.incomingKey = key;
     music.targetVolume = volume;
     music.fadeProgress = 0;
@@ -229,7 +242,7 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
 
     if (music.currentSound && "setVolume" in music.currentSound) {
       (music.currentSound as Phaser.Sound.WebAudioSound).setVolume(
-        (1 - t) * music.targetVolume * musicVol,
+        (1 - t) * music.outgoingVolume * musicVol,
       );
     }
     if (music.incomingSound && "setVolume" in music.incomingSound) {
@@ -288,8 +301,10 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
   // --- Fire SFX ---
 
   ctx.eventBus.on("fire-ignited", (e) => {
-    if (activeExplosions < AUDIO.MAX_CONCURRENT_FIRE) {
+    if (activeFires < AUDIO.MAX_CONCURRENT_FIRE) {
+      activeFires++;
       playSpatialSfx(SOUND_KEYS.SFX_FIRE_IGNITE, e.position.x, e.position.y);
+      setTimeout(() => { activeFires = Math.max(0, activeFires - 1); }, 1500);
     }
   });
 
