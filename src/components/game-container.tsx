@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { connectBridge, type BridgeConnection } from "@/lib/bridge";
 import { useGameStore } from "@/stores/useGameStore";
+import { useMinimapStore } from "@/stores/useMinimapStore";
 
 export default function GameContainer() {
   const [error, setError] = useState<Error | null>(null);
@@ -13,7 +14,7 @@ export default function GameContainer() {
     let bridge: BridgeConnection | null = null;
 
     import("@/game/PhaserGame")
-      .then(({ createGame, destroyGame, getActiveBus, getActiveSeed }) => {
+      .then(({ createGame, destroyGame, getActiveBus, getActiveSeed, getActiveMinimapInit }) => {
         if (cancelled) return;
         createGame("game-container");
         destroy = destroyGame;
@@ -30,11 +31,19 @@ export default function GameContainer() {
           const bus = getActiveBus();
           if (bus) {
             bridge = connectBridge(bus);
-            // Pull seed from PhaserGame module — the run-started event
-            // fired before the bridge connected, so we read it directly.
+            // Pull seed and minimap init from PhaserGame module — these events
+            // fired before the bridge connected, so we read them directly.
             const seed = getActiveSeed();
             if (seed) {
               useGameStore.getState().setSeed(seed);
+            }
+            const minimapInit = getActiveMinimapInit();
+            if (minimapInit) {
+              useMinimapStore.getState().setMapBounds(
+                minimapInit.mapWidth,
+                minimapInit.mapHeight,
+                minimapInit.safehouseCenter,
+              );
             }
           } else if (retries++ < MAX_BRIDGE_RETRIES) {
             requestAnimationFrame(tryConnect);

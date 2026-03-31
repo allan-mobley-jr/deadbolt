@@ -41,9 +41,12 @@ describe("HealthBar", () => {
     expect(screen.getByText("73/100")).toBeTruthy();
   });
 
-  it("handles zero max health gracefully", () => {
+  it("handles zero max health gracefully with full-health fallback", () => {
     usePlayerStore.getState().updateHealth(0, 0);
     render(<HealthBar />);
     expect(screen.getByText("0/0")).toBeTruthy();
+    // Fallback fraction is 1 (full), so indicator shows green (not red)
+    const indicator = document.querySelector("[data-slot='progress-indicator']");
+    expect(indicator?.className).toContain("bg-emerald-500");
   });
 });

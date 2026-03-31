@@ -29,7 +29,7 @@ import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
-import { setActiveBus, setActiveSeed } from "@/game/PhaserGame";
+import { setActiveBus, setActiveSeed, setActiveMinimapInit } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import { getObjectDef } from "@/game/procgen/object-defs";
@@ -151,16 +151,20 @@ export default class GameScene extends Phaser.Scene {
       seed: this.worldData!.config.seed,
     });
 
-    // --- Emit minimap bounds so the UI can scale its minimap canvas ---
+    // --- Store minimap init data for pull-based access (avoids bridge timing race) ---
     const { widthTiles, heightTiles } = this.worldData!.layout;
-    safeEmit(ctx.eventBus, "minimap-init", {
+    const minimapInitData = {
       mapWidth: widthTiles * TILE_SIZE,
       mapHeight: heightTiles * TILE_SIZE,
       safehouseCenter: {
         x: spawnTile.x * TILE_SIZE + TILE_SIZE / 2,
         y: spawnTile.y * TILE_SIZE + TILE_SIZE / 2,
       },
-    });
+    };
+    setActiveMinimapInit(minimapInitData);
+
+    // Also emit for any listeners already connected
+    safeEmit(ctx.eventBus, "minimap-init", minimapInitData);
 
     // --- Spawn world objects from procedural generation data ---
     this.spawnWorldObjects(bodyRegistry);

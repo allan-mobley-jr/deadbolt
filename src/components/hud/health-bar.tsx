@@ -32,7 +32,7 @@ export function HealthBar() {
   const health = usePlayerStore((s) => s.health);
   const maxHealth = usePlayerStore((s) => s.maxHealth);
 
-  const fraction = maxHealth > 0 ? health / maxHealth : 0;
+  const fraction = maxHealth > 0 ? health / maxHealth : 1;
   const percentage = Math.round(fraction * 100);
 
   return (

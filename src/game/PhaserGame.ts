@@ -26,6 +26,20 @@ let activeBus: GameEventBus | null = null;
 let activeSeed: string | null = null;
 
 /**
+ * Module-scoped minimap initialisation data for the current session.
+ * Set by GameScene.create(), read by the bridge after it connects.
+ *
+ * Stored here because the `minimap-init` event fires synchronously in
+ * GameScene.create(), before the React bridge has connected. This
+ * pull-based approach mirrors the seed pattern.
+ */
+let activeMinimapInit: {
+  mapWidth: number;
+  mapHeight: number;
+  safehouseCenter: { x: number; y: number };
+} | null = null;
+
+/**
  * Build the Phaser game configuration without creating an instance.
  * Exported so tests can validate the config without needing a real canvas.
  */
@@ -100,6 +114,7 @@ export function destroyGame(): void {
   instance = null;
   activeBus = null;
   activeSeed = null;
+  activeMinimapInit = null;
   try {
     ref.destroy(true);
   } catch (err) {
@@ -134,4 +149,22 @@ export function setActiveSeed(seed: string | null): void {
 /** Read-only accessor for the current run seed (or null). */
 export function getActiveSeed(): string | null {
   return activeSeed;
+}
+
+/** Called by GameScene.create() to store minimap init data for UI access. */
+export function setActiveMinimapInit(data: {
+  mapWidth: number;
+  mapHeight: number;
+  safehouseCenter: { x: number; y: number };
+} | null): void {
+  activeMinimapInit = data;
+}
+
+/** Read-only accessor for minimap init data (or null). */
+export function getActiveMinimapInit(): {
+  mapWidth: number;
+  mapHeight: number;
+  safehouseCenter: { x: number; y: number };
+} | null {
+  return activeMinimapInit;
 }

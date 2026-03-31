@@ -29,7 +29,7 @@ describe("Minimap", () => {
     const beginPath = vi.fn();
     const fill = vi.fn();
     const strokeRect = vi.fn();
-    const scale = vi.fn();
+    const setTransform = vi.fn();
 
     HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
       fillRect,
@@ -37,7 +37,7 @@ describe("Minimap", () => {
       beginPath,
       fill,
       strokeRect,
-      scale,
+      setTransform,
       fillStyle: "",
       strokeStyle: "",
       lineWidth: 1,

@@ -3,6 +3,7 @@ import { createMinimapDataSystem } from "./minimap-data-system";
 import { createGameEventBus } from "@/game/events/event-bus";
 import type { GameEventBus, MinimapUpdateEvent } from "@/game/events/event-bus";
 import type { SceneContext } from "./scene-context";
+import type { AIStateName } from "@/game/ecs/components";
 import { world } from "@/game/ecs/world";
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,7 @@ function addPlayerEntity(x: number, y: number) {
   });
 }
 
-function addZombieEntity(x: number, y: number, state = "pathing" as const) {
+function addZombieEntity(x: number, y: number, state: AIStateName = "pathing") {
   return world.add({
     position: { x, y },
     velocity: { vx: 0, vy: 0 },
@@ -36,22 +37,26 @@ function addZombieEntity(x: number, y: number, state = "pathing" as const) {
     health: { current: 50, max: 50 },
     aiState: {
       state,
-      targetX: 0,
-      targetY: 0,
-      pathIndex: 0,
+      targetPosition: null,
       path: [],
-      retargetCooldown: 0,
-      attackCooldown: 0,
-      lastKnownNoiseX: 0,
-      lastKnownNoiseY: 0,
-      noiseMemory: 0,
+      pathIndex: 0,
+      ticksSinceLastPathCalc: 0,
+      attackCooldownRemaining: 0,
+      staggerTimeRemaining: 0,
+      attackTargetBodyId: null,
+      previousHealth: 50,
     },
     zombieType: {
       variant: "shambler" as const,
-      speed: 40,
-      damage: 10,
-      attackInterval: 1.0,
-      healthMultiplier: 1,
+      moveSpeed: 40,
+      attackDamage: 10,
+      attackCooldown: 1.0,
+      pathRecalcInterval: 60,
+      staggerDuration: 0.3,
+      barricadeDamageMultiplier: 1,
+      vaultDurabilityThreshold: 0,
+      bodySize: 24,
+      hearingRange: 200,
     },
   });
 }

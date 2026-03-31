@@ -70,7 +70,7 @@ export const useMinimapStore = create<MinimapStoreState & MinimapStoreActions>()
     ...initialState,
 
     updatePositions: (playerPosition, zombiePositions) =>
-      set({ playerPosition, zombiePositions }),
+      set({ playerPosition, zombiePositions: [...zombiePositions] }),
 
     setMapBounds: (mapWidth, mapHeight, safehouseCenter) =>
       set({ mapWidth, mapHeight, safehouseCenter, initialised: true }),

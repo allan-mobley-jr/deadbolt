@@ -10,8 +10,7 @@
 import type { SceneContext } from "./scene-context";
 import type { SystemFn } from "./system-runner";
 import { safeEmit } from "@/game/events/event-bus";
-import { playerEntities } from "@/game/ecs/queries";
-import { zombieEntities } from "@/game/ecs/queries";
+import { playerEntities, zombieEntities } from "@/game/ecs/queries";
 
 // ---------------------------------------------------------------------------
 // Constants

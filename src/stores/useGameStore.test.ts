@@ -16,6 +16,7 @@ describe("useGameStore", () => {
     expect(state.waveActive).toBe(false);
     expect(state.waveNumber).toBe(0);
     expect(state.zombiesInWave).toBe(0);
+    expect(state.zombiesRemainingInWave).toBe(0);
     expect(state.totalKills).toBe(0);
     expect(state.killsByType).toEqual({});
     expect(state.paused).toBe(false);
@@ -47,10 +48,42 @@ describe("useGameStore", () => {
       expect(state.zombiesInWave).toBe(20);
     });
 
+    it("initialises zombiesRemainingInWave on setWaveStarted", () => {
+      useGameStore.getState().setWaveStarted(1, 15);
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(15);
+    });
+
     it("marks wave as inactive on setWaveEnded", () => {
       useGameStore.getState().setWaveStarted(1, 10);
       useGameStore.getState().setWaveEnded();
       expect(useGameStore.getState().waveActive).toBe(false);
+    });
+
+    it("resets zombiesRemainingInWave on setWaveEnded", () => {
+      useGameStore.getState().setWaveStarted(1, 10);
+      useGameStore.getState().decrementZombiesRemaining();
+      useGameStore.getState().setWaveEnded();
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(0);
+    });
+  });
+
+  describe("decrementZombiesRemaining", () => {
+    it("decrements from the wave zombie count", () => {
+      useGameStore.getState().setWaveStarted(1, 10);
+      useGameStore.getState().decrementZombiesRemaining();
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(9);
+    });
+
+    it("clamps at zero", () => {
+      useGameStore.getState().setWaveStarted(1, 1);
+      useGameStore.getState().decrementZombiesRemaining();
+      useGameStore.getState().decrementZombiesRemaining(); // extra
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(0);
+    });
+
+    it("does not go negative when called before wave starts", () => {
+      useGameStore.getState().decrementZombiesRemaining();
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(0);
     });
   });
 
@@ -130,6 +163,7 @@ describe("useGameStore", () => {
       expect(state.phase).toBe("day");
       expect(state.dayNumber).toBe(1);
       expect(state.waveActive).toBe(false);
+      expect(state.zombiesRemainingInWave).toBe(0);
       expect(state.totalKills).toBe(0);
       expect(state.killsByType).toEqual({});
       expect(state.paused).toBe(false);

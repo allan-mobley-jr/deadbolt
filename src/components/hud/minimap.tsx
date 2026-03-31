@@ -49,18 +49,25 @@ export function Minimap() {
     if (!canvas || !initialised || mapWidth === 0 || mapHeight === 0) return;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      console.warn("[Minimap] Canvas 2D context unavailable — minimap disabled");
+      return;
+    }
 
     const dpr = window.devicePixelRatio || 1;
     const w = MINIMAP_SIZE;
     const h = MINIMAP_SIZE;
 
     // Set canvas resolution for sharp rendering on HiDPI
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      ctx.scale(dpr, dpr);
+    const canvasW = Math.round(w * dpr);
+    const canvasH = Math.round(h * dpr);
+    if (canvas.width !== canvasW || canvas.height !== canvasH) {
+      canvas.width = canvasW;
+      canvas.height = canvasH;
     }
+
+    // Always reset transform to avoid accumulated scale on DPR changes
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Scale factor to fit the map into the minimap
     const scale = Math.min(w / mapWidth, h / mapHeight);

@@ -9,8 +9,9 @@ import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/prog
 
 /** Format seconds as M:SS for compact countdown display. */
 function formatCountdown(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
+  const clamped = Math.max(0, seconds);
+  const m = Math.floor(clamped / 60);
+  const s = Math.floor(clamped % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -75,7 +76,9 @@ export function DayNightTimer() {
   const phaseDuration = useGameStore((s) => s.phaseDuration);
 
   const elapsed = phaseDuration - timeRemaining;
-  const progress = phaseDuration > 0 ? (elapsed / phaseDuration) * 100 : 0;
+  const progress = phaseDuration > 0
+    ? Math.max(0, Math.min(100, (elapsed / phaseDuration) * 100))
+    : 0;
 
   return (
     <div

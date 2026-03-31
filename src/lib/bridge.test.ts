@@ -5,6 +5,7 @@ import { connectBridge } from "./bridge";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { useMinimapStore } from "@/stores/useMinimapStore";
 
 vi.mock("@/game/systems/stats-system", () => ({
   getRunStats: vi.fn(() => ({
@@ -24,6 +25,7 @@ describe("bridge", () => {
     useGameStore.getState().reset();
     usePlayerStore.getState().reset();
     useUIStore.getState().reset();
+    useMinimapStore.getState().reset();
   });
 
   // -------------------------------------------------------------------------
@@ -426,6 +428,79 @@ describe("bridge", () => {
       expect(notifications[0].message).toContain("50%");
       expect(notifications[0].message).toContain("Immovable");
       expect(notifications[0].type).toBe("info");
+
+      bridge.disconnect();
+    });
+
+    it("decrements zombiesRemainingInWave on zombie-killed during active wave", () => {
+      const bridge = connectBridge(bus);
+
+      // Start a wave with 10 zombies
+      safeEmit(bus, "wave-started", {
+        waveNumber: 1,
+        zombieCount: 10,
+        dayNumber: 1,
+      });
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(10);
+
+      // Kill a zombie
+      safeEmit(bus, "zombie-killed", {
+        position: { x: 100, y: 200 },
+        totalKills: 1,
+        variant: "shambler",
+      });
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(9);
+
+      bridge.disconnect();
+    });
+
+    it("does not decrement zombiesRemainingInWave when no wave is active", () => {
+      const bridge = connectBridge(bus);
+
+      // No wave started — zombiesRemainingInWave should stay 0
+      safeEmit(bus, "zombie-killed", {
+        position: { x: 100, y: 200 },
+        totalKills: 1,
+        variant: "shambler",
+      });
+      expect(useGameStore.getState().zombiesRemainingInWave).toBe(0);
+
+      bridge.disconnect();
+    });
+
+    it("writes minimap-init data to minimap store", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "minimap-init", {
+        mapWidth: 8192,
+        mapHeight: 8192,
+        safehouseCenter: { x: 4096, y: 4096 },
+      });
+
+      const state = useMinimapStore.getState();
+      expect(state.mapWidth).toBe(8192);
+      expect(state.mapHeight).toBe(8192);
+      expect(state.safehouseCenter).toEqual({ x: 4096, y: 4096 });
+      expect(state.initialised).toBe(true);
+
+      bridge.disconnect();
+    });
+
+    it("writes minimap-update positions to minimap store", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "minimap-update", {
+        playerPosition: { x: 100, y: 200 },
+        zombiePositions: [
+          { x: 300, y: 400 },
+          { x: 500, y: 600 },
+        ],
+      });
+
+      const state = useMinimapStore.getState();
+      expect(state.playerPosition).toEqual({ x: 100, y: 200 });
+      expect(state.zombiePositions).toHaveLength(2);
+      expect(state.zombiePositions[0]).toEqual({ x: 300, y: 400 });
 
       bridge.disconnect();
     });
