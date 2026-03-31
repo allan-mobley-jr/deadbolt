@@ -26,6 +26,7 @@ import {
   removeItemByType,
   buildEventSlots,
 } from "./inventory-utils";
+import { NOISE } from "./noise-constants";
 
 // ---------------------------------------------------------------------------
 // Tuning constants
@@ -258,10 +259,12 @@ export function createInteractionSystem(ctx: SceneContext): SystemFn {
             body.force.x += nx * DRAG_FORCE;
             body.force.y += ny * DRAG_FORCE;
 
-            // Emit noise for future zombie AI
+            // Emit noise for zombie AI hearing
             safeEmit(ctx.eventBus, "noise-generated", {
               position: { x: objX, y: objY },
               radius: DRAG_NOISE_RADIUS,
+              intensity: NOISE.DRAG_INTENSITY,
+              duration: NOISE.DRAG_DECAY_DURATION,
               source: "drag",
             });
           }

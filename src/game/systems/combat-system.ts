@@ -23,6 +23,7 @@ import { safeEmit } from "@/game/events/event-bus";
 import { getObjectDef } from "@/game/procgen/object-defs";
 import { getActiveItem } from "./inventory-utils";
 import { COMBAT } from "./combat-constants";
+import { NOISE } from "./noise-constants";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -259,6 +260,15 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
             position: { x: zombie.position.x, y: zombie.position.y },
             damage: actualDamage,
             targetType: "zombie",
+          });
+
+          // Emit combat noise for zombie hearing
+          safeEmit(ctx.eventBus, "noise-generated", {
+            position: { x: zombie.position.x, y: zombie.position.y },
+            radius: NOISE.COMBAT_HIT_RADIUS,
+            intensity: NOISE.COMBAT_HIT_INTENSITY,
+            duration: NOISE.COMBAT_HIT_DECAY_DURATION,
+            source: "combat",
           });
 
           // Apply knockback to zombie (away from player)

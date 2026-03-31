@@ -35,6 +35,7 @@ import { safeEmit } from "@/game/events/event-bus";
 import { igniteEntity } from "./fire-system";
 import { EXPLOSION } from "./explosion-constants";
 import { MATERIAL } from "./material-constants";
+import { NOISE } from "./noise-constants";
 import { TileType } from "@/game/tiles/tile-types";
 import { TILE_SIZE } from "@/game/procgen/constants";
 
@@ -626,6 +627,8 @@ export function createExplosionSystem(ctx: SceneContext): SystemFn {
         safeEmit(ctx.eventBus, "noise-generated", {
           position: { x, y },
           radius: blastRadius * 3,
+          intensity: NOISE.EXPLOSION_INTENSITY,
+          duration: NOISE.EXPLOSION_DECAY_DURATION,
           source: "explosion",
         });
       }

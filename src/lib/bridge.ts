@@ -16,6 +16,7 @@
 import type { GameEventBus, GameEventMap } from "@/game/events/event-bus";
 import { safeEmit } from "@/game/events/event-bus";
 import { getRunStats } from "@/game/systems/stats-system";
+import { NOISE } from "@/game/systems/noise-constants";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
@@ -177,6 +178,19 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
 
   onBus("interaction-prompt-clear", () => {
     useUIStore.getState().clearInteractionPrompt();
+  });
+
+  onBus("noise-generated", (e) => {
+    // Only forward significant noise to the UI (skip footsteps, drag)
+    if (e.intensity >= NOISE.UI_INTENSITY_THRESHOLD) {
+      useUIStore.getState().addNoiseIndicator({
+        id: `noise-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        position: e.position,
+        intensity: e.intensity,
+        source: e.source,
+        timestamp: Date.now(),
+      });
+    }
   });
 
   onBus("object-examined", (e) => {

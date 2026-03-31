@@ -25,6 +25,7 @@ import {
 import { getObjectDef } from "@/game/procgen/object-defs";
 import { safeEmit } from "@/game/events/event-bus";
 import { TILE_SIZE } from "@/game/procgen/constants";
+import { NOISE } from "./noise-constants";
 import type { WallAnchorPair } from "./wall-anchor-registry";
 
 // ---------------------------------------------------------------------------
@@ -328,6 +329,15 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
 
       // Emit destruction event
       safeEmit(ctx.eventBus, "barricade-broken", { position: positionCopy });
+
+      // Emit noise for zombie hearing
+      safeEmit(ctx.eventBus, "noise-generated", {
+        position: positionCopy,
+        radius: NOISE.BARRICADE_BREAK_RADIUS,
+        intensity: NOISE.BARRICADE_BREAK_INTENSITY,
+        duration: NOISE.BARRICADE_BREAK_DECAY_DURATION,
+        source: "barricade-break",
+      });
     }
 
     // -----------------------------------------------------------------

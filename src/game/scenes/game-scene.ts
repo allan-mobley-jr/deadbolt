@@ -22,6 +22,7 @@ import { createMaterialSystem, MaterialRegistry } from "@/game/systems/material-
 import { createFireSystem } from "@/game/systems/fire-system";
 import { createElectricitySystem } from "@/game/systems/electricity-system";
 import { createExplosionSystem } from "@/game/systems/explosion-system";
+import { createNoiseSystem, NoiseMap } from "@/game/systems/noise-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
@@ -107,10 +108,11 @@ export default class GameScene extends Phaser.Scene {
     bodyRegistry.register(playerBody);
     createPlayerEntity(px, py, playerBody.id);
 
-    // --- Registries for barricade and material systems ---
+    // --- Registries for barricade, material, and noise systems ---
     const constraintRegistry = new ConstraintRegistry();
     const wallAnchorRegistry = new WallAnchorRegistry();
     const materialRegistry = new MaterialRegistry();
+    const noiseMap = new NoiseMap();
 
     // --- Scene context (shared by all system factories) ---
     const ctx: SceneContext = {
@@ -123,6 +125,7 @@ export default class GameScene extends Phaser.Scene {
       constraintRegistry,
       wallAnchorRegistry,
       materialRegistry,
+      noiseMap,
       tileGrid: this.worldData.layout.tiles,
       tilemap: this.tileMap!,
       pathfindingGrid: this.worldData.pathfinding,
@@ -167,6 +170,7 @@ export default class GameScene extends Phaser.Scene {
       createDayNightSystem(ctx),
       createWaveSystem(ctx),
       createMovementSystem(ctx),
+      createNoiseSystem(ctx),
       createZombieAISystem(ctx),
       createCombatSystem(ctx),
       createStatsSystem(ctx),

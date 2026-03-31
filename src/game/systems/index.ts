@@ -42,6 +42,11 @@ export type { MaterialAssignment } from "./material-constants";
 export { createFireSystem, igniteEntity } from "./fire-system";
 export { FIRE } from "./fire-constants";
 
+// Noise system
+export { createNoiseSystem, NoiseMap } from "./noise-system";
+export type { NoiseEvent } from "./noise-system";
+export { NOISE } from "./noise-constants";
+
 // Explosion system
 export { createExplosionSystem } from "./explosion-system";
 export { EXPLOSION } from "./explosion-constants";
