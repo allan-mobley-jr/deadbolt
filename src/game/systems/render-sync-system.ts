@@ -217,9 +217,6 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
   /** Equipped item indicator rectangle (created lazily). */
   let equipGfx: Phaser.GameObjects.Rectangle | null = null;
 
-  /** Whether camera follow has been wired. */
-  let cameraFollowWired = false;
-
   /** Barricade health bar graphics (created lazily). */
   let barricadeGfx: Phaser.GameObjects.Graphics | null = null;
 
@@ -332,17 +329,6 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         );
         sprites.set(entity, sprite);
 
-        // Wire camera follow on first player sprite
-        if (
-          !cameraFollowWired &&
-          entity.playerControlled !== undefined
-        ) {
-          const cam = scene.cameras.main;
-          if (cam) {
-            cam.startFollow(sprite, true, 0.08, 0.08);
-            cameraFollowWired = true;
-          }
-        }
       }
 
       // Interpolate between previous and current physics positions

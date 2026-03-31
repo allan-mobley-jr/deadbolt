@@ -24,6 +24,7 @@ import { createElectricitySystem } from "@/game/systems/electricity-system";
 import { createExplosionSystem } from "@/game/systems/explosion-system";
 import { createMinimapDataSystem } from "@/game/systems/minimap-data-system";
 import { createAudioSystem } from "@/game/systems/audio-system";
+import { createCameraSystem } from "@/game/systems/camera-system";
 import { createNoiseSystem, NoiseMap } from "@/game/systems/noise-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
@@ -212,7 +213,10 @@ export default class GameScene extends Phaser.Scene {
     this.gameLoop = new GameLoop(systems);
 
     // --- Render-phase systems (once per frame, after fixed ticks) ---
+    // Camera system runs first so downstream render systems read the final
+    // camera position (e.g., LightingSystem reads cam.scrollX/scrollY).
     this.renderSystems = [
+      createCameraSystem(ctx),
       createRenderSyncSystem(ctx),
       createLightingSystem(ctx),
     ];

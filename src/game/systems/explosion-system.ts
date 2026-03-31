@@ -574,13 +574,8 @@ export function createExplosionSystem(ctx: SceneContext): SystemFn {
         // 2i. Visual feedback
         // ---------------------------------------------------------------
 
-        // Screen shake
-        tryVisual(() => {
-          ctx.scene.cameras.main.shake(
-            EXPLOSION.SCREEN_SHAKE_DURATION,
-            EXPLOSION.SCREEN_SHAKE_INTENSITY,
-          );
-        });
+        // Screen shake is now handled by the camera system
+        // (listens to explosion-detonated events).
 
         // Brief white flash overlay
         tryVisual(() => {

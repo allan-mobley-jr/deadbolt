@@ -176,6 +176,11 @@ describe("GameScene", () => {
         setBounds,
         getWorldPoint: vi.fn((x: number, y: number) => ({ x, y })),
         startFollow: vi.fn(),
+        centerOn: vi.fn(),
+        setZoom: vi.fn(),
+        scrollX: 0,
+        scrollY: 0,
+        zoom: 1,
         width: 1280,
         height: 720,
       },
@@ -244,6 +249,7 @@ describe("GameScene", () => {
         addKey: vi.fn().mockReturnValue({ isDown: false }),
       },
       activePointer: { x: 640, y: 360 },
+      on: vi.fn(),
     } as unknown as Phaser.Input.InputPlugin;
 
     scene.sound = {
