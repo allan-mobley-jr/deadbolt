@@ -163,7 +163,7 @@ describe("RenderSyncSystem", () => {
     expect(mockRect.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it("wires camera follow on first player sprite", () => {
+  it("does not wire camera follow (handled by camera system)", () => {
     const { ctx } = createMockContext();
     const system = createRenderSyncSystem(ctx);
 
@@ -178,7 +178,7 @@ describe("RenderSyncSystem", () => {
     const cam = ctx.scene.cameras.main as unknown as {
       startFollow: ReturnType<typeof vi.fn>;
     };
-    expect(cam.startFollow).toHaveBeenCalledTimes(1);
+    expect(cam.startFollow).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
@@ -333,7 +333,7 @@ describe("RenderSyncSystem", () => {
     expect(addGraphics).toHaveBeenCalledTimes(2);
   });
 
-  it("only wires camera follow once", () => {
+  it("does not call startFollow on repeated ticks", () => {
     const { ctx } = createMockContext();
     const system = createRenderSyncSystem(ctx);
 
@@ -350,7 +350,7 @@ describe("RenderSyncSystem", () => {
     const cam = ctx.scene.cameras.main as unknown as {
       startFollow: ReturnType<typeof vi.fn>;
     };
-    expect(cam.startFollow).toHaveBeenCalledTimes(1);
+    expect(cam.startFollow).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------

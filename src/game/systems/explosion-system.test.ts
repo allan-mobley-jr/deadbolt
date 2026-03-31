@@ -905,7 +905,7 @@ describe("ExplosionSystem — wall destruction", () => {
 // ---------------------------------------------------------------------------
 
 describe("ExplosionSystem — visual feedback", () => {
-  it("triggers camera shake on detonation", () => {
+  it("does not call camera.shake directly (handled by camera system)", () => {
     const ctx = createMockContext();
     const system = createExplosionSystem(ctx);
 
@@ -915,10 +915,7 @@ describe("ExplosionSystem — visual feedback", () => {
     tick(ctx, system);
 
     const cameras = (ctx.scene as unknown as { cameras: { main: { shake: ReturnType<typeof vi.fn> } } }).cameras;
-    expect(cameras.main.shake).toHaveBeenCalledWith(
-      EXPLOSION.SCREEN_SHAKE_DURATION,
-      EXPLOSION.SCREEN_SHAKE_INTENSITY,
-    );
+    expect(cameras.main.shake).not.toHaveBeenCalled();
   });
 
   it("creates white flash rectangle on detonation", () => {
