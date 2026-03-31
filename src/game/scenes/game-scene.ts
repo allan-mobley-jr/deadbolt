@@ -291,7 +291,9 @@ export default class GameScene extends Phaser.Scene {
 
   /** Check if the game clock is paused (set by command system). */
   private isClockPaused(): boolean {
-    return this._clockState?.paused ?? false;
+    // If clockState is null, create() hasn't finished — treat as paused
+    // to prevent running gameplay systems without a valid context.
+    return this._clockState?.paused ?? true;
   }
 
   // -----------------------------------------------------------------------

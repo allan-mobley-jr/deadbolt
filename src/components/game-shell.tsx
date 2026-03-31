@@ -32,9 +32,16 @@ export default function GameShell() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
+      if (e.repeat) return; // Ignore key-repeat to prevent rapid state oscillation
       e.preventDefault();
 
       const { activeMenu, overlays } = useUIStore.getState();
+
+      // Abandon Run confirmation dialog is open → dismiss it
+      if (overlays.includes("confirm-abandon")) {
+        useUIStore.getState().popOverlay("confirm-abandon");
+        return;
+      }
 
       // Controls overlay open → close it (back to pause)
       if (overlays.includes("controls")) {

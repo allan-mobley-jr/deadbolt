@@ -116,7 +116,10 @@ export function PauseMenu() {
             variant="destructive"
             size="lg"
             className="w-full"
-            onClick={() => setConfirmOpen(true)}
+            onClick={() => {
+              setConfirmOpen(true);
+              useUIStore.getState().pushOverlay("confirm-abandon");
+            }}
             data-testid="pause-abandon-btn"
           >
             Abandon Run
@@ -125,7 +128,15 @@ export function PauseMenu() {
       </Card>
 
       {/* Abandon Run confirmation */}
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (!open) {
+            useUIStore.getState().popOverlay("confirm-abandon");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Abandon Run?</AlertDialogTitle>

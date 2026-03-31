@@ -48,10 +48,13 @@ export default function GameContainer() {
               );
             }
             // Push current settings to game systems on connect
+            const SETTINGS_KEYS = [
+              "masterVolume", "sfxVolume", "musicVolume",
+              "screenShake", "showFps", "graphicsQuality",
+            ] as const;
             const settings = useSettingsStore.getState();
-            for (const [key, value] of Object.entries(settings)) {
-              if (typeof value === "function") continue;
-              safeEmit(bus, "cmd:settings-changed", { key, value });
+            for (const key of SETTINGS_KEYS) {
+              safeEmit(bus, "cmd:settings-changed", { key, value: settings[key] });
             }
           } else if (retries++ < MAX_BRIDGE_RETRIES) {
             requestAnimationFrame(tryConnect);

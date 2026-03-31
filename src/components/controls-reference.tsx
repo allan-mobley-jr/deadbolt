@@ -42,13 +42,13 @@ function KeyBadge({ children }: { children: React.ReactNode }) {
  * Sits on top of the pause menu (both use z-50 but controls renders later).
  */
 export function ControlsReference() {
-  const overlays = useUIStore((s) => s.overlays);
+  const isOpen = useUIStore((s) => s.overlays.includes("controls"));
 
   const handleBack = useCallback(() => {
     useUIStore.getState().popOverlay("controls");
   }, []);
 
-  if (!overlays.includes("controls")) return null;
+  if (!isOpen) return null;
 
   return (
     <div

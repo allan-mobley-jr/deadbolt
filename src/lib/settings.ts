@@ -70,7 +70,8 @@ export function loadSettings(): GameSettings {
       showFps: typeof obj.showFps === "boolean" ? obj.showFps : DEFAULT_SETTINGS.showFps,
       graphicsQuality: isGraphicsQuality(obj.graphicsQuality) ? obj.graphicsQuality : DEFAULT_SETTINGS.graphicsQuality,
     };
-  } catch {
+  } catch (err) {
+    console.warn("[Settings] Failed to load settings, using defaults:", err);
     return { ...DEFAULT_SETTINGS };
   }
 }
@@ -79,8 +80,12 @@ export function loadSettings(): GameSettings {
 export function saveSettings(settings: GameSettings): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // localStorage may be full or disabled — silently ignore
+  } catch (err) {
+    // QuotaExceededError and SecurityError are expected in restricted environments.
+    const name = err instanceof DOMException ? err.name : "";
+    if (name !== "QuotaExceededError" && name !== "SecurityError") {
+      console.error("[Settings] Unexpected error saving settings:", err);
+    }
   }
 }
 
