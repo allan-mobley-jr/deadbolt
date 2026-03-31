@@ -110,6 +110,11 @@ export class GameLoop {
     return this._fps;
   }
 
+  /** Reset the accumulator to zero (call on resume from pause to avoid catch-up ticks). */
+  resetAccumulator(): void {
+    this.accumulator = 0;
+  }
+
   /** Snapshot of all loop metrics. */
   get stats(): GameLoopStats {
     return {

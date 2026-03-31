@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GameLoop } from "@/game/systems/game-loop";
+import { GameLoop, FIXED_DT } from "@/game/systems/game-loop";
 import type { SystemFn } from "@/game/systems/system-runner";
 import { createInputState, createClockState } from "@/game/systems/scene-context";
 import type { SceneContext } from "@/game/systems/scene-context";
@@ -43,13 +43,16 @@ import type { WorldData } from "@/types/world";
  */
 export default class GameScene extends Phaser.Scene {
   private gameLoop!: GameLoop;
+  private commandSystem!: SystemFn;
   private renderSystems: SystemFn[] = [];
   private fpsText!: Phaser.GameObjects.Text;
   private showDebug = false;
   private crashed = false;
   private frozen = false;
+  private wasPaused = false;
   private worldData: WorldData | null = null;
   private tileMap: Phaser.Tilemaps.Tilemap | null = null;
+  private _clockState: import("@/game/systems/scene-context").ClockState | null = null;
 
   constructor() {
     super({ key: "GameScene" });
@@ -135,6 +138,9 @@ export default class GameScene extends Phaser.Scene {
       spawnZones: this.worldData.spawnZones,
     };
 
+    // Store clock state reference for pause checking in update()
+    this._clockState = ctx.clockState;
+
     // Publish the bus so the React bridge can connect to it.
     setActiveBus(ctx.eventBus);
 
@@ -176,9 +182,12 @@ export default class GameScene extends Phaser.Scene {
       bodyRegistry,
     );
 
-    // --- Assemble fixed-tick systems (60 Hz) ---
+    // --- Command system runs even when paused (to process resume commands) ---
+    this.commandSystem = createCommandSystem(ctx);
+
+    // --- Assemble fixed-tick gameplay systems (60 Hz, skipped when paused) ---
     const systems: SystemFn[] = [
-      createCommandSystem(ctx),
+      this.commandSystem,
       createInputSystem(ctx),
       createInventorySystem(ctx),
       createInteractionSystem(ctx),
@@ -206,6 +215,17 @@ export default class GameScene extends Phaser.Scene {
       createLightingSystem(ctx),
     ];
 
+    // --- Handle settings changes from the UI ---
+    ctx.eventBus.on("cmd:settings-changed", (e) => {
+      if (e.key === "masterVolume" && typeof e.value === "number") {
+        this.sound.volume = e.value;
+      }
+      if (e.key === "showFps" && typeof e.value === "boolean") {
+        this.showDebug = e.value;
+        this.fpsText?.setVisible(e.value);
+      }
+    });
+
     // --- Debug FPS overlay (F3 to toggle) ---
     this.fpsText = this.add
       .text(4, 4, "", {
@@ -231,6 +251,23 @@ export default class GameScene extends Phaser.Scene {
     if (this.crashed || this.frozen) return;
 
     try {
+      // When paused, only run the command system (to process resume commands)
+      // and skip the full game loop (physics, AI, timers all stop).
+      if (this.isClockPaused()) {
+        // Run command system each frame so resume commands are processed
+        this.commandSystem(FIXED_DT);
+
+        // Track pause state to reset accumulator on resume
+        this.wasPaused = true;
+        return;
+      }
+
+      // If resuming from pause, reset the accumulator to avoid catch-up ticks
+      if (this.wasPaused) {
+        this.gameLoop.resetAccumulator();
+        this.wasPaused = false;
+      }
+
       // Phaser provides delta in milliseconds; GameLoop expects seconds.
       this.gameLoop.tick(delta / 1000);
 
@@ -250,6 +287,11 @@ export default class GameScene extends Phaser.Scene {
         `FPS: ${Math.round(fps)}\nPhysics: ${physicsTicks} ticks\nAlpha: ${alpha.toFixed(3)}`,
       );
     }
+  }
+
+  /** Check if the game clock is paused (set by command system). */
+  private isClockPaused(): boolean {
+    return this._clockState?.paused ?? false;
   }
 
   // -----------------------------------------------------------------------

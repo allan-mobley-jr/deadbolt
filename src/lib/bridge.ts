@@ -21,6 +21,7 @@ import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useMinimapStore } from "@/stores/useMinimapStore";
+import { useSettingsStore } from "@/stores/useSettingsStore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -234,6 +235,23 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     },
   );
   cleanups.push(unsubPause);
+
+  // --- Settings → Game (forward setting changes to game systems) ------------
+
+  const settingsKeys = [
+    "masterVolume", "sfxVolume", "musicVolume",
+    "screenShake", "showFps", "graphicsQuality",
+  ] as const;
+
+  for (const key of settingsKeys) {
+    const unsub = useSettingsStore.subscribe(
+      (state) => state[key],
+      (value) => {
+        safeEmit(bus, "cmd:settings-changed", { key, value });
+      },
+    );
+    cleanups.push(unsub);
+  }
 
   // ---------------------------------------------------------------------------
   // Disconnect

@@ -18,3 +18,7 @@ export type {
 // Minimap state (entity positions, map bounds)
 export { useMinimapStore } from "./useMinimapStore";
 export type { MinimapStoreState, MinimapStoreActions } from "./useMinimapStore";
+
+// Settings (persisted to localStorage, survives across runs)
+export { useSettingsStore } from "./useSettingsStore";
+export type { SettingsStoreActions } from "./useSettingsStore";
