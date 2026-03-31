@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/useUIStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useMinimapStore } from "@/stores/useMinimapStore";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,6 +33,7 @@ function resetAllStores(): void {
   useUIStore.getState().reset();
   useGameStore.getState().reset();
   usePlayerStore.getState().reset();
+  useMinimapStore.getState().reset();
 }
 
 // ---------------------------------------------------------------------------

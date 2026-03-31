@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { InteractionPrompt } from "@/components/interaction-prompt";
 import { DeathScreen } from "@/components/death-screen";
+import { HudOverlay } from "@/components/hud/hud-overlay";
 import { useGameStore } from "@/stores/useGameStore";
 
 const GameContainer = dynamic(
@@ -25,6 +26,7 @@ export default function GameShell() {
   return (
     <div className="relative h-screen w-screen">
       <GameContainer key={runKey} />
+      <HudOverlay />
       <InteractionPrompt />
       <DeathScreen />
     </div>
