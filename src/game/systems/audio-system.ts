@@ -144,6 +144,8 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
     if (spatialVol <= 0) return;
 
     const vol = computeEffectiveVolume(spatialVol, masterVolume, sfxVolume);
+    if (vol <= 0) return;
+
     const pan = computeStereoPan(worldX, worldY, listener.x, listener.y);
 
     try {
