@@ -241,9 +241,28 @@ describe("GameScene", () => {
           }
         }),
         addKeys: vi.fn().mockReturnValue(mockKeys),
+        addKey: vi.fn().mockReturnValue({ isDown: false }),
       },
       activePointer: { x: 640, y: 360 },
     } as unknown as Phaser.Input.InputPlugin;
+
+    scene.sound = {
+      play: vi.fn(),
+      add: vi.fn().mockReturnValue({
+        play: vi.fn(),
+        stop: vi.fn(),
+        setVolume: vi.fn(),
+        destroy: vi.fn(),
+        isPlaying: false,
+      }),
+      volume: 1,
+      mute: false,
+      locked: false,
+      pauseAll: vi.fn(),
+      resumeAll: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    } as unknown as Phaser.Sound.WebAudioSoundManager;
 
     scene.matter = {
       world: {
