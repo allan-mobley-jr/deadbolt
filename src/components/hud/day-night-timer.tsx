@@ -75,9 +75,8 @@ export function DayNightTimer() {
   const timeRemaining = useGameStore((s) => s.timeRemainingInPhase);
   const phaseDuration = useGameStore((s) => s.phaseDuration);
 
-  const elapsed = phaseDuration - timeRemaining;
   const progress = phaseDuration > 0
-    ? Math.max(0, Math.min(100, (elapsed / phaseDuration) * 100))
+    ? Math.max(0, Math.min(100, (1 - timeRemaining / phaseDuration) * 100))
     : 0;
 
   return (

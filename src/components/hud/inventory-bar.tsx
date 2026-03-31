@@ -8,6 +8,9 @@ import type { InventorySlot } from "@/game/events/event-bus";
 // Constants
 // ---------------------------------------------------------------------------
 
+/** Total inventory slot count. */
+const SLOT_COUNT = 8;
+
 /** Number of quick-select slots (bound to keys 1-5). */
 const QUICK_SELECT_COUNT = 5;
 
@@ -90,13 +93,12 @@ export function InventoryBar() {
     maxCarryWeight > 0 ? (carryWeight / maxCarryWeight) * 100 : 0;
   const isOverweight = weightPercent > 80;
 
-  // Build a fixed-size slot array — inventory may not cover all slots
-  // if events haven't fired yet. Default to 8 slots per INVENTORY_SIZE.
-  const SLOT_COUNT = 8;
+  // Build a fixed-size slot array via index lookup. Inventory may not
+  // cover all slots if events haven't fired yet.
+  const slotByIndex = new Map(inventory.map((s) => [s.slotIndex, s]));
   const slots: Array<InventorySlot | null> = [];
   for (let i = 0; i < SLOT_COUNT; i++) {
-    const found = inventory.find((s) => s.slotIndex === i);
-    slots.push(found ?? null);
+    slots.push(slotByIndex.get(i) ?? null);
   }
 
   return (

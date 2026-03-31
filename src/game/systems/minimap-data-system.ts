@@ -26,8 +26,8 @@ const EMIT_INTERVAL_TICKS = 30;
 export function createMinimapDataSystem(ctx: SceneContext): SystemFn {
   let tickCounter = 0;
 
-  // Pre-allocate reusable array for zombie positions to reduce GC pressure.
-  // We replace the contents each emit — the bridge copies it into the store.
+  // Reusable array for zombie positions — cleared and refilled each emit.
+  // The bridge copies it into the store via spread, so reuse is safe.
   const zombieBuffer: Array<{ x: number; y: number }> = [];
 
   return function minimapDataSystem(_dt: number): void {

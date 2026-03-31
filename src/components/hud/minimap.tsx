@@ -15,6 +15,8 @@ const PLAYER_DOT_RADIUS = 3;
 const ZOMBIE_DOT_RADIUS = 1.5;
 const SAFEHOUSE_SIZE = 6;
 
+const TWO_PI = Math.PI * 2;
+
 /** Colors */
 const COLOR_BG = "#0a0a0f";
 const COLOR_BORDER = "#27272a"; // zinc-800
@@ -102,7 +104,7 @@ export function Minimap() {
       const zx = offsetX + zombiePositions[i].x * scale;
       const zy = offsetY + zombiePositions[i].y * scale;
       ctx.beginPath();
-      ctx.arc(zx, zy, ZOMBIE_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.arc(zx, zy, ZOMBIE_DOT_RADIUS, 0, TWO_PI);
       ctx.fill();
     }
 
@@ -111,7 +113,7 @@ export function Minimap() {
     const py = offsetY + playerPosition.y * scale;
     ctx.fillStyle = COLOR_PLAYER;
     ctx.beginPath();
-    ctx.arc(px, py, PLAYER_DOT_RADIUS, 0, Math.PI * 2);
+    ctx.arc(px, py, PLAYER_DOT_RADIUS, 0, TWO_PI);
     ctx.fill();
   }, [
     playerPosition,
