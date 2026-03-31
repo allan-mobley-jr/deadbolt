@@ -6,12 +6,14 @@ const mockCreateGame = vi.fn();
 const mockDestroyGame = vi.fn();
 const mockGetActiveBus = vi.fn().mockReturnValue(null);
 const mockGetActiveSeed = vi.fn().mockReturnValue(null);
+const mockGetActiveMinimapInit = vi.fn().mockReturnValue(null);
 
 vi.mock("@/game/PhaserGame", () => ({
   createGame: mockCreateGame,
   destroyGame: mockDestroyGame,
   getActiveBus: mockGetActiveBus,
   getActiveSeed: mockGetActiveSeed,
+  getActiveMinimapInit: mockGetActiveMinimapInit,
 }));
 
 const { mockDisconnect, mockConnectBridge } = vi.hoisted(() => {

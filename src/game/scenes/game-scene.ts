@@ -22,13 +22,14 @@ import { createMaterialSystem, MaterialRegistry } from "@/game/systems/material-
 import { createFireSystem } from "@/game/systems/fire-system";
 import { createElectricitySystem } from "@/game/systems/electricity-system";
 import { createExplosionSystem } from "@/game/systems/explosion-system";
+import { createMinimapDataSystem } from "@/game/systems/minimap-data-system";
 import { createNoiseSystem, NoiseMap } from "@/game/systems/noise-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
-import { setActiveBus, setActiveSeed } from "@/game/PhaserGame";
+import { setActiveBus, setActiveSeed, setActiveMinimapInit } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import { getObjectDef } from "@/game/procgen/object-defs";
@@ -150,6 +151,21 @@ export default class GameScene extends Phaser.Scene {
       seed: this.worldData!.config.seed,
     });
 
+    // --- Store minimap init data for pull-based access (avoids bridge timing race) ---
+    const { widthTiles, heightTiles } = this.worldData!.layout;
+    const minimapInitData = {
+      mapWidth: widthTiles * TILE_SIZE,
+      mapHeight: heightTiles * TILE_SIZE,
+      safehouseCenter: {
+        x: spawnTile.x * TILE_SIZE + TILE_SIZE / 2,
+        y: spawnTile.y * TILE_SIZE + TILE_SIZE / 2,
+      },
+    };
+    setActiveMinimapInit(minimapInitData);
+
+    // Also emit for any listeners already connected
+    safeEmit(ctx.eventBus, "minimap-init", minimapInitData);
+
     // --- Spawn world objects from procedural generation data ---
     this.spawnWorldObjects(bodyRegistry);
 
@@ -179,6 +195,7 @@ export default class GameScene extends Phaser.Scene {
       createFireSystem(ctx),
       createExplosionSystem(ctx),
       createElectricitySystem(ctx),
+      createMinimapDataSystem(ctx),
     ];
 
     this.gameLoop = new GameLoop(systems);
