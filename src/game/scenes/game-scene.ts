@@ -25,6 +25,7 @@ import { createExplosionSystem } from "@/game/systems/explosion-system";
 import { createMinimapDataSystem } from "@/game/systems/minimap-data-system";
 import { createAudioSystem } from "@/game/systems/audio-system";
 import { createCameraSystem } from "@/game/systems/camera-system";
+import { createParticleSystem } from "@/game/systems/particle-system";
 import { createNoiseSystem, NoiseMap } from "@/game/systems/noise-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
@@ -218,6 +219,7 @@ export default class GameScene extends Phaser.Scene {
     this.renderSystems = [
       createCameraSystem(ctx),
       createRenderSyncSystem(ctx),
+      createParticleSystem(ctx),
       createLightingSystem(ctx),
     ];
 

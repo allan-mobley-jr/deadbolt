@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { generateTileset } from "@/game/tiles/tileset-generator";
 import { TILE_SIZE } from "@/game/tiles/tile-types";
 import { ALL_SOUND_KEYS } from "@/game/systems/audio-constants";
+import { PARTICLE_TEXTURES } from "@/game/systems/particle-constants";
 
 /** Texture key for the player sprite. */
 export const PLAYER_TEXTURE_KEY = "player";
@@ -29,6 +30,9 @@ export default class BootScene extends Phaser.Scene {
 
       // Generate placeholder silent audio assets.
       this.generatePlaceholderAudio();
+
+      // Generate particle textures (tiny colored shapes).
+      this.generateParticleTextures();
 
       // All assets ready — proceed to loading / world generation.
       this.scene.start("LoadingScene");
@@ -61,6 +65,47 @@ export default class BootScene extends Phaser.Scene {
       // Create a short silent AudioBuffer (0.1s mono at 22050 Hz)
       const buffer = audioCtx.createBuffer(1, 2205, 22050);
       this.cache.audio.add(key, buffer);
+    }
+  }
+
+  /**
+   * Generate tiny white particle textures (circle and square).
+   *
+   * Particles are tinted at emit time — white base textures allow
+   * any color via Phaser's tint property. Sizes are 4x4 (circle)
+   * and 3x3 (square) pixels.
+   */
+  private generateParticleTextures(): void {
+    // 4x4 circle
+    if (!this.textures.exists(PARTICLE_TEXTURES.CIRCLE)) {
+      const circleCanvas = this.textures.createCanvas(
+        PARTICLE_TEXTURES.CIRCLE,
+        4,
+        4,
+      );
+      if (circleCanvas) {
+        const cCtx = circleCanvas.getContext();
+        cCtx.fillStyle = "#ffffff";
+        cCtx.beginPath();
+        cCtx.arc(2, 2, 2, 0, Math.PI * 2);
+        cCtx.fill();
+        circleCanvas.refresh();
+      }
+    }
+
+    // 3x3 square
+    if (!this.textures.exists(PARTICLE_TEXTURES.SQUARE)) {
+      const squareCanvas = this.textures.createCanvas(
+        PARTICLE_TEXTURES.SQUARE,
+        3,
+        3,
+      );
+      if (squareCanvas) {
+        const sCtx = squareCanvas.getContext();
+        sCtx.fillStyle = "#ffffff";
+        sCtx.fillRect(0, 0, 3, 3);
+        squareCanvas.refresh();
+      }
     }
   }
 
