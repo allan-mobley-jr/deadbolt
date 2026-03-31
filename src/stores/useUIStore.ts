@@ -34,6 +34,15 @@ export interface InteractionPromptData {
   worldY: number;
 }
 
+/** A noise indicator shown on the HUD as a directional cue. */
+export interface NoiseIndicator {
+  id: string;
+  position: { x: number; y: number };
+  intensity: number;
+  source: string;
+  timestamp: number;
+}
+
 // ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
@@ -47,6 +56,8 @@ export interface UIStoreState {
   notifications: Notification[];
   /** Active interaction prompt (null when no object is in range). */
   interactionPrompt: InteractionPromptData | null;
+  /** Active noise indicators for directional HUD cues. */
+  noiseIndicators: NoiseIndicator[];
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +81,10 @@ export interface UIStoreActions {
   setInteractionPrompt: (prompt: InteractionPromptData) => void;
   /** Clear the interaction prompt. */
   clearInteractionPrompt: () => void;
+  /** Add a noise indicator for directional HUD display. */
+  addNoiseIndicator: (indicator: NoiseIndicator) => void;
+  /** Remove expired noise indicators. */
+  clearNoiseIndicators: () => void;
   /** Reset to initial state between game sessions. */
   reset: () => void;
 }
@@ -83,6 +98,7 @@ const initialState: UIStoreState = {
   overlays: [],
   notifications: [],
   interactionPrompt: null,
+  noiseIndicators: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -120,6 +136,13 @@ export const useUIStore = create<UIStoreState & UIStoreActions>()(
     setInteractionPrompt: (prompt) => set({ interactionPrompt: prompt }),
 
     clearInteractionPrompt: () => set({ interactionPrompt: null }),
+
+    addNoiseIndicator: (indicator) =>
+      set((state) => ({
+        noiseIndicators: [...state.noiseIndicators, indicator].slice(-10),
+      })),
+
+    clearNoiseIndicators: () => set({ noiseIndicators: [] }),
 
     reset: () => set(initialState),
   })),

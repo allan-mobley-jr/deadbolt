@@ -204,6 +204,11 @@ export interface ZombieType {
    * Used when creating the Matter.js body and for visual sizing.
    */
   bodySize: number;
+  /**
+   * Maximum distance (pixels) at which this zombie can detect noise events.
+   * Runners have a larger range; brutes and horde use the default.
+   */
+  hearingRange: number;
 }
 
 // ---------------------------------------------------------------------------

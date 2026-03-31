@@ -177,10 +177,16 @@ export interface ObjectDroppedEvent {
   position: { x: number; y: number };
 }
 
-/** Emitted when dragging an object generates noise. */
+/** Emitted when any action generates noise that zombies may hear. */
 export interface NoiseGeneratedEvent {
   position: { x: number; y: number };
+  /** Area of effect in pixels — noise is inaudible beyond this distance. */
   radius: number;
+  /** Loudness at source (0-1). Zombies navigate toward the loudest noise. */
+  intensity: number;
+  /** Optional decay override in seconds. Falls back to DEFAULT_DECAY_DURATION. */
+  duration?: number;
+  /** Identifies the noise origin (e.g. "explosion", "combat", "drag"). */
   source: string;
 }
 

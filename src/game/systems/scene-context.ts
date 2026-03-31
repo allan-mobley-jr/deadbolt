@@ -3,6 +3,7 @@ import type { BodyRegistry } from "./body-registry";
 import type { ConstraintRegistry } from "./constraint-registry";
 import type { WallAnchorRegistry } from "./wall-anchor-registry";
 import type { MaterialRegistry } from "./material-system";
+import type { NoiseMap } from "./noise-system";
 import type { DayPhase } from "./day-night-constants";
 import { DAY_NIGHT, getPhaseDuration } from "./day-night-constants";
 import type { GameEventBus } from "@/game/events/event-bus";
@@ -98,6 +99,8 @@ export interface SceneContext {
   tileGrid?: number[][];
   /** Phaser tilemap for visual tile updates (wall destruction). */
   tilemap?: Phaser.Tilemaps.Tilemap;
+  /** Spatial noise map for zombie hearing (noise propagation system). */
+  noiseMap?: NoiseMap;
 }
 
 /** Create a zeroed-out input state. */

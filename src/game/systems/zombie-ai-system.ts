@@ -24,6 +24,7 @@ import type { Entity } from "@/game/ecs/entity";
 import type { AIState, ZombieType, ZombieVariant } from "@/game/ecs/components";
 import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
 import type { TileCoord } from "@/types/procgen";
+import type { NoiseMap } from "./noise-system";
 import { world } from "@/game/ecs/world";
 import { zombieEntities, barricadeEntities, playerEntities } from "@/game/ecs/queries";
 import { safeEmit } from "@/game/events/event-bus";
@@ -136,7 +137,7 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
       return;
     }
 
-    const { pathfindingGrid, safehouseCenter } = ctx;
+    const { pathfindingGrid, safehouseCenter, noiseMap } = ctx;
     const player = playerEntities.entities[0];
 
     // Clear deferred removal list (can't modify query during iteration)
@@ -168,11 +169,11 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
           // The stagger counter is preserved (set at spawn time) so that
           // zombies desynchronise their subsequent path recalculations.
           ai.state = "pathing";
-          computePath(entity, ai, pathfindingGrid, safehouseCenter);
-          // Fall through -- run pathing logic on the same tick so the zombie
+          computePath(entity, ai, pathfindingGrid, safehouseCenter, noiseMap);
+          // Fall through — run pathing logic on the same tick so the zombie
           // begins moving immediately rather than standing idle for one tick.
         case "pathing":
-          runPathingState(entity, dt, pathfindingGrid, safehouseCenter, player);
+          runPathingState(entity, dt, pathfindingGrid, safehouseCenter, player, noiseMap);
           break;
 
         case "attacking":
@@ -218,6 +219,7 @@ function runPathingState(
   pathfindingGrid: PathfindingGrid,
   safehouseCenter: TileCoord,
   player: Entity | undefined,
+  noiseMap?: NoiseMap,
 ): void {
   const { aiState: ai, zombieType: stats } = entity;
 
@@ -225,7 +227,7 @@ function runPathingState(
   ai.ticksSinceLastPathCalc++;
 
   if (ai.ticksSinceLastPathCalc >= stats.pathRecalcInterval) {
-    computePath(entity, ai, pathfindingGrid, safehouseCenter);
+    computePath(entity, ai, pathfindingGrid, safehouseCenter, noiseMap);
     ai.ticksSinceLastPathCalc = 0;
   }
 
@@ -460,18 +462,18 @@ function transitionToPathing(ai: AIState, stats: ZombieType): void {
 /**
  * Compute an A* path from the entity's current position to its target.
  *
- * Standard zombies path toward the safehouse center. Brutes path toward
- * the weakest barricade (lowest currentDurability), falling back to the
- * safehouse center if no barricades exist.
+ * Target selection is delegated to `resolveTarget` (noise > brute barricade
+ * > safehouse). When a noise source fades, the zombie naturally reverts to
+ * its default target on the next recalculation — no explicit state reset.
  *
- * Extracted as a shared helper so it can be called both from the idle→pathing
- * transition (initial path) and from the pathing handler (periodic recalc).
+ * Called from both the idle→pathing transition and periodic path recalc.
  */
 function computePath(
   entity: ZombieAIEntity,
   ai: AIState,
   pathfindingGrid: PathfindingGrid,
   safehouseCenter: TileCoord,
+  noiseMap?: NoiseMap,
 ): void {
   const startTileX = pixelToTile(entity.position.x);
   const startTileY = pixelToTile(entity.position.y);
@@ -488,19 +490,8 @@ function computePath(
 
   const start = { x: startTileX, y: startTileY };
 
-  // Brutes seek the weakest barricade; others head for the safehouse center.
-  let target = { x: safehouseCenter.x, y: safehouseCenter.y };
-
-  if (entity.zombieType.variant === "brute") {
-    const weakestBarricade = findWeakestBarricade();
-    if (weakestBarricade?.position) {
-      target = {
-        x: pixelToTile(weakestBarricade.position.x),
-        y: pixelToTile(weakestBarricade.position.y),
-      };
-    }
-    // If no barricades, falls through to safehouseCenter
-  }
+  // Target priority: noise > brute barricade > safehouse center
+  let target = resolveTarget(entity, safehouseCenter, noiseMap);
 
   if (!pathfindingGrid.isWalkable(target.x, target.y)) {
     const found = findNearestWalkable(pathfindingGrid, target.x, target.y);
@@ -524,6 +515,46 @@ function computePath(
 // ---------------------------------------------------------------------------
 // Pathfinding helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Determine the pathfinding target for a zombie.
+ *
+ * Priority chain:
+ *   1. Loudest noise within hearing range (all variants)
+ *   2. Weakest barricade (brutes only)
+ *   3. Safehouse center (default fallback)
+ */
+function resolveTarget(
+  entity: ZombieAIEntity,
+  safehouseCenter: TileCoord,
+  noiseMap?: NoiseMap,
+): { x: number; y: number } {
+  // 1. Noise attracts all zombie variants
+  if (noiseMap) {
+    const loudest = noiseMap.findLoudestNoise(
+      entity.position.x,
+      entity.position.y,
+      entity.zombieType.hearingRange,
+    );
+    if (loudest) {
+      return { x: pixelToTile(loudest.x), y: pixelToTile(loudest.y) };
+    }
+  }
+
+  // 2. Brutes seek the weakest barricade
+  if (entity.zombieType.variant === "brute") {
+    const weakest = findWeakestBarricade();
+    if (weakest?.position) {
+      return {
+        x: pixelToTile(weakest.position.x),
+        y: pixelToTile(weakest.position.y),
+      };
+    }
+  }
+
+  // 3. Default: safehouse center
+  return { x: safehouseCenter.x, y: safehouseCenter.y };
+}
 
 /**
  * Search in expanding squares around (cx, cy) for the nearest walkable tile.

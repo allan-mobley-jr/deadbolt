@@ -8,6 +8,7 @@
  */
 
 import type { ZombieType, ZombieVariant } from "@/game/ecs/components";
+import { NOISE } from "./noise-constants";
 
 // ---------------------------------------------------------------------------
 // Shambler preset — the baseline zombie archetype
@@ -23,6 +24,7 @@ export const SHAMBLER_STATS: Readonly<ZombieType> = {
   barricadeDamageMultiplier: 1,
   vaultDurabilityThreshold: 0, // no vaulting
   bodySize: 20,
+  hearingRange: NOISE.HEARING_RANGE_DEFAULT,
 } as const;
 
 export const SHAMBLER_HEALTH = 50;
@@ -41,6 +43,7 @@ export const RUNNER_STATS: Readonly<ZombieType> = {
   barricadeDamageMultiplier: 1,
   vaultDurabilityThreshold: 30, // ignores barricades with ≤ 30 durability
   bodySize: 20,
+  hearingRange: NOISE.HEARING_RANGE_RUNNER,
 } as const;
 
 export const RUNNER_HEALTH = 30;
@@ -59,6 +62,7 @@ export const BRUTE_STATS: Readonly<ZombieType> = {
   barricadeDamageMultiplier: 3, // 3× barricade damage (10 × 3 = 30 per hit)
   vaultDurabilityThreshold: 0,
   bodySize: 28,                // visually larger
+  hearingRange: NOISE.HEARING_RANGE_DEFAULT,
 } as const;
 
 export const BRUTE_HEALTH = 150;
@@ -77,6 +81,7 @@ export const HORDE_STATS: Readonly<ZombieType> = {
   barricadeDamageMultiplier: 1,
   vaultDurabilityThreshold: 0,
   bodySize: 14,                // small
+  hearingRange: NOISE.HEARING_RANGE_DEFAULT,
 } as const;
 
 export const HORDE_HEALTH = 20;

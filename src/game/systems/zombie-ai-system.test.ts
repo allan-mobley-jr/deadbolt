@@ -11,6 +11,7 @@ import {
   createBarricadeEntity,
 } from "@/game/ecs/archetypes";
 import { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
+import { NoiseMap } from "./noise-system";
 import {
   SHAMBLER_STATS,
   SHAMBLER_HEALTH,
@@ -1391,6 +1392,230 @@ describe("ZombieAISystem", () => {
 
     it("brute has 3x barricade damage multiplier", () => {
       expect(BRUTE_STATS.barricadeDamageMultiplier).toBe(3);
+    });
+
+    it("all variants have a positive hearing range", () => {
+      for (const stats of [SHAMBLER_STATS, RUNNER_STATS, BRUTE_STATS, HORDE_STATS]) {
+        expect(stats.hearingRange).toBeGreaterThan(0);
+      }
+    });
+
+    it("runner has a larger hearing range than shambler", () => {
+      expect(RUNNER_STATS.hearingRange).toBeGreaterThan(SHAMBLER_STATS.hearingRange);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Noise attraction
+  // -----------------------------------------------------------------------
+
+  describe("noise attraction", () => {
+    it("zombie diverts toward a loud noise within hearing range", () => {
+      const noiseMap = new NoiseMap();
+      ctx = createMockContext({ noiseMap });
+      system = createZombieAISystem(ctx);
+
+      // Zombie at (0, 0) tile, safehouse at (5, 5) tile
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      // Place a loud noise at (0, 9) tile — different direction from safehouse
+      const noisePos = tileCenter(0, 9);
+      noiseMap.addNoise(
+        noisePos.x,
+        noisePos.y,
+        500,  // large radius
+        1.0,  // max intensity
+        10.0, // long duration
+        "explosion",
+      );
+
+      system(DT); // idle → pathing (computes path toward noise)
+
+      // The zombie's path should head toward (0, 9), not toward (5, 5)
+      const lastWaypoint = zombie.aiState.path[zombie.aiState.path.length - 1];
+      expect(lastWaypoint).toBeDefined();
+
+      // The path endpoint should be closer to the noise source than to the safehouse
+      const distToNoise = Math.abs(lastWaypoint.x - 0) + Math.abs(lastWaypoint.y - 9);
+      const distToSafehouse = Math.abs(lastWaypoint.x - 5) + Math.abs(lastWaypoint.y - 5);
+      expect(distToNoise).toBeLessThan(distToSafehouse);
+    });
+
+    it("zombie ignores noise outside its hearing range", () => {
+      const noiseMap = new NoiseMap();
+      ctx = createMockContext({ noiseMap });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      // Place noise far outside hearing range (shambler = 300px)
+      // Noise at 1000px away should be ignored
+      noiseMap.addNoise(1000, 1000, 100, 1.0, 10.0, "distant-explosion");
+
+      system(DT); // idle → pathing (should path toward safehouse, not noise)
+
+      // Path should head toward safehouse (5, 5)
+      const lastWaypoint = zombie.aiState.path[zombie.aiState.path.length - 1];
+      expect(lastWaypoint).toBeDefined();
+      const distToSafehouse = Math.abs(lastWaypoint.x - 5) + Math.abs(lastWaypoint.y - 5);
+      // Should be close to or at the safehouse
+      expect(distToSafehouse).toBeLessThanOrEqual(2);
+    });
+
+    it("zombie navigates toward the loudest noise, not the nearest", () => {
+      const noiseMap = new NoiseMap();
+      ctx = createMockContext({ noiseMap });
+      system = createZombieAISystem(ctx);
+
+      // Zombie at tile (5, 0)
+      const zombiePos = tileCenter(5, 0);
+      const zombie = createZombieEntity(zombiePos.x, zombiePos.y, 1);
+
+      // Quiet noise nearby at tile (5, 1) — close but quiet
+      const nearPos = tileCenter(5, 1);
+      noiseMap.addNoise(nearPos.x, nearPos.y, 200, 0.1, 10.0, "quiet-near");
+
+      // Loud noise further away at tile (5, 8) — loud explosion
+      const farPos = tileCenter(5, 8);
+      noiseMap.addNoise(farPos.x, farPos.y, 500, 1.0, 10.0, "loud-far");
+
+      system(DT); // idle → pathing
+
+      // Path should head toward the loud noise (tile 5,8)
+      const lastWaypoint = zombie.aiState.path[zombie.aiState.path.length - 1];
+      expect(lastWaypoint).toBeDefined();
+      const distToLoud = Math.abs(lastWaypoint.y - 8);
+      const distToQuiet = Math.abs(lastWaypoint.y - 1);
+      expect(distToLoud).toBeLessThan(distToQuiet);
+    });
+
+    it("runner zombie detects noise that shambler cannot", () => {
+      const noiseMap = new NoiseMap();
+
+      // Place noise at a distance between shambler and runner hearing range
+      // Shambler hearing: 300px, Runner hearing: 500px
+      // Noise at 400px should be audible to runner but not shambler
+      const noiseX = 400;
+      const noiseY = 0;
+      noiseMap.addNoise(noiseX, noiseY, 500, 1.0, 10.0, "explosion");
+
+      // Test shambler — should NOT hear
+      const shamblerResult = noiseMap.findLoudestNoise(0, 0, SHAMBLER_STATS.hearingRange);
+      expect(shamblerResult).toBeNull();
+
+      // Test runner — SHOULD hear
+      const runnerResult = noiseMap.findLoudestNoise(0, 0, RUNNER_STATS.hearingRange);
+      expect(runnerResult).not.toBeNull();
+      expect(runnerResult!.source).toBe("explosion");
+    });
+
+    it("zombie returns to default behavior when noise fades", () => {
+      const noiseMap = new NoiseMap();
+      ctx = createMockContext({ noiseMap });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      // Add short-lived noise
+      const noisePos = tileCenter(0, 9);
+      noiseMap.addNoise(noisePos.x, noisePos.y, 500, 1.0, 0.1, "short-explosion");
+
+      system(DT); // idle → pathing toward noise
+
+      // Let the noise expire
+      noiseMap.update(0.2);
+
+      // Force path recalculation
+      zombie.aiState.ticksSinceLastPathCalc = SHAMBLER_STATS.pathRecalcInterval;
+      system(DT);
+
+      // Now path should head toward safehouse (5, 5)
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
+      const lastWaypoint = zombie.aiState.path[zombie.aiState.path.length - 1];
+      const distToSafehouse = Math.abs(lastWaypoint.x - 5) + Math.abs(lastWaypoint.y - 5);
+      expect(distToSafehouse).toBeLessThanOrEqual(2);
+    });
+
+    it("brute prefers barricade over noise when not distracted by noise", () => {
+      // Without noise, brute should still seek weakest barricade
+      ctx = createMockContext({ noiseMap: new NoiseMap() });
+      system = createZombieAISystem(ctx);
+
+      const bPos = tileCenter(3, 3);
+      createBarricadeEntity(bPos.x, bPos.y, 10, "wooden_plank", 0, [100, 101], 30);
+
+      const zPos = tileCenter(0, 0);
+      const zombie = createZombieEntity(
+        zPos.x,
+        zPos.y,
+        2,
+        { ...BRUTE_STATS },
+        0,
+        BRUTE_HEALTH,
+      );
+
+      system(DT); // idle → pathing
+
+      // With no noise, brute should path toward barricade at (3, 3)
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
+      const lastWaypoint = zombie.aiState.path[zombie.aiState.path.length - 1];
+      const distToBarricade = Math.abs(lastWaypoint.x - 3) + Math.abs(lastWaypoint.y - 3);
+      const distToSafehouse2 = Math.abs(lastWaypoint.x - 5) + Math.abs(lastWaypoint.y - 5);
+      expect(distToBarricade).toBeLessThanOrEqual(distToSafehouse2);
+    });
+
+    it("brute is diverted by a loud noise away from barricade", () => {
+      const noiseMap = new NoiseMap();
+      ctx = createMockContext({ noiseMap });
+      system = createZombieAISystem(ctx);
+
+      // Barricade at (8, 5)
+      createBarricadeEntity(
+        tileCenter(8, 5).x, tileCenter(8, 5).y,
+        10, "wooden_plank", 0, [100, 101], 30,
+      );
+
+      // Zombie at (5, 5) as a brute (center of grid)
+      const zPos = tileCenter(5, 5);
+      const zombie = createZombieEntity(
+        zPos.x,
+        zPos.y,
+        2,
+        { ...BRUTE_STATS },
+        0,
+        BRUTE_HEALTH,
+      );
+
+      // Loud explosion at (2, 5) — opposite direction from barricade
+      // Distance from brute: ~3 tiles = ~96px, well within hearing range (300px)
+      const noisePos = tileCenter(2, 5);
+      noiseMap.addNoise(noisePos.x, noisePos.y, 500, 1.0, 10.0, "explosion");
+
+      system(DT); // idle → pathing
+
+      // Brute should divert toward the noise (tile 2), not the barricade (tile 8)
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
+      const lastWaypoint = zombie.aiState.path[zombie.aiState.path.length - 1];
+      const distToNoise = Math.abs(lastWaypoint.x - 2);
+      const distToBarricade = Math.abs(lastWaypoint.x - 8);
+      expect(distToNoise).toBeLessThan(distToBarricade);
+    });
+
+    it("works without noise map (backward compatibility)", () => {
+      // NoiseMap not set on context — should work like before
+      ctx = createMockContext({ noiseMap: undefined });
+      system = createZombieAISystem(ctx);
+
+      const { x, y } = tileCenter(0, 0);
+      const zombie = createZombieEntity(x, y, 1);
+
+      // Should not crash
+      system(DT);
+      expect(zombie.aiState.state).toBe("pathing");
+      expect(zombie.aiState.path.length).toBeGreaterThan(0);
     });
   });
 });
