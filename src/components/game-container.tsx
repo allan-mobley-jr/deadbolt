@@ -68,6 +68,7 @@ export default function GameContainer() {
     return () => {
       cancelled = true;
       bridge?.disconnect();
+      useMinimapStore.getState().reset();
       destroy?.();
     };
   }, []);

@@ -56,7 +56,7 @@ export function createMinimapDataSystem(ctx: SceneContext): SystemFn {
 
     safeEmit(ctx.eventBus, "minimap-update", {
       playerPosition: playerPos,
-      zombiePositions: zombieBuffer,
+      zombiePositions: [...zombieBuffer],
     });
   };
 }
