@@ -23,6 +23,7 @@ import { createFireSystem } from "@/game/systems/fire-system";
 import { createElectricitySystem } from "@/game/systems/electricity-system";
 import { createExplosionSystem } from "@/game/systems/explosion-system";
 import { createMinimapDataSystem } from "@/game/systems/minimap-data-system";
+import { createAudioSystem } from "@/game/systems/audio-system";
 import { createNoiseSystem, NoiseMap } from "@/game/systems/noise-system";
 import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
@@ -205,6 +206,7 @@ export default class GameScene extends Phaser.Scene {
       createExplosionSystem(ctx),
       createElectricitySystem(ctx),
       createMinimapDataSystem(ctx),
+      createAudioSystem(ctx),
     ];
 
     this.gameLoop = new GameLoop(systems);
@@ -216,10 +218,8 @@ export default class GameScene extends Phaser.Scene {
     ];
 
     // --- Handle settings changes from the UI ---
+    // Volume settings are handled by the audio system (createAudioSystem).
     ctx.eventBus.on("cmd:settings-changed", (e) => {
-      if (e.key === "masterVolume" && typeof e.value === "number") {
-        this.sound.volume = e.value;
-      }
       if (e.key === "showFps" && typeof e.value === "boolean") {
         this.showDebug = e.value;
         this.fpsText?.setVisible(e.value);
