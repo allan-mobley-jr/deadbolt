@@ -310,21 +310,32 @@ export function createWaveSystem(ctx: SceneContext): SystemFn {
     const px = point.x * TILE_SIZE + TILE_SIZE / 2;
     const py = point.y * TILE_SIZE + TILE_SIZE / 2;
 
-    // Spawn entity (or cluster) and collect into a uniform array
-    const spawned =
-      variant === "horde"
-        ? spawnHordeCluster(sCtx, px, py, rng, totalSpawned)
-        : [spawnZombie(sCtx, variant, px, py, totalSpawned)];
+    // Spawn entity (or cluster).  Per-spawn try-catch ensures a single
+    // spawn failure doesn't kill the entire wave.
+    try {
+      const spawned =
+        variant === "horde"
+          ? spawnHordeCluster(sCtx, px, py, rng, totalSpawned)
+          : [spawnZombie(sCtx, variant, px, py, totalSpawned)];
 
-    // Apply stat scaling for night 4+
-    if (nightConfig.statMultiplier !== 1.0) {
-      for (const entity of spawned) {
-        applyStatMultiplier(entity, nightConfig.statMultiplier);
+      // Apply stat scaling for night 4+
+      if (nightConfig.statMultiplier !== 1.0) {
+        for (const entity of spawned) {
+          applyStatMultiplier(entity, nightConfig.statMultiplier);
+        }
       }
-    }
 
-    totalSpawned += spawned.length;
-    spawnedInPulse += spawned.length;
+      totalSpawned += spawned.length;
+      spawnedInPulse += spawned.length;
+    } catch (err) {
+      console.error(
+        `[wave-system] Spawn failed (variant=${variant}, wave=${waveNumber}):`,
+        err,
+      );
+      // Count the failed spawn to prevent infinite retry loops
+      totalSpawned += 1;
+      spawnedInPulse += 1;
+    }
 
     // Advance to next spawn point
     spawnPointIndex++;
@@ -379,6 +390,15 @@ export function createWaveSystem(ctx: SceneContext): SystemFn {
           `spawned=${totalSpawned}/${totalToSpawn}, day=${clockState.dayNumber}):`,
         err,
       );
+      // Emit wave-ended if a wave was actively running, so the bridge
+      // clears waveActive in the Zustand store (prevents stale HUD).
+      if (state === "spawning" || state === "pausing" || state === "complete") {
+        safeEmit(ctx.eventBus, "wave-ended", {
+          waveNumber,
+          zombiesKilled: killsDuringWave,
+          dayNumber: clockState.dayNumber,
+        });
+      }
       // Fail safe: transition to inactive to prevent repeated crashes
       state = "inactive";
       nightConfig = null;

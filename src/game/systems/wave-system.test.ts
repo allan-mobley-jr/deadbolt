@@ -836,6 +836,105 @@ describe("WaveSystem", () => {
 
       consoleError.mockRestore();
     });
+
+    it("emits wave-ended when tick error occurs during active wave", () => {
+      const endedHandler = vi.fn();
+      eventBus.on("wave-ended", endedHandler);
+
+      // Start a wave normally
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn some zombies
+      tickSeconds(system, 2);
+      expect(zombieEntities.entities.length).toBeGreaterThan(0);
+
+      // Sabotage the tickInternal by corrupting clockState to cause a throw
+      // in a way that bypasses the per-spawn catch (e.g., corrupt nightConfig
+      // by making the system access a null property).
+      Object.defineProperty(clockState, "phase", {
+        get() { throw new Error("test tick error"); },
+        configurable: true,
+      });
+
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      system(DT);
+
+      expect(endedHandler).toHaveBeenCalledTimes(1);
+      const event = endedHandler.mock.calls[0][0] as WaveEndedEvent;
+      expect(event.waveNumber).toBe(1);
+      expect(event.dayNumber).toBe(1);
+
+      consoleError.mockRestore();
+      // Restore phase property for afterEach cleanup
+      Object.defineProperty(clockState, "phase", {
+        value: "night",
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it("does NOT emit wave-ended when error occurs before wave starts", () => {
+      const mock = createMockContext();
+      const endedHandler = vi.fn();
+      mock.eventBus.on("wave-ended", endedHandler);
+
+      // Sabotage context so prepareNight throws (during "preparing" state)
+      Object.defineProperty(mock.ctx, "spawnZones", {
+        get() { throw new Error("test zones error"); },
+        configurable: true,
+      });
+      const errorSystem = createWaveSystem(mock.ctx);
+
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      mock.clockState.phase = "dusk" as const;
+      errorSystem(DT);
+
+      // wave-ended should NOT have been emitted (no wave was started)
+      expect(endedHandler).not.toHaveBeenCalled();
+
+      consoleError.mockRestore();
+    });
+
+    it("continues wave when individual spawn fails", () => {
+      // Start a wave
+      setPhase(clockState, "dusk");
+      system(DT);
+      setPhase(clockState, "night");
+      system(DT);
+
+      // Spawn some zombies normally
+      tickSeconds(system, 1);
+      const countBefore = zombieEntities.entities.length;
+      expect(countBefore).toBeGreaterThan(0);
+
+      // Sabotage one spawn — make rectangle throw once then restore
+      const matterAdd = (ctx.scene as unknown as { matter: { add: { rectangle: (...args: unknown[]) => unknown } } }).matter.add;
+      const originalRect = matterAdd.rectangle;
+      let throwCount = 0;
+      matterAdd.rectangle = (...args: unknown[]) => {
+        if (throwCount++ < 1) {
+          throw new Error("transient spawn failure");
+        }
+        return originalRect(...args);
+      };
+
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      // Continue ticking — wave should survive the single failed spawn
+      tickSeconds(system, 5);
+      const countAfter = zombieEntities.entities.length;
+
+      // Should have spawned more zombies despite one failure
+      expect(countAfter).toBeGreaterThan(countBefore);
+
+      consoleError.mockRestore();
+      // Restore
+      matterAdd.rectangle = originalRect;
+    });
   });
 
   // -----------------------------------------------------------------------
