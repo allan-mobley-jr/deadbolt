@@ -381,6 +381,22 @@ export interface DropItemCommandEvent {
   slotIndex?: number;
 }
 
+/** Emitted when a game system throws during execution. */
+export interface SystemErrorEvent {
+  systemIndex: number;
+  systemName: string;
+  error: unknown;
+  errorCount: number;
+  errorBudget: number;
+}
+
+/** Emitted when a game system is disabled after exhausting its error budget. */
+export interface SystemDisabledEvent {
+  systemIndex: number;
+  systemName: string;
+  errorCount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Event map — maps event names to handler signatures
 // ---------------------------------------------------------------------------
@@ -450,6 +466,10 @@ export interface GameEventMap {
 
   // Topology changes (issue #43)
   "topology-changed": [event: TopologyChangedEvent];
+
+  // System health (issue #135)
+  "system-error": [event: SystemErrorEvent];
+  "system-disabled": [event: SystemDisabledEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];

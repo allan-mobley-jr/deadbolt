@@ -1,6 +1,6 @@
 import Phaser from "phaser";
-import { GameLoop, FIXED_DT } from "@/game/systems/game-loop";
-import type { SystemFn } from "@/game/systems/system-runner";
+import { GameLoop, FIXED_DT, MAX_STEPS_PER_FRAME } from "@/game/systems/game-loop";
+import { SystemRunner, type SystemFn } from "@/game/systems/system-runner";
 import { createInputState, createClockState } from "@/game/systems/scene-context";
 import type { SceneContext } from "@/game/systems/scene-context";
 import { BodyRegistry } from "@/game/systems/body-registry";
@@ -53,7 +53,7 @@ import type { WorldData } from "@/types/world";
 export default class GameScene extends Phaser.Scene {
   private gameLoop!: GameLoop;
   private commandSystem!: SystemFn;
-  private renderSystems: SystemFn[] = [];
+  private renderRunner!: SystemRunner;
   private fpsText!: Phaser.GameObjects.Text;
   private showDebug = false;
   private crashed = false;
@@ -249,17 +249,71 @@ export default class GameScene extends Phaser.Scene {
       createAudioSystem(ctx),
     ];
 
-    this.gameLoop = new GameLoop(systems);
+    const systemNames = [
+      "CommandSystem", "InputSystem", "InventorySystem", "InteractionSystem",
+      "BarricadeSystem", "DayNightSystem", "WaveSystem", "MovementSystem",
+      "NoiseSystem", "ZombieAISystem", "CombatSystem", "StatsSystem",
+      "PhysicsSyncSystem", "MaterialSystem", "FireSystem", "ExplosionSystem",
+      "ElectricitySystem", "MinimapDataSystem", "AudioSystem",
+    ];
+
+    const errorBudget = 5;
+
+    this.gameLoop = new GameLoop(systems, FIXED_DT, MAX_STEPS_PER_FRAME, {
+      names: systemNames,
+      errorBudget,
+      onError: (index, name, error, errorCount) => {
+        safeEmit(ctx.eventBus, "system-error", {
+          systemIndex: index,
+          systemName: name,
+          error,
+          errorCount,
+          errorBudget,
+        });
+      },
+      onDisabled: (index, name) => {
+        safeEmit(ctx.eventBus, "system-disabled", {
+          systemIndex: index,
+          systemName: name,
+          errorCount: errorBudget,
+        });
+      },
+    });
 
     // --- Render-phase systems (once per frame, after fixed ticks) ---
     // Camera system runs first so downstream render systems read the final
     // camera position (e.g., LightingSystem reads cam.scrollX/scrollY).
-    this.renderSystems = [
+    const renderSystems: SystemFn[] = [
       createCameraSystem(ctx),
       createRenderSyncSystem(ctx),
       createParticleSystem(ctx),
       createLightingSystem(ctx),
     ];
+
+    const renderNames = [
+      "CameraSystem", "RenderSyncSystem", "ParticleSystem", "LightingSystem",
+    ];
+
+    this.renderRunner = new SystemRunner(renderSystems, {
+      names: renderNames,
+      errorBudget,
+      onError: (index, name, error, errorCount) => {
+        safeEmit(ctx.eventBus, "system-error", {
+          systemIndex: index,
+          systemName: name,
+          error,
+          errorCount,
+          errorBudget,
+        });
+      },
+      onDisabled: (index, name) => {
+        safeEmit(ctx.eventBus, "system-disabled", {
+          systemIndex: index,
+          systemName: name,
+          errorCount: errorBudget,
+        });
+      },
+    });
 
     // --- Handle settings changes from the UI ---
     // Volume settings are handled by the audio system (createAudioSystem).
@@ -298,8 +352,14 @@ export default class GameScene extends Phaser.Scene {
       // When paused, only run the command system (to process resume commands)
       // and skip the full game loop (physics, AI, timers all stop).
       if (this.isClockPaused()) {
-        // Run command system each frame so resume commands are processed
-        this.commandSystem(FIXED_DT);
+        // Run command system each frame so resume commands are processed.
+        // Wrapped in try-catch so a command error cannot freeze the game
+        // and prevent the player from ever resuming.
+        try {
+          this.commandSystem(FIXED_DT);
+        } catch (err) {
+          console.error("[GameScene] CommandSystem threw while paused:", err);
+        }
 
         // Track pause state to reset accumulator on resume
         this.wasPaused = true;
@@ -316,9 +376,8 @@ export default class GameScene extends Phaser.Scene {
       this.gameLoop.tick(delta / 1000);
 
       // Render-phase systems run once per frame after all fixed ticks.
-      for (let i = 0; i < this.renderSystems.length; i++) {
-        this.renderSystems[i](delta / 1000);
-      }
+      // Error-isolated via SystemRunner — a particle crash cannot end the game.
+      this.renderRunner.run(delta / 1000);
     } catch (err) {
       this.crashed = true;
       console.error("[GameScene] Game loop crashed:", err);

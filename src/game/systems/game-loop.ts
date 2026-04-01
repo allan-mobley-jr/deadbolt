@@ -1,4 +1,4 @@
-import { type SystemFn, runSystems } from "./system-runner";
+import { type SystemFn, SystemRunner, type SystemRunnerOptions } from "./system-runner";
 
 /** Fixed physics tick rate: 60 Hz (~16.67 ms per step). */
 export const FIXED_DT = 1 / 60;
@@ -20,6 +20,9 @@ export interface GameLoopStats {
  * Fixed-timestep accumulator that decouples physics (60 Hz) from
  * the browser's variable render rate. Includes a spiral-of-death
  * guard that caps physics steps per frame.
+ *
+ * Uses a {@link SystemRunner} internally for per-system error
+ * isolation — a single throwing system cannot crash the loop.
  */
 export class GameLoop {
   private accumulator = 0;
@@ -32,12 +35,13 @@ export class GameLoop {
 
   private readonly fixedDt: number;
   private readonly maxSteps: number;
-  private readonly systems: readonly SystemFn[];
+  private readonly _runner: SystemRunner;
 
   constructor(
     systems: readonly SystemFn[],
     fixedDt: number = FIXED_DT,
     maxSteps: number = MAX_STEPS_PER_FRAME,
+    runnerOptions?: SystemRunnerOptions,
   ) {
     if (fixedDt <= 0) {
       throw new Error(`[GameLoop] fixedDt must be positive, got ${fixedDt}`);
@@ -47,7 +51,7 @@ export class GameLoop {
         `[GameLoop] maxSteps must be a positive integer, got ${maxSteps}`,
       );
     }
-    this.systems = systems;
+    this._runner = new SystemRunner(systems, runnerOptions);
     this.fixedDt = fixedDt;
     this.maxSteps = maxSteps;
   }
@@ -83,7 +87,7 @@ export class GameLoop {
     // --- Fixed-timestep physics ticks ---
     let steps = 0;
     while (this.accumulator >= this.fixedDt) {
-      runSystems(this.systems, this.fixedDt);
+      this._runner.run(this.fixedDt);
       this.accumulator -= this.fixedDt;
       steps++;
     }
@@ -108,6 +112,11 @@ export class GameLoop {
   /** Smoothed render FPS. */
   get fps(): number {
     return this._fps;
+  }
+
+  /** The internal system runner (for inspection and testing). */
+  get runner(): SystemRunner {
+    return this._runner;
   }
 
   /** Reset the accumulator to zero (call on resume from pause to avoid catch-up ticks). */
