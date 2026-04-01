@@ -440,6 +440,46 @@ describe("GameLoop", () => {
     });
   });
 
+  describe("resetAccumulator()", () => {
+    it("zeroes accumulated time so next tick starts fresh", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      // Accumulate 0.75 of a physics step — not enough for a tick
+      loop.tick(FIXED_DT * 0.75);
+      expect(sys).not.toHaveBeenCalled();
+
+      // Reset the accumulator, discarding the 0.75 step
+      loop.resetAccumulator();
+
+      // Another 0.5 step — without the reset, total would be 1.25 (1 tick).
+      // With the reset, only 0.5 accumulated — still not enough.
+      loop.tick(FIXED_DT * 0.5);
+      expect(sys).not.toHaveBeenCalled();
+      expect(loop.physicsTicks).toBe(0);
+    });
+
+    it("prevents catch-up burst after a long pause", () => {
+      const sys = vi.fn<SystemFn>();
+      const loop = new GameLoop([sys]);
+
+      // Establish baseline — one normal tick
+      loop.tick(FIXED_DT);
+      expect(sys).toHaveBeenCalledTimes(1);
+      sys.mockClear();
+
+      // Reset accumulator (simulating what GameScene does on resume from pause)
+      loop.resetAccumulator();
+
+      // Next tick with exactly one FIXED_DT of real time elapsed.
+      // Without reset, any leftover accumulator from the prior tick would
+      // cause extra physics steps here.
+      loop.tick(FIXED_DT);
+      expect(sys).toHaveBeenCalledTimes(1);
+      expect(loop.physicsTicks).toBe(1);
+    });
+  });
+
   describe("display rate scenarios", () => {
     it("produces 2 physics steps per frame at 30 fps", () => {
       const sys = vi.fn<SystemFn>();
