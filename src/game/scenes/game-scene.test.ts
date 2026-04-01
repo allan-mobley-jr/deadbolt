@@ -4,7 +4,7 @@ import { resetWorld, world } from "@/game/ecs/world";
 import { TILE_SIZE, TileType } from "@/game/tiles/tile-types";
 import type { WorldData } from "@/types/world";
 import { TileType as ProcgenTileType } from "@/types/procgen";
-import { setActiveBus, getActiveBus, getActiveSeed } from "@/game/PhaserGame";
+import { setActiveBus, getActiveBus, getActiveSeed, getActiveMinimapInit } from "@/game/PhaserGame";
 import { safeEmit } from "@/game/events/event-bus";
 
 // ---------------------------------------------------------------------------
@@ -295,6 +295,13 @@ describe("GameScene", () => {
     scene.game = {
       events: { emit: vi.fn(), on: vi.fn(), off: vi.fn() },
     } as unknown as Phaser.Game;
+
+    scene.events = {
+      on: vi.fn(),
+      once: vi.fn(),
+      off: vi.fn(),
+      emit: vi.fn(),
+    } as unknown as Phaser.Events.EventEmitter;
 
     // Provide world data before create
     scene.init(mockWorldData);
@@ -758,6 +765,79 @@ describe("GameScene", () => {
       scene.create();
 
       expect(getActiveSeed()).toBe("test-seed");
+
+      setActiveBus(null);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Shutdown cleanup
+  // -----------------------------------------------------------------------
+
+  describe("shutdown cleanup", () => {
+    /** Extract and invoke the shutdown handler registered via events.once. */
+    function triggerShutdown(): void {
+      const onceMock = scene.events.once as ReturnType<typeof vi.fn>;
+      const call = onceMock.mock.calls.find(
+        (args: unknown[]) => args[0] === "shutdown",
+      );
+      expect(call).toBeDefined();
+      (call![1] as () => void)();
+    }
+
+    it("registers a shutdown listener in create()", () => {
+      scene.create();
+
+      expect(scene.events.once).toHaveBeenCalledWith(
+        "shutdown",
+        expect.any(Function),
+      );
+
+      setActiveBus(null);
+    });
+
+    it("clears activeBus on shutdown", () => {
+      scene.create();
+      expect(getActiveBus()).not.toBeNull();
+
+      triggerShutdown();
+
+      expect(getActiveBus()).toBeNull();
+    });
+
+    it("clears activeSeed on shutdown", () => {
+      scene.create();
+      expect(getActiveSeed()).toBe("test-seed");
+
+      triggerShutdown();
+
+      expect(getActiveSeed()).toBeNull();
+    });
+
+    it("clears activeMinimapInit on shutdown", () => {
+      scene.create();
+      expect(getActiveMinimapInit()).not.toBeNull();
+
+      triggerShutdown();
+
+      expect(getActiveMinimapInit()).toBeNull();
+    });
+
+    it("singletons are re-set after shutdown and re-create", () => {
+      scene.create();
+      triggerShutdown();
+
+      expect(getActiveBus()).toBeNull();
+      expect(getActiveSeed()).toBeNull();
+      expect(getActiveMinimapInit()).toBeNull();
+
+      // Re-enter: init + create should restore singletons
+      scene.init(mockWorldData);
+      scene.create();
+
+      expect(getActiveBus()).not.toBeNull();
+      expect(getActiveSeed()).toBe("test-seed");
+      expect(getActiveMinimapInit()).not.toBeNull();
 
       setActiveBus(null);
     });

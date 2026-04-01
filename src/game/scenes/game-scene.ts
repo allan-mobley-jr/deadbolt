@@ -200,6 +200,14 @@ export default class GameScene extends Phaser.Scene {
     // Also emit for any listeners already connected
     safeEmit(ctx.eventBus, "minimap-init", minimapInitData);
 
+    // Clear singletons on scene shutdown (restart or stop) so stale
+    // references don't persist if GameScene re-enters create().
+    this.events.once("shutdown", () => {
+      setActiveBus(null);
+      setActiveSeed(null);
+      setActiveMinimapInit(null);
+    });
+
     // --- Spawn world objects from procedural generation data ---
     this.spawnWorldObjects(bodyRegistry);
 
