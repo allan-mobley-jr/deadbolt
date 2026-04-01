@@ -41,6 +41,7 @@ describe('isWalkableTileType', () => {
   it.each([
     ['Wall', TileType.Wall],
     ['Empty', TileType.Empty],
+    ['Window', TileType.Window],
   ] as const)('marks %s as non-walkable', (_, type) => {
     expect(isWalkableTileType(type)).toBe(false);
   });
@@ -48,7 +49,6 @@ describe('isWalkableTileType', () => {
   it.each([
     ['Floor', TileType.Floor],
     ['Door', TileType.Door],
-    ['Window', TileType.Window],
     ['Road', TileType.Road],
     ['Sidewalk', TileType.Sidewalk],
   ] as const)('marks %s as walkable', (_, type) => {

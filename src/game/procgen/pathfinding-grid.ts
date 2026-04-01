@@ -33,10 +33,10 @@ export function isWalkableTileType(tileType: TileType): boolean {
   switch (tileType) {
     case TileType.Wall:
     case TileType.Empty:
+    case TileType.Window:
       return false;
     case TileType.Floor:
     case TileType.Door:
-    case TileType.Window:
     case TileType.Road:
     case TileType.Sidewalk:
       return true;
