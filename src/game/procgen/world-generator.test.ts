@@ -17,8 +17,11 @@ function makeConfig(seed = 'test-seed-123'): RunConfig {
 }
 
 /** Exhaust a generator, collecting yields and the return value. */
-function exhaust(config: RunConfig) {
-  const gen = generateWorld(config);
+function exhaust(
+  config: RunConfig,
+  options?: { gridWidth?: number; gridHeight?: number },
+) {
+  const gen = generateWorld(config, options);
   const yields: GenerationProgress[] = [];
 
   let result = gen.next();
@@ -111,9 +114,14 @@ describe('generateWorld', () => {
   });
 
   it('produces the same world for the same seed (determinism)', () => {
+    // Use an 8×8 macro grid (64×64 tiles) so running the pipeline twice
+    // stays well within CI timeouts. The full 32×32 grid is exercised by
+    // the dimension and performance tests — this test only verifies that
+    // identical seeds produce identical output.
     const config = makeConfig('determinism-check');
-    const { worldData: first } = exhaust(config);
-    const { worldData: second } = exhaust(config);
+    const gridOptions = { gridWidth: 8, gridHeight: 8 };
+    const { worldData: first } = exhaust(config, gridOptions);
+    const { worldData: second } = exhaust(config, gridOptions);
 
     // Same tile grid
     expect(first.layout.tiles).toEqual(second.layout.tiles);
@@ -123,7 +131,7 @@ describe('generateWorld', () => {
     expect(first.safehouse.buildingIndex).toBe(second.safehouse.buildingIndex);
     // Same spawn zones
     expect(first.spawnZones).toEqual(second.spawnZones);
-  });
+  }, 15_000);
 
   it('produces different worlds for different seeds', () => {
     const { worldData: a } = exhaust(makeConfig('seed-alpha'));
