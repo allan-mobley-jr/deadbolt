@@ -59,9 +59,15 @@ describe("keybindings", () => {
   });
 
   it("loadKeybindings handles corrupt data gracefully", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     store.set("deadbolt-keybindings", "not-json");
     const loaded = loadKeybindings();
     expect(loaded).toEqual(DEFAULT_KEYBINDINGS);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[Keybindings] Failed to load keybindings, using defaults:",
+      expect.any(SyntaxError),
+    );
+    warnSpy.mockRestore();
   });
 
   it("findConflict detects duplicate key bindings", () => {
@@ -89,6 +95,29 @@ describe("keybindings", () => {
       expect(ACTION_META[key].label).toBeTruthy();
       expect(ACTION_META[key].category).toBeTruthy();
     }
+  });
+
+  it("saveKeybindings logs unexpected setItem errors", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLocalStorage.setItem.mockImplementationOnce(() => {
+      throw new TypeError("unexpected");
+    });
+    saveKeybindings(DEFAULT_KEYBINDINGS);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[Keybindings] Unexpected error saving keybindings:",
+      expect.any(TypeError),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("saveKeybindings silences QuotaExceededError", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLocalStorage.setItem.mockImplementationOnce(() => {
+      throw new DOMException("Storage full", "QuotaExceededError");
+    });
+    expect(() => saveKeybindings(DEFAULT_KEYBINDINGS)).not.toThrow();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it("default keybindings have no conflicts", () => {
