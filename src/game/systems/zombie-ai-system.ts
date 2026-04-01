@@ -41,6 +41,7 @@ import { TILE_SIZE } from "@/game/procgen/constants";
 import { ZOMBIE_AI, PATHFINDING_OPT } from "./zombie-ai-constants";
 import { releaseZombie } from "@/game/ecs/zombie-pool";
 import { FlowField } from "@/game/procgen/flow-field";
+import { safeRemoveBody } from "./physics-utils";
 
 // ---------------------------------------------------------------------------
 // Local type alias
@@ -271,9 +272,12 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
         releaseZombie(ctx.zombiePool, entity as unknown as ZombieEntity, ctx.bodyRegistry);
       } else {
         if (entity.physicsBody) {
-          const body = ctx.bodyRegistry.get(entity.physicsBody.bodyId);
-          if (body) ctx.scene.matter.world.remove(body);
-          ctx.bodyRegistry.unregister(entity.physicsBody.bodyId);
+          safeRemoveBody(
+            ctx.scene.matter.world,
+            ctx.bodyRegistry,
+            entity.physicsBody.bodyId,
+            "ZombieAISystem",
+          );
         }
         world.remove(entity);
       }
