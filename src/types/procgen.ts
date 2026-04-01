@@ -170,6 +170,45 @@ export interface PathResult {
   length: number;
 }
 
+// ---------------------------------------------------------------------------
+// Pathfinding grid
+// ---------------------------------------------------------------------------
+
+/**
+ * Public API contract for the pathfinding grid.
+ *
+ * The concrete implementation lives in src/game/procgen/pathfinding-grid.ts.
+ * This interface exists so that shared types (WorldData, SceneContext) can
+ * reference the grid without importing from game internals.
+ */
+export interface PathfindingGrid {
+  readonly width: number;
+  readonly height: number;
+  /** Monotonically increasing counter bumped on every walkability change. */
+  readonly topologyVersion: number;
+
+  /** Check whether the given tile coordinate is walkable. */
+  isWalkable(x: number, y: number): boolean;
+  /** Update walkability of a single tile. Returns true if applied, false if out of bounds. */
+  setWalkable(x: number, y: number, walkable: boolean): boolean;
+  /** Batch-update walkability for multiple tiles. */
+  setWalkableBatch(updates: Array<{ coord: TileCoord; walkable: boolean }>): void;
+  /** Find the shortest A* path between two tile coordinates. */
+  findPath(start: TileCoord, end: TileCoord): PathResult;
+  /** Find a smoothed path (fewer waypoints) between two tile coordinates. */
+  findSmoothedPath(start: TileCoord, end: TileCoord): PathResult;
+  /** Quick existence check — can a path be found? */
+  hasPath(start: TileCoord, end: TileCoord): boolean;
+  /** Get grid dimensions. */
+  getDimensions(): { width: number; height: number };
+  /** Export the current walkability state as a 0/1 matrix. */
+  toMatrix(): number[][];
+}
+
+// ---------------------------------------------------------------------------
+// Spawn zones
+// ---------------------------------------------------------------------------
+
 /** A zombie spawn zone. */
 export interface SpawnZone {
   /** Unique identifier. */

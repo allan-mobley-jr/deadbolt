@@ -12,7 +12,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { DayPhase } from "@/game/systems/day-night-constants";
-import type { ZombieVariant } from "@/game/ecs/components";
+import type { ZombieVariant } from "@/types/entities";
 
 // ---------------------------------------------------------------------------
 // State shape

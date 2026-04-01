@@ -1,5 +1,8 @@
 import type { ObjectCategory } from '@/types/procgen';
 import type { SizeCategory } from '@/game/procgen/object-defs';
+import type { ZombieVariant } from '@/types/entities';
+
+export type { ZombieVariant };
 
 /** 2D position in world space (pixels, not tiles). */
 export interface Position {
@@ -165,8 +168,8 @@ export interface AIState {
   previousHealth: number;
 }
 
-/** All zombie variant identifiers. */
-export type ZombieVariant = 'shambler' | 'runner' | 'brute' | 'horde';
+// ZombieVariant is imported from @/types/entities and re-exported above
+// for backward compatibility with all game-internal consumers.
 
 /**
  * Zombie variant definition — holds all per-type tunable stats.

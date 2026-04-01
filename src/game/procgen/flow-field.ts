@@ -13,7 +13,7 @@
  * NO React imports — this is pure TypeScript.
  */
 
-import type { PathfindingGrid } from "./pathfinding-grid";
+import type { PathfindingGrid } from "@/types/procgen";
 
 // ---------------------------------------------------------------------------
 // Direction encoding
