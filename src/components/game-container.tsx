@@ -6,6 +6,7 @@ import { safeEmit } from "@/game/events/event-bus";
 import { useGameStore } from "@/stores/useGameStore";
 import { useMinimapStore } from "@/stores/useMinimapStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { resetSessionStores } from "@/stores/resetSessionStores";
 
 export default function GameContainer() {
   const [error, setError] = useState<Error | null>(null);
@@ -105,7 +106,7 @@ export default function GameContainer() {
     return () => {
       cancelled = true;
       bridge?.disconnect();
-      useMinimapStore.getState().reset();
+      resetSessionStores();
       destroy?.();
     };
   }, []);

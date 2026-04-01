@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/useUIStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
-import { useMinimapStore } from "@/stores/useMinimapStore";
 import { usePersistenceStore } from "@/stores/usePersistenceStore";
+import { resetSessionStores } from "@/stores/resetSessionStores";
 import { computeRunScore } from "@/types/persistence";
 import { setNextRunSeed } from "@/lib/next-run-seed";
 
@@ -29,14 +29,6 @@ const PIXELS_PER_TILE = 32;
 /** Convert pixel distance to a human-friendly meter string. */
 function formatDistance(pixels: number): string {
   return `${Math.round(pixels / PIXELS_PER_TILE)}m`;
-}
-
-/** Reset all Zustand stores to initial values for a fresh run. */
-function resetAllStores(): void {
-  useUIStore.getState().reset();
-  useGameStore.getState().reset();
-  usePlayerStore.getState().reset();
-  useMinimapStore.getState().reset();
 }
 
 /** Zombie variant display names. */
@@ -126,7 +118,7 @@ export function DeathScreen() {
     hasSaved.current = false;
     setCopied(false);
     try {
-      resetAllStores();
+      resetSessionStores();
       useGameStore.getState().incrementRunKey();
     } catch (err) {
       console.error("[DeathScreen] Failed to restart game:", err);
@@ -139,7 +131,7 @@ export function DeathScreen() {
     setCopied(false);
     try {
       if (seed) setNextRunSeed(seed);
-      resetAllStores();
+      resetSessionStores();
       useGameStore.getState().incrementRunKey();
     } catch (err) {
       console.error("[DeathScreen] Failed to restart with same seed:", err);
@@ -151,7 +143,7 @@ export function DeathScreen() {
     hasSaved.current = false;
     setCopied(false);
     try {
-      resetAllStores();
+      resetSessionStores();
       router.push("/");
     } catch (err) {
       console.error("[DeathScreen] Failed to return to menu:", err);

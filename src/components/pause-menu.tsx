@@ -16,20 +16,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useUIStore } from "@/stores/useUIStore";
 import { useGameStore } from "@/stores/useGameStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
-import { useMinimapStore } from "@/stores/useMinimapStore";
+import { resetSessionStores } from "@/stores/resetSessionStores";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Reset all Zustand stores to initial values for a fresh run. */
-function resetAllStores(): void {
-  useUIStore.getState().reset();
-  useGameStore.getState().reset();
-  usePlayerStore.getState().reset();
-  useMinimapStore.getState().reset();
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -61,7 +52,7 @@ export function PauseMenu() {
 
   const handleAbandonConfirm = useCallback(() => {
     try {
-      resetAllStores();
+      resetSessionStores();
       router.push("/");
     } catch (err) {
       console.error("[PauseMenu] Failed to abandon run:", err);
