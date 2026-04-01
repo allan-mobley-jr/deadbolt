@@ -33,6 +33,7 @@ function VolumeSlider({
         </span>
       </div>
       <Slider
+        aria-label={label}
         value={[value * 100]}
         min={0}
         max={100}
@@ -61,6 +62,7 @@ function SettingToggle({
     <div className="flex items-center justify-between">
       <span className="text-sm text-zinc-300">{label}</span>
       <Switch
+        aria-label={label}
         checked={checked}
         onCheckedChange={onChange}
         data-testid={testId}
@@ -117,6 +119,9 @@ export function SettingsDialog() {
   const screenShake = useSettingsStore((s) => s.screenShake);
   const showFps = useSettingsStore((s) => s.showFps);
   const graphicsQuality = useSettingsStore((s) => s.graphicsQuality);
+  const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
+  const reducedMotion = useSettingsStore((s) => s.reducedMotion);
+  const highContrast = useSettingsStore((s) => s.highContrast);
 
   const handleBack = useCallback(() => {
     useUIStore.getState().openMenu("pause");
@@ -126,6 +131,9 @@ export function SettingsDialog() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 animate-in fade-in duration-300"
       data-testid="settings-dialog"
     >
@@ -198,6 +206,31 @@ export function SettingsDialog() {
             <QualitySelector
               value={graphicsQuality}
               onChange={(q) => useSettingsStore.getState().setGraphicsQuality(q)}
+            />
+          </div>
+
+          {/* Accessibility section */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Accessibility
+            </h3>
+            <SettingToggle
+              label="Color-Blind Mode"
+              checked={colorBlindMode}
+              onChange={(v) => useSettingsStore.getState().setColorBlindMode(v)}
+              testId="settings-color-blind"
+            />
+            <SettingToggle
+              label="Reduced Motion"
+              checked={reducedMotion}
+              onChange={(v) => useSettingsStore.getState().setReducedMotion(v)}
+              testId="settings-reduced-motion"
+            />
+            <SettingToggle
+              label="High Contrast"
+              checked={highContrast}
+              onChange={(v) => useSettingsStore.getState().setHighContrast(v)}
+              testId="settings-high-contrast"
             />
           </div>
         </CardContent>

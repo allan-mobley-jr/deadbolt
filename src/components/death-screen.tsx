@@ -172,6 +172,9 @@ export function DeathScreen() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Death screen"
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 animate-in fade-in duration-500"
       data-testid="death-screen"
     >

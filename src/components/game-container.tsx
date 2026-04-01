@@ -51,6 +51,7 @@ export default function GameContainer() {
             const SETTINGS_KEYS = [
               "masterVolume", "sfxVolume", "musicVolume",
               "screenShake", "showFps", "graphicsQuality",
+              "colorBlindMode", "reducedMotion", "highContrast",
             ] as const;
             const settings = useSettingsStore.getState();
             for (const key of SETTINGS_KEYS) {

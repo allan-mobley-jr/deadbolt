@@ -52,6 +52,9 @@ export function ControlsReference() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Controls reference"
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 animate-in fade-in duration-200"
       data-testid="controls-reference"
     >

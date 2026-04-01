@@ -289,12 +289,26 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   });
 
   // --- Settings changes ---
+  let reducedMotionOverride = false;
+
   ctx.eventBus.on("cmd:settings-changed", (e) => {
     if (e.key === "graphicsQuality" && typeof e.value === "string") {
       quality = e.value as GraphicsQuality;
-      qMul = qualityMultiplier(quality);
+      qMul = reducedMotionOverride ? 0 : qualityMultiplier(quality);
 
-      // If set to low, destroy all ongoing emitters
+      // If set to low or reduced motion, destroy all ongoing emitters
+      if (qMul <= 0) {
+        for (const tracked of trackedEmitters) {
+          try { tracked.emitter.destroy(); } catch { /* ignore */ }
+        }
+        trackedEmitters.length = 0;
+      }
+    }
+    if (e.key === "reducedMotion" && typeof e.value === "boolean") {
+      reducedMotionOverride = e.value;
+      qMul = e.value ? 0 : qualityMultiplier(quality);
+
+      // Destroy ongoing emitters when reduced motion is enabled
       if (qMul <= 0) {
         for (const tracked of trackedEmitters) {
           try { tracked.emitter.destroy(); } catch { /* ignore */ }
