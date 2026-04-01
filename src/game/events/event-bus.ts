@@ -340,6 +340,18 @@ export interface MinimapUpdateEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Event payload types — Topology changes (issue #43)
+// ---------------------------------------------------------------------------
+
+/** Emitted when walkability changes (barricade placed/destroyed, wall destroyed). */
+export interface TopologyChangedEvent {
+  tileX: number;
+  tileY: number;
+  /** True = tile became walkable (barricade removed), false = blocked (barricade placed). */
+  walkable: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Event payload types — UI → Game commands
 // ---------------------------------------------------------------------------
 
@@ -433,6 +445,9 @@ export interface GameEventMap {
   // Minimap (issue #33)
   "minimap-init": [event: MinimapInitEvent];
   "minimap-update": [event: MinimapUpdateEvent];
+
+  // Topology changes (issue #43)
+  "topology-changed": [event: TopologyChangedEvent];
 
   // UI → Game commands (prefixed with cmd:)
   "cmd:pause": [event: PauseCommandEvent];
