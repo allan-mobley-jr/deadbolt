@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { InteractionPrompt } from "@/components/interaction-prompt";
-import { DeathScreen } from "@/components/death-screen";
 import { HudOverlay } from "@/components/hud/hud-overlay";
-import { PauseMenu } from "@/components/pause-menu";
-import { SettingsDialog } from "@/components/settings-dialog";
-import { ControlsReference } from "@/components/controls-reference";
 import { useGameStore } from "@/stores/useGameStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { usePersistenceStore } from "@/stores/usePersistenceStore";
+
+// Lazy-loaded overlays — only rendered when their menu state is active
+const DeathScreen = lazy(() =>
+  import("@/components/death-screen").then((m) => ({ default: m.DeathScreen })),
+);
+const PauseMenu = lazy(() =>
+  import("@/components/pause-menu").then((m) => ({ default: m.PauseMenu })),
+);
+const SettingsDialog = lazy(() =>
+  import("@/components/settings-dialog").then((m) => ({
+    default: m.SettingsDialog,
+  })),
+);
+const ControlsReference = lazy(() =>
+  import("@/components/controls-reference").then((m) => ({
+    default: m.ControlsReference,
+  })),
+);
 
 const GameContainer = dynamic(
   () => import("@/components/game-container"),
@@ -87,10 +101,18 @@ export default function GameShell() {
       <GameContainer key={runKey} />
       <HudOverlay />
       <InteractionPrompt />
-      <PauseMenu />
-      <SettingsDialog />
-      <ControlsReference />
-      <DeathScreen />
+      <Suspense fallback={null}>
+        <PauseMenu />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SettingsDialog />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ControlsReference />
+      </Suspense>
+      <Suspense fallback={null}>
+        <DeathScreen />
+      </Suspense>
     </div>
   );
 }
