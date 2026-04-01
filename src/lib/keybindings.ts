@@ -88,6 +88,7 @@ const STORAGE_KEY = "deadbolt-keybindings";
 
 /** Load keybindings from localStorage, merging with defaults. */
 export function loadKeybindings(): KeyBindingMap {
+  if (typeof localStorage === "undefined") return { ...DEFAULT_KEYBINDINGS };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_KEYBINDINGS };
@@ -115,6 +116,7 @@ export function loadKeybindings(): KeyBindingMap {
 
 /** Persist keybindings to localStorage. */
 export function saveKeybindings(bindings: KeyBindingMap): void {
+  if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
   } catch {
