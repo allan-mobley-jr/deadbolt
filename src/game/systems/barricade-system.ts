@@ -141,10 +141,11 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
 
     let currentSnapTarget: WallAnchorPair | null = null;
     let snapObjectEntity: Entity | null = null;
+    let bestSnapDistSq = Infinity;
 
     // Only check for snap when pointer is down (dragging) or just released
     if (ctx.inputState.pointerDown || ctx.inputState.pointerReleased) {
-      // Find the nearest interactable object being dragged near the player
+      // Find the interactable object nearest to its snap center
       for (const entity of interactableEntities) {
         const objX = entity.position.x;
         const objY = entity.position.y;
@@ -155,9 +156,12 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
         // Check if object is near a snap target
         const snapTarget = wallAnchorRegistry.findSnapTarget(objX, objY);
         if (snapTarget) {
-          currentSnapTarget = snapTarget;
-          snapObjectEntity = entity;
-          break; // Use first matching object
+          const d = distSq(objX, objY, snapTarget.centerX, snapTarget.centerY);
+          if (d < bestSnapDistSq) {
+            bestSnapDistSq = d;
+            currentSnapTarget = snapTarget;
+            snapObjectEntity = entity;
+          }
         }
       }
     }
@@ -180,6 +184,7 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
           snapCenter: { x: currentSnapTarget.centerX, y: currentSnapTarget.centerY },
           orientation: currentSnapTarget.orientation,
           snapping: true,
+          objectType: snapObjectEntity?.objectProperties?.objectType,
         });
       }
       activeSnapTarget = currentSnapTarget;
