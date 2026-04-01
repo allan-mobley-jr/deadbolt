@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -14,9 +14,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://deadbolt.vercel.app"),
   title: "Deadbolt",
   description:
     "A top-down zombie survival base builder that runs entirely in the browser",
+  openGraph: {
+    siteName: "Deadbolt",
+    locale: "en_US",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a1a1a",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

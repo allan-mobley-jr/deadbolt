@@ -1,59 +1,57 @@
 # Lighthouse Baseline
 
-Recorded 2026-04-01 using Lighthouse 13.0.3 (headless Chrome) against local production build.
+## Latest Audit (2026-04-01, post-M6 optimizations)
 
-## Landing Page (`/`)
+Recorded using Lighthouse 13.0.3 (headless Chrome) against local production build.
+
+### Landing Page (`/`)
 
 | Category | Score |
 |----------|-------|
-| Performance | 93 |
+| Performance | 95 |
 | Accessibility | 94 |
 | Best Practices | 100 |
 | SEO | 100 |
 
-### Key Metrics
-
 | Metric | Value |
 |--------|-------|
 | First Contentful Paint (FCP) | 0.8 s |
-| Largest Contentful Paint (LCP) | 3.2 s |
-| Total Blocking Time (TBT) | 30 ms |
+| Largest Contentful Paint (LCP) | 3.0 s |
+| Total Blocking Time (TBT) | 20 ms |
 | Cumulative Layout Shift (CLS) | 0.043 |
 | Speed Index (SI) | 0.8 s |
 
-### Notes
-
-Landing page is a static Server Component with a single client island (LandingStats). No Phaser code loads. Performance is strong across all metrics.
-
-## Game Page (`/play`)
+### Game Page (`/play`)
 
 | Category | Score |
 |----------|-------|
-| Performance | 56 |
+| Performance | 58 |
 | Accessibility | 86 |
 | Best Practices | 100 |
 | SEO | 100 |
-
-### Key Metrics
 
 | Metric | Value |
 |--------|-------|
 | First Contentful Paint (FCP) | 0.8 s |
 | Largest Contentful Paint (LCP) | 2.9 s |
-| Total Blocking Time (TBT) | 20,670 ms |
+| Total Blocking Time (TBT) | 14,940 ms |
 | Cumulative Layout Shift (CLS) | 0 |
-| Speed Index (SI) | 9.0 s |
+| Speed Index (SI) | 7.1 s |
 
 ### Notes
 
-The low performance score is dominated by Total Blocking Time (20.7s). This is expected: Phaser initializes synchronously and runs the full world generation pipeline (WFC city layout, BSP interiors, object placement, pathfinding grid) on the main thread. The game shows a loading screen during this time.
+The play page's low performance score is dominated by Total Blocking Time (14.9s). This is expected: Phaser initializes synchronously and runs the full world generation pipeline (WFC city layout, BSP interiors, object placement, pathfinding grid) on the main thread. The loading scene runs generation one step per frame.
 
-**This is inherent to the game architecture, not a regression.** The loading scene already runs generation one step per frame to keep the UI responsive, but the cumulative work still blocks the main thread significantly.
+TBT improved from 20.7s (initial baseline) to 14.9s after entity pooling (pre-warmed bodies avoid allocation during gameplay) and pathfinding optimization (flow field replaces individual A* for safehouse-targeting zombies).
 
-Future optimization opportunities:
-- Move world generation to a Web Worker
-- Implement progressive loading with visual feedback
-- Split heavy generation steps across multiple frames
+## Score History
+
+| Date | Page | Perf | A11y | BP | SEO | Notes |
+|------|------|------|------|----|-----|-------|
+| 2026-04-01 | `/` | 93 | 94 | 100 | 100 | Initial baseline |
+| 2026-04-01 | `/play` | 56 | 86 | 100 | 100 | Initial baseline |
+| 2026-04-01 | `/` | 95 | 94 | 100 | 100 | Post-M6: OG image, meta tags, entity pooling, pathfinding opt |
+| 2026-04-01 | `/play` | 58 | 86 | 100 | 100 | Post-M6: TBT improved 20.7s → 14.9s |
 
 ## How to Re-Run
 
