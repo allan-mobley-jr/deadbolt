@@ -24,7 +24,7 @@ import { playerEntities } from "@/game/ecs/queries";
 export function createCameraSystem(ctx: SceneContext): SystemFn {
   const cam = ctx.scene.cameras.main;
   if (!cam) {
-    // No camera available — return a no-op system
+    console.error("[CameraSystem] Main camera not found — camera system disabled");
     return () => {};
   }
   const cameraRng = ctx.rng?.derive("camera");
@@ -58,8 +58,8 @@ export function createCameraSystem(ctx: SceneContext): SystemFn {
     try {
       plusKey = kb.addKey("PLUS");
       minusKey = kb.addKey("MINUS");
-    } catch {
-      // Key capture may fail in test environments
+    } catch (err) {
+      console.warn("[CameraSystem] Failed to capture zoom keys:", err);
     }
   }
 
