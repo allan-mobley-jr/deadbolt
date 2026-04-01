@@ -784,6 +784,47 @@ describe("BarricadeSystem", () => {
       );
     });
 
+    it("unblocks the entry point tile even when physics body drifts", () => {
+      const { ctx, bodyRegistry, pathfindingGrid, entryPoints } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // Place the barricade
+      ctx.inputState.pointerReleased = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(pathfindingGrid.isWalkable(5, 3)).toBe(false);
+      ctx.inputState.pointerReleased = false;
+
+      // Simulate physics drift — move the entity a full tile away from the
+      // entry point.  With the buggy code this would unblock tile (6,4)
+      // instead of (5,3), leaving the entry point permanently blocked.
+      const barricade = barricadeEntities.entities[0];
+      barricade.position!.x = 6 * TILE_SIZE + TILE_SIZE / 2;
+      barricade.position!.y = 4 * TILE_SIZE + TILE_SIZE / 2;
+
+      // Destroy the barricade
+      barricade.health.current = 0;
+      system(1 / 60);
+
+      // Entry point tile (5,3) must be unblocked, not the drifted position (6,4)
+      expect(pathfindingGrid.isWalkable(5, 3)).toBe(true);
+      expect(entryPoints[0].barricaded).toBe(false);
+    });
+
     it("keeps pathfinding blocked when other barricades remain at entry point", () => {
       const { ctx, bodyRegistry, pathfindingGrid, entryPoints } = createMockContext();
 
