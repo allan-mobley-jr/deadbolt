@@ -118,14 +118,15 @@ describe("InputSystem", () => {
     expect(ctx.inputState.moveY).toBe(1);
   });
 
-  it("supports arrow keys", () => {
+  it("supports arrow keys for keyboard aiming", () => {
     const system = createInputSystem(ctx);
     keys.RIGHT.isDown = true;
     keys.DOWN.isDown = true;
     system(1 / 60);
-    // Diagonal normalised
-    expect(ctx.inputState.moveX).toBeCloseTo(1 / Math.SQRT2, 5);
-    expect(ctx.inputState.moveY).toBeCloseTo(1 / Math.SQRT2, 5);
+    // Arrow keys now control aiming direction (not movement)
+    // Movement axes should be zero (no WASD pressed)
+    expect(ctx.inputState.moveX).toBe(0);
+    expect(ctx.inputState.moveY).toBe(0);
   });
 
   it("normalises diagonal movement", () => {
