@@ -9,6 +9,7 @@
  */
 
 import type { BodyRegistry } from "@/game/systems/body-registry";
+import { setBodyPosition } from "@/game/physics/matter-body";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,8 +79,7 @@ export class SensorBodyPool {
     }
 
     // Reposition and activate
-    body.position.x = x;
-    body.position.y = y;
+    setBodyPosition(body, { x, y });
     // Sensor bodies are always static + sensor (that's their normal mode)
     // Just make sure they're visible to collision detection
     this.bodyRegistry.register(body);
@@ -100,8 +100,7 @@ export class SensorBodyPool {
     this.bodyRegistry.unregister(body.id);
 
     // Move off-screen
-    body.position.x = -9999;
-    body.position.y = -9999;
+    setBodyPosition(body, { x: -9999, y: -9999 });
 
     this.activeSet.delete(body);
     this.dormant.push(body);

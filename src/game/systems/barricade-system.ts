@@ -23,6 +23,7 @@ import {
   barricadeEntities,
 } from "@/game/ecs/queries";
 import { getObjectDef } from "@/game/procgen/object-defs";
+import { setBodyPosition, setBodyVelocity } from "@/game/physics/matter-body";
 import { safeEmit } from "@/game/events/event-bus";
 import { TILE_SIZE } from "@/game/procgen/constants";
 import { NOISE } from "./noise-constants";
@@ -406,10 +407,8 @@ function tryPlaceBarricade(
   }
 
   // Move object to snap center for clean alignment
-  objectBody.position.x = snapTarget.centerX;
-  objectBody.position.y = snapTarget.centerY;
-  objectBody.velocity.x = 0;
-  objectBody.velocity.y = 0;
+  setBodyPosition(objectBody, { x: snapTarget.centerX, y: snapTarget.centerY });
+  setBodyVelocity(objectBody, { x: 0, y: 0 });
 
   // Resolve anchor bodies
   const anchorA = ctx.bodyRegistry.get(snapTarget.anchorBodyIdA);

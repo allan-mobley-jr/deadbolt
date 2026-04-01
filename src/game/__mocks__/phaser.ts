@@ -21,6 +21,7 @@ class MockScene {
   }
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 const Phaser = {
   AUTO: 0,
   HEADLESS: 3,
@@ -28,6 +29,33 @@ const Phaser = {
   Scale: {
     FIT: 1,
     CENTER_BOTH: 3,
+  },
+  Physics: {
+    Matter: {
+      Matter: {
+        Body: {
+          setPosition(body: any, position: { x: number; y: number }) {
+            body.position.x = position.x;
+            body.position.y = position.y;
+          },
+          setVelocity(body: any, velocity: { x: number; y: number }) {
+            body.velocity.x = velocity.x;
+            body.velocity.y = velocity.y;
+            body.speed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+          },
+          setAngularVelocity(body: any, velocity: number) {
+            body.angularVelocity = velocity;
+          },
+          setStatic(body: any, isStatic: boolean) {
+            body.isStatic = isStatic;
+          },
+          setInertia(body: any, inertia: number) {
+            body.inertia = inertia;
+            body.inverseInertia = inertia === Infinity ? 0 : 1 / inertia;
+          },
+        },
+      },
+    },
   },
   Game: class MockGame {
     config: unknown;

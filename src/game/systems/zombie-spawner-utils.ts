@@ -21,6 +21,7 @@ import { createZombieEntity, type ZombieEntity } from "@/game/ecs/archetypes";
 import type { BodyRegistry } from "./body-registry";
 import type { EntityPool } from "@/game/ecs/pool";
 import { configureZombie } from "@/game/ecs/zombie-pool";
+import { setBodyInertia } from "@/game/physics/matter-body";
 
 // ---------------------------------------------------------------------------
 // Variant selection
@@ -129,8 +130,7 @@ function createZombieBody(
     frictionAir: 0.05,
     restitution: 0.1,
   });
-  body.inertia = Infinity;
-  body.inverseInertia = 0;
+  setBodyInertia(body as unknown as MatterJS.BodyType, Infinity);
   // SAFETY: bodyRegistry.register stores the body instance in its internal
   // map keyed by body.id. The real Phaser MatterFactory.rectangle returns a
   // full MatterJS.BodyType, but SpawnContext narrows the interface for

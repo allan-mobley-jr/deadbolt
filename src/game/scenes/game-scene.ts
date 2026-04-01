@@ -37,6 +37,7 @@ import { SensorBodyPool } from "@/game/ecs/sensor-pool";
 import { COMBAT } from "@/game/systems/combat-constants";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
 import { setActiveBus, setActiveSeed, setActiveMinimapInit } from "@/game/PhaserGame";
+import { setBodyInertia } from "@/game/physics/matter-body";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import { getObjectDef } from "@/game/procgen/object-defs";
@@ -114,8 +115,7 @@ export default class GameScene extends Phaser.Scene {
       restitution: 0,
     });
     // Prevent rotation — set inertia after creation (not in MatterBodyConfig)
-    playerBody.inertia = Infinity;
-    playerBody.inverseInertia = 0;
+    setBodyInertia(playerBody, Infinity);
     bodyRegistry.register(playerBody);
     createPlayerEntity(px, py, playerBody.id);
 
@@ -430,8 +430,7 @@ export default class GameScene extends Phaser.Scene {
           restitution: 0.2,
           mass: def.immovable ? def.physics.mass * 10 : def.physics.mass,
         });
-        body.inertia = Infinity;
-        body.inverseInertia = 0;
+        setBodyInertia(body, Infinity);
         bodyRegistry.register(body);
 
         createObjectEntity(
