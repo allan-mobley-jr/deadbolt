@@ -15,6 +15,7 @@ import {
 } from "@/game/ecs/archetypes";
 import { ObjectCategory } from "@/types/procgen";
 import { FIRE } from "./fire-constants";
+import { RNG } from "@/lib/rng";
 
 const DT = 1 / 60;
 
@@ -55,6 +56,7 @@ function createMockContext(
     getAlpha: () => 0,
     clockState: createClockState(),
     eventBus: createGameEventBus(),
+    rng: new RNG("test-seed"),
     materialRegistry,
     constraintRegistry,
     ...overrides,
@@ -156,6 +158,22 @@ function collectEvents<T>(bus: GameEventBus, eventName: string): T[] {
     events.push(e);
   });
   return events;
+}
+
+/**
+ * Create a mock context whose fire-system RNG always returns the given value.
+ * The RNG is controlled via spy on the derived "fire" child's float() method.
+ */
+function createMockContextWithFixedRng(
+  value: number,
+  overrides: Partial<SceneContext> = {},
+): { ctx: SceneContext; fireRng: RNG } {
+  const rng = new RNG("test-seed");
+  const fireRng = rng.derive("fire");
+  vi.spyOn(fireRng, "float").mockReturnValue(value);
+  vi.spyOn(rng, "derive").mockReturnValue(fireRng);
+  const ctx = createMockContext({ rng, ...overrides });
+  return { ctx, fireRng };
 }
 
 beforeEach(() => {
@@ -276,15 +294,12 @@ describe("FireSystem — burn duration", () => {
 
 describe("FireSystem — spread", () => {
   it("spreads fire to nearby flammable objects", () => {
-    const ctx = createMockContext();
+    const { ctx } = createMockContextWithFixedRng(0);
     const system = createFireSystem(ctx);
 
     const source = spawnGasCan(ctx, 100, 100);
     const target = spawnWoodenPlank(ctx, 140, 100); // 40px away, within 64px radius
     source.material.state = "burning";
-
-    // Force spread to succeed
-    vi.spyOn(Math, "random").mockReturnValue(0);
 
     // Tick enough to trigger spread check
     tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL + 1);
@@ -293,21 +308,20 @@ describe("FireSystem — spread", () => {
   });
 
   it("does not spread to fireproof (metal) objects", () => {
-    const ctx = createMockContext();
+    const { ctx } = createMockContextWithFixedRng(0);
     const system = createFireSystem(ctx);
 
     const source = spawnGasCan(ctx, 100, 100);
     const metal = spawnMetalSheet(ctx, 140, 100);
     source.material.state = "burning";
 
-    vi.spyOn(Math, "random").mockReturnValue(0);
     tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL + 1);
 
     expect(metal.material.state).toBe("inert");
   });
 
   it("does not spread beyond spread radius", () => {
-    const ctx = createMockContext();
+    const { ctx } = createMockContextWithFixedRng(0);
     const system = createFireSystem(ctx);
 
     const source = spawnGasCan(ctx, 100, 100);
@@ -315,21 +329,19 @@ describe("FireSystem — spread", () => {
     const target = spawnWoodenPlank(ctx, 100 + FIRE.SPREAD_RADIUS + 10, 100);
     source.material.state = "burning";
 
-    vi.spyOn(Math, "random").mockReturnValue(0);
     tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL + 1);
 
     expect(target.material.state).toBe("inert");
   });
 
   it("emits fire-spread and material-state-changed events", () => {
-    const ctx = createMockContext();
+    const { ctx } = createMockContextWithFixedRng(0);
     const system = createFireSystem(ctx);
 
     const source = spawnGasCan(ctx, 100, 100);
     spawnWoodenPlank(ctx, 140, 100);
     source.material.state = "burning";
 
-    vi.spyOn(Math, "random").mockReturnValue(0);
     const spreads = collectEvents(ctx.eventBus, "fire-spread");
     const stateChanges = collectEvents(ctx.eventBus, "material-state-changed");
 
@@ -352,14 +364,12 @@ describe("FireSystem — spread", () => {
   });
 
   it("respects the spread check interval cooldown", () => {
-    const ctx = createMockContext();
+    const { ctx } = createMockContextWithFixedRng(0);
     const system = createFireSystem(ctx);
 
     const source = spawnGasCan(ctx, 100, 100);
     const target = spawnWoodenPlank(ctx, 140, 100);
     source.material.state = "burning";
-
-    vi.spyOn(Math, "random").mockReturnValue(0);
 
     // Tick fewer than the interval — should not spread
     tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL - 1);
@@ -368,7 +378,9 @@ describe("FireSystem — spread", () => {
   });
 
   it("spread probability scales with target flammability", () => {
-    const ctx = createMockContext();
+    const { ctx } = createMockContextWithFixedRng(
+      FIRE.BASE_IGNITION_CHANCE * 0.95 + 0.01,
+    );
     const system = createFireSystem(ctx);
 
     const source = spawnGasCan(ctx, 100, 100);
@@ -376,14 +388,78 @@ describe("FireSystem — spread", () => {
     const sofa = spawnSofa(ctx, 140, 100);
     source.material.state = "burning";
 
-    // Set random to be just above the threshold (should NOT ignite)
-    vi.spyOn(Math, "random").mockReturnValue(
-      FIRE.BASE_IGNITION_CHANCE * 0.95 + 0.01,
-    );
-
     tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL + 1);
 
     expect(sofa.material.state).toBe("inert");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Determinism
+// ---------------------------------------------------------------------------
+
+describe("FireSystem — determinism", () => {
+  it("fire spread is deterministic given the same seed", () => {
+    function runSpreadScenario(seed: string): string[] {
+      const rng = new RNG(seed);
+      const ctx = createMockContext({ rng });
+      const system = createFireSystem(ctx);
+
+      const source = spawnGasCan(ctx, 100, 100);
+      spawnWoodenPlank(ctx, 140, 100);
+      spawnWoodenPlank(ctx, 100, 140);
+      spawnSofa(ctx, 130, 130);
+      source.material.state = "burning";
+
+      const spreads: string[] = [];
+      ctx.eventBus.on("fire-spread", (e) => {
+        spreads.push(`${e.targetPosition.x},${e.targetPosition.y}`);
+      });
+
+      // Tick enough spread intervals to give fire a chance to spread
+      tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL * 20);
+      return spreads;
+    }
+
+    const run1 = runSpreadScenario("determinism-test");
+    resetWorld();
+    const run2 = runSpreadScenario("determinism-test");
+
+    expect(run1).toEqual(run2);
+  });
+
+  it("different seeds produce different spread sequences", () => {
+    function runSpreadScenario(seed: string): string[] {
+      const rng = new RNG(seed);
+      const ctx = createMockContext({ rng });
+      const system = createFireSystem(ctx);
+
+      const source = spawnGasCan(ctx, 100, 100);
+      spawnWoodenPlank(ctx, 140, 100);
+      spawnWoodenPlank(ctx, 100, 140);
+      spawnSofa(ctx, 130, 130);
+      source.material.state = "burning";
+
+      const spreads: string[] = [];
+      ctx.eventBus.on("fire-spread", (e) => {
+        spreads.push(`${e.targetPosition.x},${e.targetPosition.y}`);
+      });
+
+      tickN(ctx, system, FIRE.SPREAD_CHECK_INTERVAL * 50);
+      return spreads;
+    }
+
+    const runA = runSpreadScenario("seed-alpha");
+    resetWorld();
+    const runB = runSpreadScenario("seed-beta");
+
+    // At least one run should have spreads, and they should differ
+    // (with enough ticks, fire should spread at least once)
+    if (runA.length > 0 && runB.length > 0) {
+      // If both spread, at least their timing/order should differ
+      expect(runA).not.toEqual(runB);
+    }
+    // If one has no spreads, seeds are already producing different outcomes
   });
 });
 

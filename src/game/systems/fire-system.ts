@@ -107,6 +107,10 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
   if (!registry) {
     throw new Error("[FireSystem] ctx.materialRegistry is required");
   }
+  if (!ctx.rng) {
+    throw new Error("[FireSystem] ctx.rng is required");
+  }
+  const fireRng = ctx.rng.derive("fire");
 
   /** Per-entity burn state. */
   const burnState = new Map<Entity, BurnRecord>();
@@ -193,7 +197,7 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           // Probability check scaled by target flammability
           const chance =
             FIRE.BASE_IGNITION_CHANCE * target.material.flammability;
-          if (Math.random() >= chance) continue;
+          if (fireRng.float() >= chance) continue;
 
           // Ignite the target
           target.material.state = "burning";

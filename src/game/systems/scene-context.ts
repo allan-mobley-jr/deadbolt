@@ -12,6 +12,7 @@ import type { EntityPool } from "@/game/ecs/pool";
 import type { ZombieEntity } from "@/game/ecs/archetypes";
 import type { SensorBodyPool } from "@/game/ecs/sensor-pool";
 import type { PoolManager } from "@/game/ecs/pool-manager";
+import type { RNG } from "@/lib/rng";
 
 /**
  * Snapshot of normalised input state, written by InputSystem each fixed tick
@@ -110,6 +111,8 @@ export interface SceneContext {
   sensorPool?: SensorBodyPool;
   /** Pool manager aggregating all entity pools for diagnostics. */
   poolManager?: PoolManager;
+  /** Seeded PRNG for deterministic randomness across game systems. */
+  rng?: RNG;
 }
 
 /** Create a zeroed-out input state. */

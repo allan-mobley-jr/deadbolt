@@ -38,6 +38,7 @@ import { COMBAT } from "@/game/systems/combat-constants";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
 import { setActiveBus, setActiveSeed, setActiveMinimapInit } from "@/game/PhaserGame";
 import { setBodyInertia } from "@/game/physics/matter-body";
+import { RNG } from "@/lib/rng";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
 import { getObjectDef } from "@/game/procgen/object-defs";
@@ -143,6 +144,9 @@ export default class GameScene extends Phaser.Scene {
       5,
     );
 
+    // --- Seeded PRNG for deterministic randomness in game systems ---
+    const rng = new RNG(this.worldData.config.seed);
+
     // --- Scene context (shared by all system factories) ---
     const ctx: SceneContext = {
       scene: this,
@@ -151,6 +155,7 @@ export default class GameScene extends Phaser.Scene {
       getAlpha: () => this.gameLoop.alpha,
       clockState: createClockState(),
       eventBus: createGameEventBus(),
+      rng,
       constraintRegistry,
       wallAnchorRegistry,
       materialRegistry,
