@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/useUIStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useMinimapStore } from "@/stores/useMinimapStore";
+import { usePersistenceStore } from "@/stores/usePersistenceStore";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,7 +59,30 @@ export function DeathScreen() {
   const objectsUsed = useGameStore((s) => s.objectsUsed);
   const seed = useGameStore((s) => s.seed);
 
+  // --- Persist run data to IndexedDB when the death screen opens ---
+  const hasSaved = useRef(false);
+  const killsByType = useGameStore((s) => s.killsByType);
+  const waveNumber = useGameStore((s) => s.waveNumber);
+
+  useEffect(() => {
+    if (activeMenu !== "death" || hasSaved.current) return;
+    hasSaved.current = true;
+
+    usePersistenceStore.getState().recordRun({
+      seed: seed ?? "unknown",
+      elapsedTotal,
+      dayNumber,
+      waveNumber,
+      totalKills,
+      killsByType,
+      barricadesBuilt,
+      distanceTraveled,
+      objectsUsed,
+    });
+  }, [activeMenu, seed, elapsedTotal, dayNumber, waveNumber, totalKills, killsByType, barricadesBuilt, distanceTraveled, objectsUsed]);
+
   const handleTryAgain = useCallback(() => {
+    hasSaved.current = false;
     try {
       resetAllStores();
       useGameStore.getState().incrementRunKey();
@@ -69,6 +93,7 @@ export function DeathScreen() {
   }, []);
 
   const handleReturnToMenu = useCallback(() => {
+    hasSaved.current = false;
     try {
       resetAllStores();
       router.push("/");
