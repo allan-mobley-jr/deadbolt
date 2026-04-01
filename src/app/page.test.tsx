@@ -18,9 +18,26 @@ test("Landing page renders tagline", () => {
   ).toBeInTheDocument();
 });
 
-test("Landing page renders Play button linking to /play", () => {
+test("Landing page renders feature highlights", () => {
   render(<Page />);
-  const link = screen.getByRole("link", { name: /play/i });
-  expect(link).toBeInTheDocument();
-  expect(link).toHaveAttribute("href", "/play");
+  expect(screen.getByText("Scavenge")).toBeInTheDocument();
+  expect(screen.getByText("Barricade")).toBeInTheDocument();
+  expect(screen.getByText("Survive")).toBeInTheDocument();
+});
+
+test("Landing page renders How to Play section", () => {
+  render(<Page />);
+  expect(screen.getByText("How to Play")).toBeInTheDocument();
+  expect(screen.getByText("WASD")).toBeInTheDocument();
+  expect(screen.getByText("ESC")).toBeInTheDocument();
+});
+
+test("Landing page renders footer with version", () => {
+  render(<Page />);
+  expect(screen.getByText(/Deadbolt v0\.1\.0/)).toBeInTheDocument();
+});
+
+test("Landing page renders seed input field", () => {
+  render(<Page />);
+  expect(screen.getByTestId("seed-input")).toBeInTheDocument();
 });
