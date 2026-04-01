@@ -9,6 +9,8 @@ import {
   getActiveBus,
   setActiveSeed,
   getActiveSeed,
+  setActiveError,
+  getActiveError,
 } from "@/game/PhaserGame";
 import { createGameEventBus } from "@/game/events/event-bus";
 import BootScene from "@/game/scenes/boot-scene";
@@ -217,5 +219,96 @@ describe("seed accessors", () => {
     expect(getActiveSeed()).toBeNull();
 
     container.remove();
+  });
+});
+
+describe("error accessors", () => {
+  afterEach(() => {
+    setActiveError(null);
+  });
+
+  it("getActiveError returns null before any error is set", () => {
+    expect(getActiveError()).toBeNull();
+  });
+
+  it("setActiveError makes getActiveError return the error", () => {
+    const err = new Error("test error");
+    setActiveError(err);
+    expect(getActiveError()).toBe(err);
+  });
+
+  it("setActiveError(null) clears the error", () => {
+    setActiveError(new Error("will be cleared"));
+    setActiveError(null);
+    expect(getActiveError()).toBeNull();
+  });
+
+  it("destroyGame clears activeError", () => {
+    const container = document.createElement("div");
+    container.id = "error-test";
+    document.body.appendChild(container);
+
+    createGame("error-test");
+    setActiveError(new Error("boot failure"));
+    expect(getActiveError()).not.toBeNull();
+
+    destroyGame();
+    expect(getActiveError()).toBeNull();
+
+    container.remove();
+  });
+});
+
+describe("boot/loading error listeners", () => {
+  let container: HTMLDivElement;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    container.id = "err-listener-test";
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    destroyGame();
+    container.remove();
+  });
+
+  it("captures boot-error emitted on game.events", () => {
+    const game = createGame("err-listener-test");
+    expect(getActiveError()).toBeNull();
+
+    const err = new Error("tileset generation failed");
+    game.events.emit("boot-error", err);
+
+    expect(getActiveError()).toBe(err);
+  });
+
+  it("captures generation-error emitted on game.events", () => {
+    const game = createGame("err-listener-test");
+    expect(getActiveError()).toBeNull();
+
+    const err = new Error("world generation failed");
+    game.events.emit("generation-error", err);
+
+    expect(getActiveError()).toBe(err);
+  });
+
+  it("wraps non-Error values in an Error", () => {
+    const game = createGame("err-listener-test");
+
+    game.events.emit("boot-error", "string error");
+
+    const captured = getActiveError();
+    expect(captured).toBeInstanceOf(Error);
+    expect(captured!.message).toBe("string error");
+  });
+
+  it("last error wins when multiple errors fire", () => {
+    const game = createGame("err-listener-test");
+
+    game.events.emit("boot-error", new Error("first"));
+    game.events.emit("generation-error", new Error("second"));
+
+    expect(getActiveError()!.message).toBe("second");
   });
 });

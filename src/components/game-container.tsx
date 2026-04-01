@@ -16,7 +16,7 @@ export default function GameContainer() {
     let bridge: BridgeConnection | null = null;
 
     import("@/game/PhaserGame")
-      .then(({ createGame, destroyGame, getActiveBus, getActiveSeed, getActiveMinimapInit }) => {
+      .then(({ createGame, destroyGame, getActiveBus, getActiveSeed, getActiveMinimapInit, getActiveError }) => {
         if (cancelled) return;
         createGame("game-container");
         destroy = destroyGame;
@@ -30,6 +30,16 @@ export default function GameContainer() {
 
         const tryConnect = () => {
           if (cancelled) return;
+
+          // Check for boot/loading errors before checking the bus.
+          // These fire on Phaser's native emitter before the typed bus exists.
+          const gameError = getActiveError();
+          if (gameError) {
+            console.error("[GameContainer] Game boot/loading error:", gameError);
+            setError(gameError);
+            return;
+          }
+
           const bus = getActiveBus();
           if (bus) {
             bridge = connectBridge(bus);
