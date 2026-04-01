@@ -27,6 +27,8 @@ export function createCameraSystem(ctx: SceneContext): SystemFn {
     // No camera available — return a no-op system
     return () => {};
   }
+  const cameraRng = ctx.rng?.derive("camera");
+  const rngFloat = cameraRng ? () => cameraRng.float() : Math.random;
 
   // --- Settings ---
   let screenShakeEnabled = true;
@@ -189,8 +191,8 @@ export function createCameraSystem(ctx: SceneContext): SystemFn {
 
     // --- Screen shake ---
     if (shakeIntensity > CAMERA.SHAKE_MIN_THRESHOLD && screenShakeEnabled) {
-      const offsetX = (Math.random() - 0.5) * 2 * shakeIntensity;
-      const offsetY = (Math.random() - 0.5) * 2 * shakeIntensity;
+      const offsetX = (rngFloat() - 0.5) * 2 * shakeIntensity;
+      const offsetY = (rngFloat() - 0.5) * 2 * shakeIntensity;
       cam.scrollX += offsetX;
       cam.scrollY += offsetY;
     }

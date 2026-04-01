@@ -44,6 +44,8 @@ interface MusicState {
 
 export function createAudioSystem(ctx: SceneContext): SystemFn {
   const soundManager = ctx.scene.sound;
+  const audioRng = ctx.rng?.derive("audio");
+  const rngFloat = audioRng ? () => audioRng.float() : Math.random;
 
   // --- Volume settings cache ---
   let masterVolume = 1.0;
@@ -435,14 +437,14 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
         if (dist > AUDIO.ZOMBIE_GROAN_RANGE) continue;
 
         // Random chance to groan this tick (low probability per tick)
-        if (Math.random() > 0.02) continue;
+        if (rngFloat() > 0.02) continue;
 
         if (activeGroans >= AUDIO.ZOMBIE_GROAN_MAX_CONCURRENT) continue;
 
         // Play groan with randomized pitch
         const detune =
           AUDIO.ZOMBIE_GROAN_PITCH_MIN +
-          Math.random() * (AUDIO.ZOMBIE_GROAN_PITCH_MAX - AUDIO.ZOMBIE_GROAN_PITCH_MIN);
+          rngFloat() * (AUDIO.ZOMBIE_GROAN_PITCH_MAX - AUDIO.ZOMBIE_GROAN_PITCH_MIN);
 
         activeGroans++;
         playSpatialSfx(SOUND_KEYS.SFX_ZOMBIE_GROAN, z.position.x, z.position.y, { detune });
