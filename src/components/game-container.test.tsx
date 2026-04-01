@@ -208,6 +208,39 @@ test("connects bridge when getActiveBus returns a bus", async () => {
   expect(mockConnectBridge).toHaveBeenCalledWith(fakeBus);
 });
 
+test("throws to error boundary when connectBridge throws", async () => {
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+
+  // Make connectBridge throw to simulate bridge initialization failure
+  mockConnectBridge.mockImplementation(() => {
+    throw new Error("bridge init failed");
+  });
+
+  render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Flush dynamic import + first rAF poll
+  await vi.advanceTimersByTimeAsync(20);
+
+  await vi.waitFor(() => {
+    expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
+  });
+  expect(screen.getByTestId("boundary-error").textContent).toBe(
+    "bridge init failed",
+  );
+
+  // Bridge never connected, so disconnect should not be called
+  expect(mockDisconnect).not.toHaveBeenCalled();
+
+  consoleSpy.mockRestore();
+});
+
 test("disconnects bridge on unmount after successful connection", async () => {
   vi.useFakeTimers();
   const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };

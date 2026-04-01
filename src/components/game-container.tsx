@@ -43,46 +43,53 @@ export default function GameContainer() {
 
           const bus = getActiveBus();
           if (bus) {
-            bridge = connectBridge(bus);
-            // Pull seed and minimap init from PhaserGame module — these events
-            // fired before the bridge connected, so we read them directly.
-            const seed = getActiveSeed();
-            if (seed) {
-              useGameStore.getState().setSeed(seed);
-            }
-            const minimapInit = getActiveMinimapInit();
-            if (minimapInit) {
-              useMinimapStore.getState().setMapBounds(
-                minimapInit.mapWidth,
-                minimapInit.mapHeight,
-                minimapInit.safehouseCenter,
-              );
-            }
-            // Push current settings to game systems on connect
-            const SETTINGS_KEYS = [
-              "masterVolume", "sfxVolume", "musicVolume",
-              "screenShake", "showFps", "graphicsQuality",
-              "colorBlindMode", "reducedMotion", "highContrast",
-            ] as const;
-            const settings = useSettingsStore.getState();
-            for (const key of SETTINGS_KEYS) {
-              safeEmit(bus, "cmd:settings-changed", { key, value: settings[key] });
-            }
-
-            // Poll for runtime crashes after the bridge connects.
-            // The tryConnect loop has stopped, so runtime errors (game-crash)
-            // need a separate polling path.  One variable read per frame.
-            const pollCrash = () => {
-              if (cancelled) return;
-              const crashError = getActiveError();
-              if (crashError) {
-                console.error("[GameContainer] Game runtime crash:", crashError);
-                setError(crashError);
-                return;
+            try {
+              bridge = connectBridge(bus);
+              // Pull seed and minimap init from PhaserGame module — these events
+              // fired before the bridge connected, so we read them directly.
+              const seed = getActiveSeed();
+              if (seed) {
+                useGameStore.getState().setSeed(seed);
               }
+              const minimapInit = getActiveMinimapInit();
+              if (minimapInit) {
+                useMinimapStore.getState().setMapBounds(
+                  minimapInit.mapWidth,
+                  minimapInit.mapHeight,
+                  minimapInit.safehouseCenter,
+                );
+              }
+              // Push current settings to game systems on connect
+              const SETTINGS_KEYS = [
+                "masterVolume", "sfxVolume", "musicVolume",
+                "screenShake", "showFps", "graphicsQuality",
+                "colorBlindMode", "reducedMotion", "highContrast",
+              ] as const;
+              const settings = useSettingsStore.getState();
+              for (const key of SETTINGS_KEYS) {
+                safeEmit(bus, "cmd:settings-changed", { key, value: settings[key] });
+              }
+
+              // Poll for runtime crashes after the bridge connects.
+              // The tryConnect loop has stopped, so runtime errors (game-crash)
+              // need a separate polling path.  One variable read per frame.
+              const pollCrash = () => {
+                if (cancelled) return;
+                const crashError = getActiveError();
+                if (crashError) {
+                  console.error("[GameContainer] Game runtime crash:", crashError);
+                  setError(crashError);
+                  return;
+                }
+                requestAnimationFrame(pollCrash);
+              };
               requestAnimationFrame(pollCrash);
-            };
-            requestAnimationFrame(pollCrash);
+            } catch (err) {
+              const e = err instanceof Error ? err : new Error(String(err));
+              console.error("[GameContainer] Bridge connection failed:", e);
+              setError(e);
+              return;
+            }
           } else if (retries++ < MAX_BRIDGE_RETRIES) {
             requestAnimationFrame(tryConnect);
           } else {
