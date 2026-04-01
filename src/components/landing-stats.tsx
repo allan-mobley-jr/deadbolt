@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { usePersistenceStore } from "@/stores/usePersistenceStore";
@@ -45,11 +46,7 @@ export function LandingStats() {
   // --- Seed input state ---
   const [seedInput, setSeedInput] = useState("");
 
-  // --- Mobile detection ---
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    setIsMobile(window.innerWidth < 768);
-  }, []);
+  // Mobile detection handled via CSS (Tailwind `md:hidden`).
 
   const hasStats = loaded && lifetimeStats.totalRuns > 0;
   const bestRun = leaderboard.length > 0 ? leaderboard[0] : null;
@@ -92,15 +89,13 @@ export function LandingStats() {
         </div>
       </div>
 
-      {/* --- Mobile notice --- */}
-      {isMobile && (
-        <div
-          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400"
-          data-testid="mobile-notice"
-        >
-          Best played on desktop with mouse and keyboard
-        </div>
-      )}
+      {/* --- Mobile notice (visible < md, hidden on md+) --- */}
+      <div
+        className="block md:hidden rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400"
+        data-testid="mobile-notice"
+      >
+        Best played on desktop with mouse and keyboard
+      </div>
 
       {/* --- Lifetime stats (only when data exists) --- */}
       {hasStats && (
