@@ -27,6 +27,7 @@ import {
 import { safeEmit } from "@/game/events/event-bus";
 import { FIRE } from "./fire-constants";
 import { MATERIAL } from "./material-constants";
+import { safeRemoveBody, safeRemoveConstraint } from "./physics-utils";
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -313,18 +314,12 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
         const { constraintIds, entryPointIndex } = entity.barricade;
 
         for (const constraintId of constraintIds) {
-          const constraint = ctx.constraintRegistry.get(constraintId);
-          if (constraint) {
-            try {
-              ctx.scene.matter.world.removeConstraint(constraint);
-            } catch (err) {
-              console.error(
-                `[FireSystem] Failed to remove constraint ${constraintId}:`,
-                err,
-              );
-            }
-            ctx.constraintRegistry.unregister(constraintId);
-          }
+          safeRemoveConstraint(
+            ctx.scene.matter.world,
+            ctx.constraintRegistry,
+            constraintId,
+            "FireSystem",
+          );
         }
 
         // Update pathfinding — only unblock if no other barricades at this entry point
@@ -360,19 +355,12 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
 
       // --- Remove physics body from Matter.js ---
       if (entity.physicsBody) {
-        const bodyId = entity.physicsBody.bodyId;
-        const body = ctx.bodyRegistry.get(bodyId);
-        if (body) {
-          try {
-            ctx.scene.matter.world.remove(body);
-          } catch (err) {
-            console.error(
-              `[FireSystem] Failed to remove physics body ${bodyId}:`,
-              err,
-            );
-          }
-        }
-        ctx.bodyRegistry.unregister(bodyId);
+        safeRemoveBody(
+          ctx.scene.matter.world,
+          ctx.bodyRegistry,
+          entity.physicsBody.bodyId,
+          "FireSystem",
+        );
       }
 
       // --- Remove entity from ECS ---

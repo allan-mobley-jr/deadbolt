@@ -38,6 +38,7 @@ import { MATERIAL } from "./material-constants";
 import { NOISE } from "./noise-constants";
 import { TileType } from "@/game/tiles/tile-types";
 import { TILE_SIZE } from "@/game/procgen/constants";
+import { safeRemoveBody, safeRemoveConstraint } from "./physics-utils";
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -389,18 +390,12 @@ export function createExplosionSystem(ctx: SceneContext): SystemFn {
           // Release constraints
           if (ctx.constraintRegistry) {
             for (const constraintId of constraintIds) {
-              const constraint = ctx.constraintRegistry.get(constraintId);
-              if (constraint) {
-                try {
-                  ctx.scene.matter.world.removeConstraint(constraint);
-                } catch (err) {
-                  console.error(
-                    `[ExplosionSystem] Failed to remove constraint ${constraintId}:`,
-                    err,
-                  );
-                }
-                ctx.constraintRegistry.unregister(constraintId);
-              }
+              safeRemoveConstraint(
+                ctx.scene.matter.world,
+                ctx.constraintRegistry,
+                constraintId,
+                "ExplosionSystem",
+              );
             }
           }
 
@@ -427,19 +422,12 @@ export function createExplosionSystem(ctx: SceneContext): SystemFn {
 
           // Remove physics body
           if (barricade.physicsBody) {
-            const bodyId = barricade.physicsBody.bodyId;
-            const body = ctx.bodyRegistry.get(bodyId);
-            if (body) {
-              try {
-                ctx.scene.matter.world.remove(body);
-              } catch (err) {
-                console.error(
-                  `[ExplosionSystem] Failed to remove physics body ${bodyId}:`,
-                  err,
-                );
-              }
-            }
-            ctx.bodyRegistry.unregister(bodyId);
+            safeRemoveBody(
+              ctx.scene.matter.world,
+              ctx.bodyRegistry,
+              barricade.physicsBody.bodyId,
+              "ExplosionSystem",
+            );
           }
 
           // Remove entity from ECS
@@ -552,19 +540,12 @@ export function createExplosionSystem(ctx: SceneContext): SystemFn {
         // ---------------------------------------------------------------
 
         if (entity.physicsBody) {
-          const bodyId = entity.physicsBody.bodyId;
-          const body = ctx.bodyRegistry.get(bodyId);
-          if (body) {
-            try {
-              ctx.scene.matter.world.remove(body);
-            } catch (err) {
-              console.error(
-                `[ExplosionSystem] Failed to remove detonating body ${bodyId}:`,
-                err,
-              );
-            }
-          }
-          ctx.bodyRegistry.unregister(bodyId);
+          safeRemoveBody(
+            ctx.scene.matter.world,
+            ctx.bodyRegistry,
+            entity.physicsBody.bodyId,
+            "ExplosionSystem",
+          );
         }
 
         if (entity.position && entity.material) {

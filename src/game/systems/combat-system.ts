@@ -23,6 +23,7 @@ import { safeEmit } from "@/game/events/event-bus";
 import { getObjectDef } from "@/game/procgen/object-defs";
 import { getActiveItem } from "./inventory-utils";
 import { COMBAT } from "./combat-constants";
+import { safeRemoveBody } from "./physics-utils";
 import { NOISE } from "./noise-constants";
 
 // ---------------------------------------------------------------------------
@@ -141,18 +142,12 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
         if (ctx.sensorPool && activeSensorBody) {
           ctx.sensorPool.release(activeSensorBody);
         } else {
-          const sensorBody = ctx.bodyRegistry.get(activeSensorId);
-          if (sensorBody) {
-            try {
-              ctx.scene.matter.world.remove(sensorBody);
-            } catch (err) {
-              console.error(
-                `[CombatSystem] Failed to remove orphan sensor body (id=${activeSensorId}):`,
-                err,
-              );
-            }
-          }
-          ctx.bodyRegistry.unregister(activeSensorId);
+          safeRemoveBody(
+            ctx.scene.matter.world,
+            ctx.bodyRegistry,
+            activeSensorId,
+            "CombatSystem",
+          );
         }
         activeSensorId = null;
         activeSensorBody = null;
@@ -179,18 +174,12 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
       if (ctx.sensorPool && activeSensorBody) {
         ctx.sensorPool.release(activeSensorBody);
       } else {
-        const sensorBody = ctx.bodyRegistry.get(cs.sensorBodyId);
-        if (sensorBody) {
-          try {
-            ctx.scene.matter.world.remove(sensorBody);
-          } catch (err) {
-            console.error(
-              `[CombatSystem] Failed to remove expired sensor body (id=${cs.sensorBodyId}):`,
-              err,
-            );
-          }
-        }
-        ctx.bodyRegistry.unregister(cs.sensorBodyId);
+        safeRemoveBody(
+          ctx.scene.matter.world,
+          ctx.bodyRegistry,
+          cs.sensorBodyId,
+          "CombatSystem",
+        );
       }
       cs.sensorBodyId = null;
       activeSensorId = null;

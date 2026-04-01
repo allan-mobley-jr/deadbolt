@@ -24,6 +24,7 @@ import {
 } from "@/game/ecs/queries";
 import { getObjectDef } from "@/game/procgen/object-defs";
 import { setBodyPosition, setBodyVelocity } from "@/game/physics/matter-body";
+import { safeRemoveConstraint } from "./physics-utils";
 import { safeEmit } from "@/game/events/event-bus";
 import { TILE_SIZE } from "@/game/procgen/constants";
 import { NOISE } from "./noise-constants";
@@ -255,18 +256,12 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
 
       // Remove constraints from Matter.js world
       for (const constraintId of cIds) {
-        const constraint = constraintRegistry.get(constraintId);
-        if (constraint) {
-          try {
-            ctx.scene.matter.world.removeConstraint(constraint);
-          } catch (err) {
-            console.error(
-              `[BarricadeSystem] Failed to remove constraint ${constraintId}:`,
-              err,
-            );
-          }
-          constraintRegistry.unregister(constraintId);
-        }
+        safeRemoveConstraint(
+          ctx.scene.matter.world,
+          constraintRegistry,
+          constraintId,
+          "BarricadeSystem",
+        );
       }
 
       // Remove barricade + health components
@@ -446,18 +441,12 @@ function tryPlaceBarricade(
     );
     // Clean up any partially created constraints
     for (const id of constraintIds) {
-      const c = constraintRegistry.get(id);
-      if (c) {
-        try {
-          ctx.scene.matter.world.removeConstraint(c);
-        } catch (cleanupErr) {
-          console.error(
-            `[BarricadeSystem] Failed to clean up partial constraint ${id}:`,
-            cleanupErr,
-          );
-        }
-        constraintRegistry.unregister(id);
-      }
+      safeRemoveConstraint(
+        ctx.scene.matter.world,
+        constraintRegistry,
+        id,
+        "BarricadeSystem",
+      );
     }
     return;
   }
