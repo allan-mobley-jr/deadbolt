@@ -103,6 +103,12 @@ export class PathfindingGrid {
   readonly width: number;
   readonly height: number;
 
+  /**
+   * Monotonically increasing counter bumped every time walkability changes.
+   * Used by path caches and flow fields to detect stale data.
+   */
+  private _topologyVersion = 0;
+
   constructor(matrix: number[][]) {
     this.grid = new PF.Grid(matrix);
     this.width = this.grid.width;
@@ -111,6 +117,11 @@ export class PathfindingGrid {
       diagonalMovement: PATHFINDING.DIAGONAL_MOVEMENT,
       weight: PATHFINDING.ASTAR_WEIGHT,
     });
+  }
+
+  /** Current topology version (incremented on every walkability change). */
+  get topologyVersion(): number {
+    return this._topologyVersion;
   }
 
   /**
@@ -147,6 +158,7 @@ export class PathfindingGrid {
   setWalkable(x: number, y: number, walkable: boolean): boolean {
     if (!this.isInBounds(x, y)) return false;
     this.grid.setWalkableAt(x, y, walkable);
+    this._topologyVersion++;
     return true;
   }
 

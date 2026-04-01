@@ -281,20 +281,25 @@ describe("ZombieAISystem", () => {
       expect(speed).toBeLessThanOrEqual(SHAMBLER_STATS.moveSpeed + 0.01);
     });
 
-    it("recalculates path after pathRecalcInterval ticks", () => {
+    it("recalculates path periodically (counter eventually resets)", () => {
       const { x, y } = tileCenter(0, 0);
       const zombie = createZombieEntity(x, y, 1);
 
       system(DT); // idle → pathing (counter becomes 1 from pathing handler)
 
-      // After initial tick, counter = 1. Need pathRecalcInterval - 1 more
-      // ticks for counter to reach the threshold and trigger recalc.
-      for (let i = 0; i < SHAMBLER_STATS.pathRecalcInterval - 1; i++) {
+      // Run enough ticks that the path must have been recalculated at least
+      // once. With distance-based priority, the interval varies but is always
+      // <= FAR_RECALC_INTERVAL (90). Run 100 ticks to be safe.
+      let sawReset = false;
+      for (let i = 0; i < 100; i++) {
         system(DT);
+        if (zombie.aiState.ticksSinceLastPathCalc === 0) {
+          sawReset = true;
+          break;
+        }
       }
 
-      // Path should have been recalculated (tick counter resets to 0)
-      expect(zombie.aiState.ticksSinceLastPathCalc).toBe(0);
+      expect(sawReset).toBe(true);
     });
 
     it("staggers pathfinding across zombies with different offsets", () => {

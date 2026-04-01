@@ -175,3 +175,49 @@ export const ZOMBIE_AI = {
    */
   BODY_SIZE: 20,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Pathfinding optimization constants (issue #43)
+// ---------------------------------------------------------------------------
+
+export const PATHFINDING_OPT = {
+  /**
+   * Maximum time (ms) allowed for A* pathfinding per game tick.
+   * Requests exceeding this budget are deferred to the next tick.
+   */
+  FRAME_BUDGET_MS: 2,
+
+  /**
+   * Zombie count threshold for activating the flow field.
+   * Below this count, all zombies use individual A* paths.
+   * Above this count, safehouse-targeting zombies use the flow field.
+   */
+  FLOW_FIELD_THRESHOLD: 10,
+
+  /** Hysteresis margin: deactivate flow field when count drops below threshold minus this. */
+  FLOW_FIELD_HYSTERESIS: 5,
+
+  /**
+   * Distance (tiles) from the player below which a zombie is "close".
+   * Close zombies recalculate paths more frequently.
+   */
+  CLOSE_DISTANCE_TILES: 15,
+
+  /**
+   * Minimum recalculation interval (ticks) for close zombies.
+   * Overrides the per-variant pathRecalcInterval when closer than CLOSE_DISTANCE_TILES.
+   */
+  CLOSE_RECALC_INTERVAL: 20,
+
+  /**
+   * Maximum recalculation interval (ticks) for far zombies.
+   * Far zombies recalculate less often than their base pathRecalcInterval.
+   */
+  FAR_RECALC_INTERVAL: 90,
+
+  /**
+   * Number of tiles around a topology change within which cached paths
+   * are invalidated. Zombies further away keep their current path.
+   */
+  INVALIDATION_RADIUS_TILES: 10,
+} as const;
