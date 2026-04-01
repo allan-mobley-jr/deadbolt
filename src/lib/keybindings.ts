@@ -109,7 +109,8 @@ export function loadKeybindings(): KeyBindingMap {
     }
 
     return result;
-  } catch {
+  } catch (err) {
+    console.warn("[Keybindings] Failed to load keybindings, using defaults:", err);
     return { ...DEFAULT_KEYBINDINGS };
   }
 }
@@ -119,8 +120,12 @@ export function saveKeybindings(bindings: KeyBindingMap): void {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
-  } catch {
-    // Ignore storage errors (quota, restricted env)
+  } catch (err) {
+    // QuotaExceededError and SecurityError are expected in restricted environments.
+    const name = err instanceof DOMException ? err.name : "";
+    if (name !== "QuotaExceededError" && name !== "SecurityError") {
+      console.error("[Keybindings] Unexpected error saving keybindings:", err);
+    }
   }
 }
 
