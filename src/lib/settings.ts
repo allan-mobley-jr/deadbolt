@@ -26,6 +26,12 @@ export interface GameSettings {
   showFps: boolean;
   /** Graphics quality preset. */
   graphicsQuality: GraphicsQuality;
+  /** Color-blind mode: adds shape indicators to zombie types and health states. */
+  colorBlindMode: boolean;
+  /** Reduced motion: disables shake, reduces particles, snaps camera. */
+  reducedMotion: boolean;
+  /** High contrast: stronger borders, distinct interactive objects. */
+  highContrast: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,6 +45,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   screenShake: true,
   showFps: false,
   graphicsQuality: "medium",
+  colorBlindMode: false,
+  reducedMotion: false,
+  highContrast: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -62,6 +71,19 @@ export function loadSettings(): GameSettings {
     }
 
     const obj = parsed as Record<string, unknown>;
+
+    // Default reducedMotion from OS preference when no stored value exists
+    let reducedMotionDefault = DEFAULT_SETTINGS.reducedMotion;
+    if (obj.reducedMotion === undefined) {
+      try {
+        if (typeof window !== "undefined" && window.matchMedia) {
+          reducedMotionDefault = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        }
+      } catch {
+        // matchMedia unavailable (SSR, restricted env)
+      }
+    }
+
     return {
       masterVolume: clampVolume(obj.masterVolume, DEFAULT_SETTINGS.masterVolume),
       sfxVolume: clampVolume(obj.sfxVolume, DEFAULT_SETTINGS.sfxVolume),
@@ -69,6 +91,9 @@ export function loadSettings(): GameSettings {
       screenShake: typeof obj.screenShake === "boolean" ? obj.screenShake : DEFAULT_SETTINGS.screenShake,
       showFps: typeof obj.showFps === "boolean" ? obj.showFps : DEFAULT_SETTINGS.showFps,
       graphicsQuality: isGraphicsQuality(obj.graphicsQuality) ? obj.graphicsQuality : DEFAULT_SETTINGS.graphicsQuality,
+      colorBlindMode: typeof obj.colorBlindMode === "boolean" ? obj.colorBlindMode : DEFAULT_SETTINGS.colorBlindMode,
+      reducedMotion: typeof obj.reducedMotion === "boolean" ? obj.reducedMotion : reducedMotionDefault,
+      highContrast: typeof obj.highContrast === "boolean" ? obj.highContrast : DEFAULT_SETTINGS.highContrast,
     };
   } catch (err) {
     console.warn("[Settings] Failed to load settings, using defaults:", err);

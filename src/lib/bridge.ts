@@ -241,6 +241,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
   const settingsKeys = [
     "masterVolume", "sfxVolume", "musicVolume",
     "screenShake", "showFps", "graphicsQuality",
+    "colorBlindMode", "reducedMotion", "highContrast",
   ] as const;
 
   for (const key of settingsKeys) {

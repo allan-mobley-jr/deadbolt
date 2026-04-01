@@ -36,6 +36,12 @@ export interface SettingsStoreActions {
   setShowFps: (enabled: boolean) => void;
   /** Set graphics quality preset. */
   setGraphicsQuality: (q: GraphicsQuality) => void;
+  /** Toggle color-blind mode (shape indicators for zombie types). */
+  setColorBlindMode: (enabled: boolean) => void;
+  /** Toggle reduced motion (disables shake, particles, camera lerp). */
+  setReducedMotion: (enabled: boolean) => void;
+  /** Toggle high contrast mode (stronger borders, interactive distinction). */
+  setHighContrast: (enabled: boolean) => void;
   /** Reset all settings to defaults and persist. */
   resetToDefaults: () => void;
 }
@@ -60,6 +66,9 @@ function updateAndPersist(
     screenShake: state.screenShake,
     showFps: state.showFps,
     graphicsQuality: state.graphicsQuality,
+    colorBlindMode: state.colorBlindMode,
+    reducedMotion: state.reducedMotion,
+    highContrast: state.highContrast,
   });
 }
 
@@ -88,6 +97,15 @@ export const useSettingsStore = create<GameSettings & SettingsStoreActions>()(
 
     setGraphicsQuality: (q) =>
       updateAndPersist(set, get, { graphicsQuality: q }),
+
+    setColorBlindMode: (enabled) =>
+      updateAndPersist(set, get, { colorBlindMode: enabled }),
+
+    setReducedMotion: (enabled) =>
+      updateAndPersist(set, get, { reducedMotion: enabled }),
+
+    setHighContrast: (enabled) =>
+      updateAndPersist(set, get, { highContrast: enabled }),
 
     resetToDefaults: () => {
       set(() => ({ ...DEFAULT_SETTINGS }));
