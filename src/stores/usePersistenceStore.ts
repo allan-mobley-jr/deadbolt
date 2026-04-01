@@ -12,6 +12,7 @@
 import { create } from "zustand";
 import type { CompletedRun, LifetimeStats } from "@/types/persistence";
 import { EMPTY_LIFETIME_STATS, computeRunScore } from "@/types/persistence";
+import { generateRunId } from "@/lib/ids";
 import {
   saveRun,
   loadRunHistory,
@@ -112,7 +113,7 @@ export const usePersistenceStore = create<
 
   recordRun: async (stats) => {
     const run: CompletedRun = {
-      id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateRunId(),
       seed: stats.seed,
       completedAt: Date.now(),
       elapsedTotal: stats.elapsedTotal,

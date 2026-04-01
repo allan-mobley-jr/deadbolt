@@ -10,6 +10,7 @@ import {
   _resetDBConnection,
 } from "./persistence";
 import type { CompletedRun } from "@/types/persistence";
+import { generateRunId } from "./ids";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -17,7 +18,7 @@ import type { CompletedRun } from "@/types/persistence";
 
 function makeRun(overrides: Partial<CompletedRun> = {}): CompletedRun {
   return {
-    id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: generateRunId(),
     seed: "test-seed",
     completedAt: Date.now(),
     elapsedTotal: 300,
@@ -89,6 +90,21 @@ describe("saveRun + loadRunHistory", () => {
     expect(ids).not.toContain("run-4");
     // The newest should still be there
     expect(ids).toContain("run-24");
+  });
+
+  it("rapid sequential saves do not overwrite each other", async () => {
+    const runs = Array.from({ length: 5 }, (_, i) =>
+      makeRun({ totalKills: i * 10, score: i * 100 }),
+    );
+
+    await Promise.all(runs.map(saveRun));
+
+    const history = await loadRunHistory();
+    expect(history).toHaveLength(5);
+
+    // Verify each run's ID is unique
+    const ids = new Set(history.map((r) => r.id));
+    expect(ids.size).toBe(5);
   });
 });
 

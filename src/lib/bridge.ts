@@ -22,6 +22,7 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useMinimapStore } from "@/stores/useMinimapStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { generateEphemeralId } from "@/lib/ids";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,7 +112,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
 
   onBus("player-hit", (e) => {
     useUIStore.getState().addNotification({
-      id: `hit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateEphemeralId("hit"),
       message: `Took ${e.damage} damage!`,
       type: "danger",
       timestamp: Date.now(),
@@ -135,7 +136,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
 
   onBus("inventory-full", (e) => {
     useUIStore.getState().addNotification({
-      id: `inv-full-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateEphemeralId("inv-full"),
       message: `Inventory full — cannot pick up ${e.displayName}`,
       type: "warning",
       timestamp: Date.now(),
@@ -144,7 +145,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
 
   onBus("item-picked-up", (e) => {
     useUIStore.getState().addNotification({
-      id: `pickup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateEphemeralId("pickup"),
       message: `Picked up ${e.quantity}x ${e.itemType}`,
       type: "info",
       timestamp: Date.now(),
@@ -154,7 +155,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
   onBus("barricade-placed", () => {
     useGameStore.getState().incrementBarricadesBuilt();
     useUIStore.getState().addNotification({
-      id: `barricade-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateEphemeralId("barricade"),
       message: "Barricade placed",
       type: "success",
       timestamp: Date.now(),
@@ -163,7 +164,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
 
   onBus("barricade-broken", () => {
     useUIStore.getState().addNotification({
-      id: `barricade-broken-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateEphemeralId("barricade-broken"),
       message: "A barricade was destroyed!",
       type: "danger",
       timestamp: Date.now(),
@@ -189,7 +190,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     // Only forward significant noise to the UI (skip footsteps, drag)
     if (e.intensity >= NOISE.UI_INTENSITY_THRESHOLD) {
       useUIStore.getState().addNoiseIndicator({
-        id: `noise-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: generateEphemeralId("noise"),
         position: e.position,
         intensity: e.intensity,
         source: e.source,
@@ -200,7 +201,7 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
 
   onBus("object-examined", (e) => {
     useUIStore.getState().addNotification({
-      id: `examine-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateEphemeralId("examine"),
       message: `${e.displayName}: Durability ${Math.round(e.properties.durability * 100)}%, ${e.properties.immovable ? "Immovable" : "Movable"}`,
       type: "info",
       timestamp: Date.now(),
