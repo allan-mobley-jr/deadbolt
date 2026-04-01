@@ -544,6 +544,28 @@ describe("ZombieAISystem", () => {
       expect(diedEvents.length).toBe(1);
       expect(diedEvents[0].cause).toBe("zombie");
     });
+
+    it("emits player-died exactly once when multiple zombies attack in the same tick", () => {
+      const diedEvents: Array<{ cause: string }> = [];
+      ctx.eventBus.on("player-died", (e) => {
+        diedEvents.push({ cause: e.cause });
+      });
+
+      const pPos = tileCenter(3, 3);
+      const player = createPlayerEntity(pPos.x, pPos.y, 10);
+      player.health.current = 1; // One hit will kill
+
+      // Two zombies both in attack range
+      const offset = ZOMBIE_AI.ATTACK_RANGE * 0.5;
+      createZombieEntity(pPos.x + offset, pPos.y, 2);
+      createZombieEntity(pPos.x - offset, pPos.y, 3);
+
+      system(DT); // idle → attacking
+      system(DT); // both attack — only one should emit player-died
+
+      expect(player.health.current).toBe(0);
+      expect(diedEvents.length).toBe(1);
+    });
   });
 
   // -----------------------------------------------------------------------
