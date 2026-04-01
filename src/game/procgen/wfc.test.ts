@@ -8,7 +8,7 @@
  * fallback generator, full pipeline, and edge cases.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import seedrandom from 'seedrandom';
 import type { PRNG } from 'seedrandom';
 import { TileType } from '@/types/procgen';
@@ -898,6 +898,16 @@ describe('generateCityLayout', () => {
 // ---------------------------------------------------------------------------
 
 describe('retry and fallback resilience', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
   it('generateCityLayout never throws for many seeds across grid sizes', () => {
     const seeds = [
       'retry-a', 'retry-b', 'retry-c', 'retry-d', 'retry-e',
@@ -932,6 +942,13 @@ describe('retry and fallback resilience', () => {
     // Across all 40 runs, the pipeline should produce meaningful output
     expect(totalBuildings).toBeGreaterThan(0);
     expect(totalRoadTiles).toBeGreaterThan(0);
+
+    // Small grids trigger the fallback path — verify the warning fires
+    expect(warnSpy).toHaveBeenCalled();
+    const wfcWarnings = warnSpy.mock.calls.filter((args: unknown[]) =>
+      String(args[0]).includes("[WFC]"),
+    );
+    expect(wfcWarnings.length).toBeGreaterThan(0);
   });
 
   it('fallback grid produces valid pipeline output with buildings', () => {

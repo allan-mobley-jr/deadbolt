@@ -723,6 +723,9 @@ export function generateCityLayout(
   }
 
   // Fallback: deterministic simple grid
+  console.warn(
+    `[WFC] All ${WFC.MAX_RETRIES} attempts failed for seed "${seed}" — using deterministic fallback grid`,
+  );
   const fallbackRng = seedrandom(`${seed}-fallback`);
   const macroGrid = generateFallbackGrid(width, height, fallbackRng);
   return buildResult(macroGrid, width, height, seed);
