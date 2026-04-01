@@ -10,6 +10,13 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Maximum number of notifications kept in the queue. Oldest are evicted first. */
+export const MAX_NOTIFICATIONS = 20;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -125,7 +132,7 @@ export const useUIStore = create<UIStoreState & UIStoreActions>()(
 
     addNotification: (notification) =>
       set((state) => ({
-        notifications: [...state.notifications, notification],
+        notifications: [...state.notifications, notification].slice(-MAX_NOTIFICATIONS),
       })),
 
     dismissNotification: (id) =>
