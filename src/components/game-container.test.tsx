@@ -7,6 +7,7 @@ const mockDestroyGame = vi.fn();
 const mockGetActiveBus = vi.fn().mockReturnValue(null);
 const mockGetActiveSeed = vi.fn().mockReturnValue(null);
 const mockGetActiveMinimapInit = vi.fn().mockReturnValue(null);
+const mockGetActiveError = vi.fn().mockReturnValue(null);
 
 vi.mock("@/game/PhaserGame", () => ({
   createGame: mockCreateGame,
@@ -14,6 +15,7 @@ vi.mock("@/game/PhaserGame", () => ({
   getActiveBus: mockGetActiveBus,
   getActiveSeed: mockGetActiveSeed,
   getActiveMinimapInit: mockGetActiveMinimapInit,
+  getActiveError: mockGetActiveError,
 }));
 
 const { mockDisconnect, mockConnectBridge } = vi.hoisted(() => {
@@ -218,4 +220,80 @@ test("disconnects bridge on unmount after successful connection", async () => {
 
   unmount();
   expect(mockDisconnect).toHaveBeenCalledTimes(1);
+});
+
+test("throws to error boundary when getActiveError returns an error during polling", async () => {
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  // Simulate a boot-error captured by PhaserGame listeners
+  const bootError = new Error("Failed to generate tileset");
+  mockGetActiveError.mockReturnValue(bootError);
+
+  render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Flush dynamic import + first rAF poll
+  await vi.advanceTimersByTimeAsync(20);
+
+  await vi.waitFor(() => {
+    expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
+  });
+  expect(screen.getByTestId("boundary-error").textContent).toBe(
+    "Failed to generate tileset",
+  );
+
+  consoleSpy.mockRestore();
+});
+
+test("checks for errors before checking for bus", async () => {
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+
+  // Both error and bus available — error should take priority
+  mockGetActiveError.mockReturnValue(new Error("boot failed"));
+  mockGetActiveBus.mockReturnValue(fakeBus);
+
+  render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  await vi.advanceTimersByTimeAsync(20);
+
+  await vi.waitFor(() => {
+    expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
+  });
+  // Bridge should NOT have been connected
+  expect(mockConnectBridge).not.toHaveBeenCalled();
+
+  consoleSpy.mockRestore();
+});
+
+test("does not set error state if unmounted when boot error is detected", async () => {
+  vi.useFakeTimers();
+
+  const { unmount } = render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Unmount before the polling can detect the error
+  unmount();
+
+  // Now simulate error appearing
+  mockGetActiveError.mockReturnValue(new Error("late boot error"));
+
+  // Advance timers — cancelled guard should prevent setError
+  for (let i = 0; i < 50; i++) {
+    await vi.advanceTimersByTimeAsync(20);
+  }
+
+  expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
 });

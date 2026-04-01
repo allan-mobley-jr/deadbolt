@@ -35,6 +35,13 @@ let activeSeed: string | null = null;
  */
 let activeMinimapInit: MinimapInitEvent | null = null;
 
+/**
+ * Module-scoped error captured from BootScene or LoadingScene.
+ * These errors fire on Phaser's native `game.events` emitter — before
+ * the typed GameEventBus exists — so they cannot flow through the
+ * bridge.  Stored here for the React layer to poll via getActiveError().
+ */
+let activeError: Error | null = null;
 
 /**
  * Build the Phaser game configuration without creating an instance.
@@ -97,6 +104,17 @@ export function createGame(parentId: string): Phaser.Game {
   }
 
   instance = new Phaser.Game(buildGameConfig(parentId));
+
+  // Listen for pre-bus errors emitted on Phaser's native event system.
+  // These fire during BootScene/LoadingScene — before the typed GameEventBus
+  // exists — so we capture them in module scope for React to poll.
+  instance.events.on("boot-error", (err: unknown) => {
+    activeError = err instanceof Error ? err : new Error(String(err));
+  });
+  instance.events.on("generation-error", (err: unknown) => {
+    activeError = err instanceof Error ? err : new Error(String(err));
+  });
+
   return instance;
 }
 
@@ -112,6 +130,7 @@ export function destroyGame(): void {
   activeBus = null;
   activeSeed = null;
   activeMinimapInit = null;
+  activeError = null;
   try {
     ref.destroy(true);
   } catch (err) {
@@ -156,5 +175,19 @@ export function setActiveMinimapInit(data: MinimapInitEvent | null): void {
 /** Read-only accessor for minimap init data (or null). */
 export function getActiveMinimapInit(): MinimapInitEvent | null {
   return activeMinimapInit;
+}
+
+// ---------------------------------------------------------------------------
+// Error accessors — pre-bus errors from BootScene / LoadingScene
+// ---------------------------------------------------------------------------
+
+/** Called internally when boot-error or generation-error fires. Exported for tests. */
+export function setActiveError(error: Error | null): void {
+  activeError = error;
+}
+
+/** Read-only accessor for the first boot/loading error (or null). */
+export function getActiveError(): Error | null {
+  return activeError;
 }
 

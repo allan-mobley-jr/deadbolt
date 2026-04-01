@@ -31,8 +31,31 @@ const Phaser = {
   },
   Game: class MockGame {
     config: unknown;
+    events: {
+      on: (event: string, fn: (...args: unknown[]) => void) => void;
+      off: (event: string, fn: (...args: unknown[]) => void) => void;
+      emit: (event: string, ...args: unknown[]) => void;
+    };
     constructor(config: unknown) {
       this.config = config;
+      const listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
+      this.events = {
+        on(event: string, fn: (...args: unknown[]) => void) {
+          (listeners[event] ??= []).push(fn);
+        },
+        off(event: string, fn: (...args: unknown[]) => void) {
+          const arr = listeners[event];
+          if (arr) {
+            const idx = arr.indexOf(fn);
+            if (idx !== -1) arr.splice(idx, 1);
+          }
+        },
+        emit(event: string, ...args: unknown[]) {
+          for (const fn of listeners[event] ?? []) {
+            fn(...args);
+          }
+        },
+      };
     }
     destroy() {}
   },
