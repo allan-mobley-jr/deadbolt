@@ -112,7 +112,11 @@ export default function GameContainer() {
 
     return () => {
       cancelled = true;
-      bridge?.disconnect();
+      try {
+        bridge?.disconnect();
+      } catch (err) {
+        console.error("[GameContainer] Bridge disconnect failed:", err);
+      }
       resetSessionStores();
       destroy?.();
     };
