@@ -31,7 +31,9 @@ Is the implementation well-structured and following the project's established pa
 - **ECS discipline:** Game state lives in Miniplex ECS, not React state. No React imports in `src/game/`. The bridge pattern is respected — only display-relevant changes cross to Zustand.
 - **Performance:** No visible frame drops during normal gameplay. Physics simulation stable at 60Hz fixed timestep. Staggered AI pathfinding keeps CPU manageable.
 - **Code patterns:** Follows existing project conventions — atomic commits, proper TypeScript types, no `any` casts, tests for critical systems.
-- **Error handling:** Game degrades gracefully on edge cases (entity cleanup, physics constraint release, wave timer boundaries).
+- **Error handling:** Game degrades gracefully on edge cases (entity cleanup, physics constraint release, wave timer boundaries). *Honer annotation (2026-04-01 audit): "Graceful degradation" must include observability — bare `catch {}` blocks that silently swallow errors make debugging impossible. Systems should log first-occurrence errors and surface critical failures to the UI. Silent no-ops for core subsystems (material interactions, camera, audio) are NOT graceful — they are invisible breakage.*
+- **Configuration hygiene:** No debug flags, development-only features, or placeholder configurations reach production. *Added by Honer (2026-04-01 audit): Matter.js `debug: true` was left in the production physics config from the initial commit, exposing wireframe rendering to all users with 10-15% frame overhead. Every new configuration flag should be reviewed for production correctness.*
+- **PRNG determinism:** All gameplay-affecting randomness uses the seeded PRNG from `src/lib/rng.ts`. `Math.random()` is only acceptable for cosmetic effects (particle jitter, audio pitch variation) that do not affect game outcomes. *Added by Honer (2026-04-01 audit): Fire spread used `Math.random()`, breaking run reproducibility for a gameplay-critical system. The CLAUDE.md invariant ("Seeded PRNG for all procedural generation") must be enforced in review.*
 
 ## 4. Functionality
 
@@ -41,6 +43,14 @@ Does the implementation work correctly and completely?
 - **Edge cases handled:** Boundary conditions (empty inventory, zero durability, last zombie in wave, day/night transition mid-action) don't crash or produce undefined behavior.
 - **Integration:** New systems integrate cleanly with existing ones. The event bus carries new events. ECS queries compose correctly.
 - **Testable:** Critical logic has unit tests. Complex interactions have integration tests.
+
+## 5. Deployment Readiness
+
+Is the implementation compatible with the production environment?
+
+- **SSR/SSG safety:** Code that runs at module initialization time must not access browser-only APIs (`localStorage`, `window`, `document`) without environment guards. Next.js evaluates modules server-side during static generation. *Added by Honer (2026-04-01 audit): `loadSettings()` accessed `localStorage` at module init time, causing `ReferenceError` during SSG that was accidentally caught by an outer try-catch. Fragile patterns that rely on accidental error handling must be caught in review.*
+- **Security headers:** `vercel.json` includes Content Security Policy, X-Frame-Options, X-Content-Type-Options, and Referrer-Policy headers before any public deployment.
+- **Build cleanliness:** `pnpm build` produces zero errors and zero warnings. Build warnings indicate fragile patterns that should be fixed, not ignored.
 
 ---
 
