@@ -10,6 +10,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { ControlsReference } from "@/components/controls-reference";
 import { useGameStore } from "@/stores/useGameStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { usePersistenceStore } from "@/stores/usePersistenceStore";
 
 const GameContainer = dynamic(
   () => import("@/components/game-container"),
@@ -27,6 +28,11 @@ const GameContainer = dynamic(
 
 export default function GameShell() {
   const runKey = useGameStore((s) => s.runKey);
+
+  // --- Load persistence data from IndexedDB on mount ---
+  useEffect(() => {
+    usePersistenceStore.getState().loadFromDB();
+  }, []);
 
   // --- ESC key handler — context-sensitive menu navigation ---
   useEffect(() => {
