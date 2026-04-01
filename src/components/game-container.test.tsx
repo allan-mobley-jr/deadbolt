@@ -318,8 +318,12 @@ test("throws to error boundary when runtime crash detected after bridge connects
   });
   expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
 
-  // Simulate a runtime crash arriving after bridge connected
-  mockGetActiveError.mockReturnValue(new Error("Game loop crashed: system crash"));
+  // Simulate a runtime crash arriving after bridge connected.
+  // GameScene wraps the original error with a "Game loop crashed:" prefix,
+  // so the activeError has the wrapped message (not the raw system error).
+  const rawError = new Error("Cannot read properties of undefined");
+  const wrappedError = new Error(`Game loop crashed: ${rawError.message}`, { cause: rawError });
+  mockGetActiveError.mockReturnValue(wrappedError);
 
   // Advance frames so the rAF crash poll detects it
   await vi.advanceTimersByTimeAsync(40);
@@ -327,8 +331,8 @@ test("throws to error boundary when runtime crash detected after bridge connects
   await vi.waitFor(() => {
     expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
   });
-  expect(screen.getByTestId("boundary-error").textContent).toBe(
-    "Game loop crashed: system crash",
+  expect(screen.getByTestId("boundary-error").textContent).toContain(
+    "Game loop crashed:",
   );
 
   consoleSpy.mockRestore();

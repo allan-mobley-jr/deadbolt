@@ -648,7 +648,7 @@ describe("GameScene", () => {
       consoleSpy.mockRestore();
     });
 
-    it("emits game-crash on this.game.events when a system throws", () => {
+    it("emits game-crash on this.game.events with wrapped message", () => {
       scene.create();
 
       const gameLoop = (
@@ -666,8 +666,17 @@ describe("GameScene", () => {
 
       expect(scene.game.events.emit).toHaveBeenCalledWith(
         "game-crash",
-        expect.objectContaining({ message: "physics exploded" }),
+        expect.objectContaining({ message: "Game loop crashed: physics exploded" }),
       );
+
+      // Verify the original error is preserved as cause
+      const emitMock = scene.game.events.emit as ReturnType<typeof vi.fn>;
+      const crashCall = emitMock.mock.calls.find(
+        (args: unknown[]) => args[0] === "game-crash",
+      )!;
+      const emittedError = crashCall[1] as Error;
+      expect(emittedError.cause).toBeInstanceOf(Error);
+      expect((emittedError.cause as Error).message).toBe("physics exploded");
 
       consoleSpy.mockRestore();
     });
