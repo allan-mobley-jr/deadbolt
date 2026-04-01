@@ -22,7 +22,7 @@ const DT = 1 / 60;
 let nextBodyId = 1000;
 
 /** Collision pairs accumulated by the mock Matter.js world. */
-let mockPairs: Array<{ bodyA: { id: number }; bodyB: { id: number } }> = [];
+let mockPairs: Array<{ bodyA: { id: number }; bodyB: { id: number }; isActive?: boolean }> = [];
 
 function createMockContext(
   overrides: Partial<SceneContext> = {},
@@ -449,7 +449,7 @@ describe("MaterialRegistry adjacency", () => {
 
     // Simulate collision pair between their bodies
     mockPairs = [
-      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
     ];
 
     system(DT);
@@ -468,7 +468,7 @@ describe("MaterialRegistry adjacency", () => {
     const plank = spawnWoodenPlank(ctx, 132, 100);
 
     mockPairs = [
-      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
     ];
 
     system(DT);
@@ -503,7 +503,7 @@ describe("MaterialRegistry adjacency", () => {
     // Non-material body (e.g., wall, sensor)
     const wallBodyId = 9999;
     mockPairs = [
-      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: wallBodyId } },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: wallBodyId }, isActive: true },
     ];
 
     system(DT);
@@ -529,8 +529,8 @@ describe("MaterialRegistry.getConductiveNeighbors", () => {
 
     // Wire touches both metal and plank
     mockPairs = [
-      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId } },
-      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId }, isActive: true },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
     ];
 
     system(DT);
@@ -668,7 +668,7 @@ describe("MaterialRegistry after entity removal", () => {
     const metal = spawnMetalSheet(ctx, 110, 100);
 
     mockPairs = [
-      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId } },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId }, isActive: true },
     ];
 
     system(DT);
@@ -825,7 +825,7 @@ describe("MaterialRegistry adjacency edge cases", () => {
 
     // Tick 1: bodies colliding
     mockPairs = [
-      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
     ];
     system(DT);
     expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(1);
@@ -850,9 +850,9 @@ describe("MaterialRegistry adjacency edge cases", () => {
 
     // Wire touches all three other entities simultaneously
     mockPairs = [
-      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId } },
-      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
-      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: gasCan.physicsBody.bodyId } },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId }, isActive: true },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
+      { bodyA: { id: wire.physicsBody.bodyId }, bodyB: { id: gasCan.physicsBody.bodyId }, isActive: true },
     ];
 
     system(DT);
@@ -878,15 +878,38 @@ describe("MaterialRegistry adjacency edge cases", () => {
 
     // Same pair reported multiple times (and in both directions)
     mockPairs = [
-      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
-      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId } },
-      { bodyA: { id: plank.physicsBody.bodyId }, bodyB: { id: gasCan.physicsBody.bodyId } },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
+      { bodyA: { id: plank.physicsBody.bodyId }, bodyB: { id: gasCan.physicsBody.bodyId }, isActive: true },
     ];
 
     system(DT);
 
     expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(1);
     expect(reg.getAdjacentEntities(plank.physicsBody.bodyId)).toHaveLength(1);
+  });
+
+  it("excludes stale (inactive) collision pairs from adjacency", () => {
+    const ctx = createMockContext();
+    const system = createMaterialSystem(ctx);
+    const reg = ctx.materialRegistry!;
+
+    const gasCan = spawnGasCan(ctx, 100, 100);
+    const plank = spawnWoodenPlank(ctx, 132, 100);
+    const metal = spawnMetalSheet(ctx, 164, 100);
+
+    // gas_can <-> plank is active, plank <-> metal is stale (isActive: false)
+    mockPairs = [
+      { bodyA: { id: gasCan.physicsBody.bodyId }, bodyB: { id: plank.physicsBody.bodyId }, isActive: true },
+      { bodyA: { id: plank.physicsBody.bodyId }, bodyB: { id: metal.physicsBody.bodyId }, isActive: false },
+    ];
+
+    system(DT);
+
+    // Only the active pair should create adjacency
+    expect(reg.getAdjacentEntities(gasCan.physicsBody.bodyId)).toHaveLength(1);
+    expect(reg.getAdjacentEntities(plank.physicsBody.bodyId)).toHaveLength(1);
+    expect(reg.getAdjacentEntities(metal.physicsBody.bodyId)).toHaveLength(0);
   });
 });
 

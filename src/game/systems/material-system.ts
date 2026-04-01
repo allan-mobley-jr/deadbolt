@@ -290,9 +290,9 @@ export function createMaterialSystem(ctx: SceneContext): SystemFn {
     registry.rebuildBodyLookup();
 
     // 2. Update adjacency from Matter.js collision pairs
-    // Phaser wraps Matter.js — access the engine's active pair list.
-    // The pairs.list array contains all pairs that had active collisions
-    // during the last Matter.js step.
+    // Phaser wraps Matter.js — access the engine's pair cache.
+    // pairs.list is the full cache (may include stale separated pairs),
+    // so we filter to isActive pairs only for current-tick adjacency.
     // Use optional chaining because the engine structure may not be fully
     // available in test mocks or before the first physics step.
     const matterWorld = ctx.scene.matter.world as unknown as Record<string, unknown>;
@@ -305,8 +305,9 @@ export function createMaterialSystem(ctx: SceneContext): SystemFn {
       warnedMissingEngine = true;
     }
 
-    const pairs = engine?.pairs?.list ?? [];
-    registry.updateAdjacency(pairs);
+    const allPairs = engine?.pairs?.list ?? [];
+    const activePairs = allPairs.filter((p) => p.isActive);
+    registry.updateAdjacency(activePairs);
   };
 }
 
@@ -317,6 +318,10 @@ export function createMaterialSystem(ctx: SceneContext): SystemFn {
  */
 interface MatterEngine {
   pairs?: {
-    list: ReadonlyArray<{ bodyA: { id: number }; bodyB: { id: number } }>;
+    list: ReadonlyArray<{
+      bodyA: { id: number };
+      bodyB: { id: number };
+      isActive?: boolean;
+    }>;
   };
 }
