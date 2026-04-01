@@ -316,6 +316,8 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
           console.warn(
             `[BarricadeSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
           );
+        } else {
+          safeEmit(ctx.eventBus, "topology-changed", { tileX, tileY, walkable: true });
         }
 
         if (entryPoints[entryPointIndex]) {
@@ -497,6 +499,8 @@ function tryPlaceBarricade(
     console.warn(
       `[BarricadeSystem] Failed to block pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
     );
+  } else {
+    safeEmit(ctx.eventBus, "topology-changed", { tileX, tileY, walkable: false });
   }
 
   // Update entry point state
