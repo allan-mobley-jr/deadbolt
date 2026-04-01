@@ -292,6 +292,10 @@ describe("GameScene", () => {
       },
     } as unknown as Phaser.Physics.Matter.MatterPhysics;
 
+    scene.game = {
+      events: { emit: vi.fn(), on: vi.fn(), off: vi.fn() },
+    } as unknown as Phaser.Game;
+
     // Provide world data before create
     scene.init(mockWorldData);
   });
@@ -640,6 +644,30 @@ describe("GameScene", () => {
       scene.update(16.67, 16.67);
       scene.update(33.34, 16.67);
       expect(tickCalls).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("emits game-crash on this.game.events when a system throws", () => {
+      scene.create();
+
+      const gameLoop = (
+        scene as unknown as { gameLoop: { tick: (dt: number) => void } }
+      ).gameLoop;
+      gameLoop.tick = () => {
+        throw new Error("physics exploded");
+      };
+
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      scene.update(0, 16.67);
+
+      expect(scene.game.events.emit).toHaveBeenCalledWith(
+        "game-crash",
+        expect.objectContaining({ message: "physics exploded" }),
+      );
 
       consoleSpy.mockRestore();
     });

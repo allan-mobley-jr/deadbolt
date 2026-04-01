@@ -10,20 +10,29 @@ export default function PlayError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const isRuntimeCrash = error.message.includes("Game loop crashed");
+
   useEffect(() => {
-    console.error("Game failed to load:", error);
-  }, [error]);
+    console.error(
+      isRuntimeCrash ? "Game crashed during play:" : "Game failed to load:",
+      error,
+    );
+  }, [error, isRuntimeCrash]);
 
   return (
     <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-black">
       <p className="font-mono text-sm text-destructive">
-        Failed to load the game.
+        {isRuntimeCrash
+          ? "The game crashed unexpectedly."
+          : "Failed to load the game."}
       </p>
       <p className="text-sm text-muted-foreground">
-        Check your connection and try again.
+        {isRuntimeCrash
+          ? "Try starting a new run."
+          : "Check your connection and try again."}
       </p>
       <Button variant="link" onClick={reset} className="font-mono">
-        Retry
+        {isRuntimeCrash ? "Restart" : "Retry"}
       </Button>
     </div>
   );

@@ -303,6 +303,16 @@ describe("boot/loading error listeners", () => {
     expect(captured!.message).toBe("string error");
   });
 
+  it("captures game-crash emitted on game.events", () => {
+    const game = createGame("err-listener-test");
+    expect(getActiveError()).toBeNull();
+
+    const err = new Error("Game loop crashed: physics exploded");
+    game.events.emit("game-crash", err);
+
+    expect(getActiveError()).toBe(err);
+  });
+
   it("last error wins when multiple errors fire", () => {
     const game = createGame("err-listener-test");
 

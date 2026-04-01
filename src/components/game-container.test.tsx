@@ -297,3 +297,39 @@ test("does not set error state if unmounted when boot error is detected", async 
 
   expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
 });
+
+test("throws to error boundary when runtime crash detected after bridge connects", async () => {
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  render(
+    <TestErrorBoundary>
+      <GameContainer />
+    </TestErrorBoundary>,
+  );
+
+  // Bridge connects — no error yet
+  await vi.advanceTimersByTimeAsync(20);
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalled();
+  });
+  expect(screen.queryByTestId("boundary-error")).not.toBeInTheDocument();
+
+  // Simulate a runtime crash arriving after bridge connected
+  mockGetActiveError.mockReturnValue(new Error("Game loop crashed: system crash"));
+
+  // Advance frames so the rAF crash poll detects it
+  await vi.advanceTimersByTimeAsync(40);
+
+  await vi.waitFor(() => {
+    expect(screen.getByTestId("boundary-error")).toBeInTheDocument();
+  });
+  expect(screen.getByTestId("boundary-error").textContent).toBe(
+    "Game loop crashed: system crash",
+  );
+
+  consoleSpy.mockRestore();
+});
