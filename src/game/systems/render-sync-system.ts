@@ -231,6 +231,29 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     snapState = e.snapping ? e : null;
   });
 
+  // --- Accessibility settings ---
+  let colorBlindMode = false;
+  let highContrastMode = false;
+
+  /** Graphics overlays for color-blind shape indicators. */
+  const shapeOverlays = new Map<Entity, Phaser.GameObjects.Graphics>();
+
+  ctx.eventBus.on("cmd:settings-changed", (e) => {
+    if (e.key === "colorBlindMode" && typeof e.value === "boolean") {
+      colorBlindMode = e.value;
+      // Clear existing overlays when toggling off
+      if (!e.value) {
+        for (const gfx of shapeOverlays.values()) {
+          gfx.destroy();
+        }
+        shapeOverlays.clear();
+      }
+    }
+    if (e.key === "highContrast" && typeof e.value === "boolean") {
+      highContrastMode = e.value;
+    }
+  });
+
   // --- Combat visual state ---
 
   /** Swing arc graphics (created lazily). */
@@ -352,6 +375,55 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         // Reset to the base sprite colour when not burning or electrified.
         sprite.setFillStyle(spriteColour(entity.renderable.spriteKey));
       }
+
+      // --- Color-blind mode: shape indicators on zombie sprites ---
+      if (colorBlindMode && entity.zombieType) {
+        let gfx = shapeOverlays.get(entity);
+        if (!gfx) {
+          gfx = scene.add.graphics();
+          shapeOverlays.set(entity, gfx);
+        }
+        gfx.clear();
+        gfx.setPosition(sprite.x, sprite.y);
+
+        // Draw distinctive shape per variant
+        const variant = entity.zombieType.variant;
+        gfx.lineStyle(2, 0xffffff, 0.9);
+        switch (variant) {
+          case "shambler":
+            // Circle
+            gfx.strokeCircle(0, 0, 6);
+            break;
+          case "runner":
+            // Triangle (chevron)
+            gfx.strokeTriangle(-5, 4, 0, -5, 5, 4);
+            break;
+          case "brute":
+            // X cross
+            gfx.lineBetween(-5, -5, 5, 5);
+            gfx.lineBetween(-5, 5, 5, -5);
+            break;
+          case "horde":
+            // Dot
+            gfx.fillStyle(0xffffff, 0.9);
+            gfx.fillCircle(0, 0, 3);
+            break;
+        }
+      }
+
+      // --- High contrast: white stroke border on all entities ---
+      if (typeof sprite.setStrokeStyle === "function") {
+        if (highContrastMode) {
+          sprite.setStrokeStyle(1, 0xffffff, 0.8);
+          // Pulsing outline on highlighted interactable objects
+          if (entity.interactable?.highlighted) {
+            const pulse = 0.5 + 0.5 * Math.sin(totalElapsed * 4);
+            sprite.setStrokeStyle(2, 0xffffff, pulse);
+          }
+        } else {
+          sprite.setStrokeStyle(0);
+        }
+      }
     }
 
     // --- Clean up sprites for removed entities ---
@@ -361,6 +433,12 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       if (!activeEntities.has(entity) && !deathFlashes.has(entity)) {
         sprite.destroy();
         sprites.delete(entity);
+        // Also clean up color-blind shape overlays
+        const overlay = shapeOverlays.get(entity);
+        if (overlay) {
+          overlay.destroy();
+          shapeOverlays.delete(entity);
+        }
       }
     }
 
@@ -374,7 +452,9 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         }
 
         aimGfx.clear();
-        aimGfx.lineStyle(2, 0xffffff, 0.7);
+        const aimWidth = highContrastMode ? 3 : 2;
+        const aimAlpha = highContrastMode ? 1.0 : 0.7;
+        aimGfx.lineStyle(aimWidth, 0xffffff, aimAlpha);
 
         const dx = inputState.aimX - playerSprite.x;
         const dy = inputState.aimY - playerSprite.y;
