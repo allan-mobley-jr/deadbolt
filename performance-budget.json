@@ -1,0 +1,30 @@
+{
+  "budgets": {
+    "landing": {
+      "description": "Landing page (/) — route-specific JS excluding shared framework",
+      "routeJsGzippedBytes": 102400,
+      "noPhaserChunk": true
+    },
+    "play": {
+      "description": "Game page (/play) — total JS including all dynamic imports",
+      "totalJsGzippedBytes": 1048576,
+      "phaserChunkGzippedBytes": 512000
+    }
+  },
+  "thresholds": {
+    "lighthouse": {
+      "performance": 85,
+      "accessibility": 90,
+      "bestPractices": 90,
+      "seo": 90
+    }
+  },
+  "notes": {
+    "phaser": "Phaser 3.90 is monolithic (~1.3MB minified, ~346KB gzip). Not tree-shakeable. Matter.js is bundled inside.",
+    "framework": "React + Next.js framework JS is ~168KB gzip (shared on all routes). Not counted in route-specific budgets.",
+    "treeshakeable": "miniplex (sideEffects: false), lucide-react (sideEffects: false). Both tree-shake correctly.",
+    "notTreeshakeable": "phaser (no sideEffects declaration), pathfinding (no sideEffects declaration).",
+    "audio": "All audio is placeholder (silent AudioBuffers generated at runtime). No external audio files to lazy-load yet.",
+    "analyzerMode": "Run 'pnpm analyze' to generate bundle analysis visualization."
+  }
+}
