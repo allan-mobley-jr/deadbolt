@@ -259,6 +259,46 @@ test("disconnects bridge on unmount after successful connection", async () => {
   expect(mockDisconnect).toHaveBeenCalledTimes(1);
 });
 
+test("still calls destroyGame and resets stores when bridge.disconnect() throws", async () => {
+  vi.useFakeTimers();
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+
+  // Make disconnect throw
+  mockDisconnect.mockImplementation(() => {
+    throw new Error("disconnect boom");
+  });
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  // Set stale data to verify resetSessionStores still runs
+  useGameStore.setState({ totalKills: 42 });
+
+  const { unmount } = render(<GameContainer />);
+
+  // Wait for bridge to connect
+  await vi.advanceTimersByTimeAsync(20);
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalled();
+  });
+
+  unmount();
+
+  // disconnect was called (and threw)
+  expect(mockDisconnect).toHaveBeenCalledTimes(1);
+  // destroyGame still ran despite disconnect failure
+  expect(mockDestroyGame).toHaveBeenCalled();
+  // stores still reset despite disconnect failure
+  expect(useGameStore.getState().totalKills).toBe(0);
+  // error was logged
+  expect(consoleSpy).toHaveBeenCalledWith(
+    "[GameContainer] Bridge disconnect failed:",
+    expect.any(Error),
+  );
+
+  consoleSpy.mockRestore();
+});
+
 test("throws to error boundary when getActiveError returns an error during polling", async () => {
   vi.useFakeTimers();
   const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
