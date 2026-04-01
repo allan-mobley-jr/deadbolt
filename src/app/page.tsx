@@ -18,6 +18,13 @@ export const metadata: Metadata = {
     description:
       "Physics-driven barricading. Permadeath roguelike. 15-minute runs.",
     type: "website",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Deadbolt",
+    description:
+      "Physics-driven barricading. Permadeath roguelike. 15-minute runs.",
   },
 };
 
