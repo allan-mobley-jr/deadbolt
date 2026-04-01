@@ -478,15 +478,13 @@ describe("GameScene", () => {
 
     it("calls render systems after gameLoop.tick", () => {
       scene.create();
-      const renderSystems = (
-        scene as unknown as { renderSystems: Array<(dt: number) => void> }
-      ).renderSystems;
-      expect(renderSystems.length).toBeGreaterThan(0);
+      const renderRunner = (
+        scene as unknown as { renderRunner: { run: (dt: number) => void } }
+      ).renderRunner;
+      expect(renderRunner).toBeDefined();
 
-      // Spy on first render system
-      const spy = vi.fn();
-      (scene as unknown as { renderSystems: Array<(dt: number) => void> })
-        .renderSystems[0] = spy;
+      // Spy on render runner
+      const spy = vi.spyOn(renderRunner, "run");
 
       scene.update(0, 16.67);
       expect(spy).toHaveBeenCalledTimes(1);
@@ -580,40 +578,43 @@ describe("GameScene", () => {
   });
 
   describe("update before create", () => {
-    it("catches crash when update() is called before create()", () => {
+    it("logs error when update() is called before create() without crashing", () => {
       const consoleSpy = vi
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
+      // Before create(), commandSystem is uninitialized and isClockPaused()
+      // returns true (null _clockState). The try-catch around commandSystem
+      // during pause catches the error without setting crashed = true.
       scene.update(0, 16.67);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        "[GameScene] Game loop crashed:",
+        "[GameScene] CommandSystem threw while paused:",
         expect.any(Error),
       );
       consoleSpy.mockRestore();
     });
 
-    it("create() resets the crashed flag so the scene can recover", () => {
+    it("create() recovers from pre-create update calls", () => {
       const consoleSpy = vi
         .spyOn(console, "error")
         .mockImplementation(() => {});
 
-      // Trigger crash: update before create
+      // Pre-create update — error is caught gracefully, no crash
       scene.update(0, 16.67);
       expect(consoleSpy).toHaveBeenCalledTimes(1);
 
       consoleSpy.mockClear();
 
-      // create() should reset crashed flag
+      // create() initializes all systems
       scene.create();
 
-      // Subsequent updates should work (not silently halted)
+      // Subsequent updates should work normally
       scene.update(16.67, 16.67);
       scene.update(33.34, 16.67);
       expect(consoleSpy).not.toHaveBeenCalled();
 
-      // Verify the game loop is ticking (not crashed)
+      // Verify the game loop is ticking
       const gameLoop = (
         scene as unknown as { gameLoop: { tick: (dt: number) => void } }
       ).gameLoop;
