@@ -67,6 +67,21 @@ export default function GameContainer() {
             for (const key of SETTINGS_KEYS) {
               safeEmit(bus, "cmd:settings-changed", { key, value: settings[key] });
             }
+
+            // Poll for runtime crashes after the bridge connects.
+            // The tryConnect loop has stopped, so runtime errors (game-crash)
+            // need a separate polling path.  One variable read per frame.
+            const pollCrash = () => {
+              if (cancelled) return;
+              const crashError = getActiveError();
+              if (crashError) {
+                console.error("[GameContainer] Game runtime crash:", crashError);
+                setError(crashError);
+                return;
+              }
+              requestAnimationFrame(pollCrash);
+            };
+            requestAnimationFrame(pollCrash);
           } else if (retries++ < MAX_BRIDGE_RETRIES) {
             requestAnimationFrame(tryConnect);
           } else {

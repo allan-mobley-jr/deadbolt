@@ -105,13 +105,17 @@ export function createGame(parentId: string): Phaser.Game {
 
   instance = new Phaser.Game(buildGameConfig(parentId));
 
-  // Listen for pre-bus errors emitted on Phaser's native event system.
-  // These fire during BootScene/LoadingScene — before the typed GameEventBus
-  // exists — so we capture them in module scope for React to poll.
+  // Listen for errors emitted on Phaser's native event system.
+  // boot-error and generation-error fire before the typed GameEventBus exists;
+  // game-crash fires during gameplay when a system throws in GameScene.update().
+  // All three are captured in module scope for the React layer to poll.
   instance.events.on("boot-error", (err: unknown) => {
     activeError = err instanceof Error ? err : new Error(String(err));
   });
   instance.events.on("generation-error", (err: unknown) => {
+    activeError = err instanceof Error ? err : new Error(String(err));
+  });
+  instance.events.on("game-crash", (err: unknown) => {
     activeError = err instanceof Error ? err : new Error(String(err));
   });
 

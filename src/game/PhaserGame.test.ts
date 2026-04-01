@@ -303,6 +303,19 @@ describe("boot/loading error listeners", () => {
     expect(captured!.message).toBe("string error");
   });
 
+  it("captures game-crash emitted on game.events", () => {
+    const game = createGame("err-listener-test");
+    expect(getActiveError()).toBeNull();
+
+    // GameScene wraps errors with "Game loop crashed:" prefix before emitting
+    const raw = new Error("physics exploded");
+    const wrapped = new Error(`Game loop crashed: ${raw.message}`, { cause: raw });
+    game.events.emit("game-crash", wrapped);
+
+    expect(getActiveError()).toBe(wrapped);
+    expect(getActiveError()!.message).toBe("Game loop crashed: physics exploded");
+  });
+
   it("last error wins when multiple errors fire", () => {
     const game = createGame("err-listener-test");
 

@@ -309,6 +309,10 @@ export default class GameScene extends Phaser.Scene {
     } catch (err) {
       this.crashed = true;
       console.error("[GameScene] Game loop crashed:", err);
+      const wrapped = err instanceof Error
+        ? new Error(`Game loop crashed: ${err.message}`, { cause: err })
+        : new Error(`Game loop crashed: ${String(err)}`);
+      this.game.events.emit("game-crash", wrapped);
       return;
     }
 
