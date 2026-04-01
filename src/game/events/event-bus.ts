@@ -100,6 +100,8 @@ export interface BarricadeSnapEvent {
   orientation: "horizontal" | "vertical";
   /** True when object is within snap bounds, false when it leaves. */
   snapping: boolean;
+  /** The snapped object's type (e.g. "wooden_plank"). Absent on snap-leave events. */
+  objectType?: string;
 }
 
 /** Emitted when a barricade takes damage (for visual feedback). */

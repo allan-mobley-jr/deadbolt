@@ -321,6 +321,95 @@ describe("BarricadeSystem", () => {
       // Verify BARRICADE_PLACE_RANGE is what we expect
       expect(BARRICADE_PLACE_RANGE).toBe(96);
     });
+
+    it("selects the nearest object to snap center when multiple candidates exist", () => {
+      const { ctx, bodyRegistry, eventBus } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+
+      // Object A: farther from snap center (offset +20)
+      const bodyA = mockBody(undefined, epCenterX + 20, epCenterY + 20);
+      bodyRegistry.register(bodyA);
+      createObjectEntity(
+        epCenterX + 20, epCenterY + 20, bodyA.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      // Object B: closer to snap center (offset +5), inserted later in ECS
+      const bodyB = mockBody(undefined, epCenterX + 5, epCenterY + 5);
+      bodyRegistry.register(bodyB);
+      createObjectEntity(
+        epCenterX + 5, epCenterY + 5, bodyB.id,
+        "metal_sheet", ObjectCategory.Loot, false,
+        { durability: 0.8, flammability: 0, conductivity: 0.6 }, 4,
+      );
+
+      const snapHandler = vi.fn();
+      eventBus.on("barricade-snap", snapHandler);
+
+      ctx.inputState.pointerDown = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      // Should select metal_sheet (closer to snap center), not wooden_plank
+      expect(snapHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          snapping: true,
+          objectType: "metal_sheet",
+        }),
+      );
+    });
+
+    it("includes objectType in barricade-snap event for single object", () => {
+      const { ctx, bodyRegistry, eventBus } = createMockContext();
+
+      const playerBody = mockBody();
+      bodyRegistry.register(playerBody);
+      createPlayerEntity(100, 100, playerBody.id);
+
+      const epCenterX = 5 * TILE_SIZE + TILE_SIZE / 2;
+      const epCenterY = 3 * TILE_SIZE + TILE_SIZE / 2;
+      const objBody = mockBody(undefined, epCenterX, epCenterY);
+      bodyRegistry.register(objBody);
+      createObjectEntity(
+        epCenterX, epCenterY, objBody.id,
+        "wooden_plank", ObjectCategory.Loot, false,
+        { durability: 0.3, flammability: 0.9, conductivity: 0 }, 3,
+      );
+
+      const handler = vi.fn();
+      eventBus.on("barricade-snap", handler);
+
+      // Enter snap zone
+      ctx.inputState.pointerDown = true;
+      const system = createBarricadeSystem(ctx);
+      system(1 / 60);
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          snapping: true,
+          objectType: "wooden_plank",
+        }),
+      );
+
+      // Move object far away to leave snap zone
+      const entity = interactableEntities.entities[0];
+      entity.position.x = 9999;
+      entity.position.y = 9999;
+      system(1 / 60);
+
+      // snap-leave event should NOT have objectType
+      expect(handler).toHaveBeenCalledTimes(2);
+      const leaveCall = handler.mock.calls[1][0];
+      expect(leaveCall.snapping).toBe(false);
+      expect(leaveCall.objectType).toBeUndefined();
+    });
   });
 
   describe("placement", () => {
