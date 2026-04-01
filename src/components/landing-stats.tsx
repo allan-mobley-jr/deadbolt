@@ -33,6 +33,7 @@ function formatTotalTime(seconds: number): string {
  */
 export function LandingStats() {
   const loaded = usePersistenceStore((s) => s.loaded);
+  const loadError = usePersistenceStore((s) => s.loadError);
   const lifetimeStats = usePersistenceStore((s) => s.lifetimeStats);
   const leaderboard = usePersistenceStore((s) => s.leaderboard);
 
@@ -96,6 +97,17 @@ export function LandingStats() {
       >
         Best played on desktop with mouse and keyboard
       </div>
+
+      {/* --- Persistence load error --- */}
+      {loaded && loadError && (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400"
+          data-testid="persistence-load-error"
+          role="alert"
+        >
+          {loadError}
+        </div>
+      )}
 
       {/* --- Lifetime stats (only when data exists) --- */}
       {hasStats && (

@@ -118,7 +118,8 @@ export async function saveRun(run: CompletedRun): Promise<void> {
     // Prune old runs beyond MAX_HISTORY (separate transaction)
     await pruneOldRuns(db);
   } catch (err) {
-    console.warn("[Persistence] Failed to save run:", err);
+    console.error("[Persistence] Failed to save run:", err);
+    throw err;
   }
 }
 
@@ -173,7 +174,8 @@ export async function clearAllRuns(): Promise<void> {
     await idbRequest(store.clear());
     await idbTransaction(tx);
   } catch (err) {
-    console.warn("[Persistence] Failed to clear runs:", err);
+    console.error("[Persistence] Failed to clear runs:", err);
+    throw err;
   }
 }
 
@@ -207,8 +209,8 @@ export async function loadRunHistory(): Promise<CompletedRun[]> {
       cursor.onerror = () => reject(cursor.error);
     });
   } catch (err) {
-    console.warn("[Persistence] Failed to load run history:", err);
-    return [];
+    console.error("[Persistence] Failed to load run history:", err);
+    throw err;
   }
 }
 
@@ -238,8 +240,8 @@ export async function getLeaderboard(): Promise<CompletedRun[]> {
       cursor.onerror = () => reject(cursor.error);
     });
   } catch (err) {
-    console.warn("[Persistence] Failed to load leaderboard:", err);
-    return [];
+    console.error("[Persistence] Failed to load leaderboard:", err);
+    throw err;
   }
 }
 
@@ -255,8 +257,8 @@ export async function getLifetimeStats(): Promise<LifetimeStats> {
 
     return computeLifetimeFromRuns(allRuns);
   } catch (err) {
-    console.warn("[Persistence] Failed to compute lifetime stats:", err);
-    return { ...EMPTY_LIFETIME_STATS };
+    console.error("[Persistence] Failed to compute lifetime stats:", err);
+    throw err;
   }
 }
 

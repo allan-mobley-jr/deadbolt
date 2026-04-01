@@ -24,6 +24,8 @@ beforeEach(() => {
   usePersistenceStore.setState({
     loaded: true,
     available: true,
+    loadError: null,
+    saveError: null,
     runHistory: [],
     leaderboard: [],
     lifetimeStats: {
@@ -252,6 +254,41 @@ describe("DeathScreen", () => {
       render(<DeathScreen />);
       expect(screen.getByTestId("copy-seed-btn")).toBeTruthy();
       expect(screen.getByText("Copy")).toBeTruthy();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Button handlers
+  // -------------------------------------------------------------------------
+
+  // -------------------------------------------------------------------------
+  // Save error display
+  // -------------------------------------------------------------------------
+
+  describe("save error display", () => {
+    it("shows save error banner when saveError is set", () => {
+      useUIStore.getState().openMenu("death");
+      usePersistenceStore.setState({ saveError: "This run may not have been saved." });
+      render(<DeathScreen />);
+      expect(screen.getByTestId("persistence-save-error")).toBeTruthy();
+      expect(screen.getByText(/may not have been saved/)).toBeTruthy();
+    });
+
+    it("does not show save error banner when saveError is null", () => {
+      useUIStore.getState().openMenu("death");
+      usePersistenceStore.setState({ saveError: null });
+      render(<DeathScreen />);
+      expect(screen.queryByTestId("persistence-save-error")).toBeNull();
+    });
+
+    it("still shows all run stats when save fails", () => {
+      useUIStore.getState().openMenu("death");
+      useGameStore.setState({ totalKills: 42, dayNumber: 3 });
+      usePersistenceStore.setState({ saveError: "This run may not have been saved." });
+      render(<DeathScreen />);
+      expect(screen.getByText("42")).toBeTruthy();
+      expect(screen.getByText("3")).toBeTruthy();
+      expect(screen.getByText("YOU DIED")).toBeTruthy();
     });
   });
 

@@ -30,6 +30,10 @@ export interface PersistenceStoreState {
   loaded: boolean;
   /** Whether IndexedDB is available in this environment. */
   available: boolean;
+  /** Error message from the most recent load attempt, or null. */
+  loadError: string | null;
+  /** Error message from the most recent save attempt, or null. */
+  saveError: string | null;
   /** Recent completed runs (newest first, max 20). */
   runHistory: CompletedRun[];
   /** Top runs by score (highest first, max 10). */
@@ -62,6 +66,8 @@ export interface PersistenceStoreActions {
     distanceTraveled: number;
     objectsUsed: number;
   }) => Promise<void>;
+  /** Dismiss the save error banner. */
+  clearSaveError: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +77,8 @@ export interface PersistenceStoreActions {
 const initialState: PersistenceStoreState = {
   loaded: false,
   available: false,
+  loadError: null,
+  saveError: null,
   runHistory: [],
   leaderboard: [],
   lifetimeStats: { ...EMPTY_LIFETIME_STATS },
@@ -101,13 +109,18 @@ export const usePersistenceStore = create<
       set({
         loaded: true,
         available: true,
+        loadError: null,
         runHistory,
         leaderboard,
         lifetimeStats,
       });
     } catch (err) {
-      console.warn("[PersistenceStore] Failed to load from IndexedDB:", err);
-      set({ loaded: true, available: false });
+      console.error("[PersistenceStore] Failed to load from IndexedDB:", err);
+      set({
+        loaded: true,
+        available: false,
+        loadError: "Failed to load saved data. Your run history may be unavailable.",
+      });
     }
   },
 
@@ -127,8 +140,14 @@ export const usePersistenceStore = create<
       score: computeRunScore(stats),
     };
 
-    // Save to IndexedDB (async, non-blocking)
-    await saveRun(run);
+    // Save to IndexedDB
+    try {
+      await saveRun(run);
+      set({ saveError: null });
+    } catch (err) {
+      console.error("[PersistenceStore] Failed to save run:", err);
+      set({ saveError: "This run may not have been saved." });
+    }
 
     // Refresh cached data from DB
     try {
@@ -149,4 +168,6 @@ export const usePersistenceStore = create<
       }));
     }
   },
+
+  clearSaveError: () => set({ saveError: null }),
 }));

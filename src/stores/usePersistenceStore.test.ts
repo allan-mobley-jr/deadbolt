@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import "fake-indexeddb/auto";
 import { usePersistenceStore } from "./usePersistenceStore";
 import { _resetDBConnection, clearAllRuns } from "@/lib/persistence";
@@ -14,6 +14,8 @@ beforeEach(async () => {
   usePersistenceStore.setState({
     loaded: false,
     available: false,
+    loadError: null,
+    saveError: null,
     runHistory: [],
     leaderboard: [],
     lifetimeStats: { ...EMPTY_LIFETIME_STATS, killsByType: {} },
@@ -36,6 +38,8 @@ describe("usePersistenceStore", () => {
       const state = usePersistenceStore.getState();
       expect(state.loaded).toBe(false);
       expect(state.available).toBe(false);
+      expect(state.loadError).toBeNull();
+      expect(state.saveError).toBeNull();
       expect(state.runHistory).toEqual([]);
       expect(state.leaderboard).toEqual([]);
       expect(state.lifetimeStats.totalRuns).toBe(0);
@@ -56,6 +60,38 @@ describe("usePersistenceStore", () => {
       expect(state.runHistory).toEqual([]);
       expect(state.leaderboard).toEqual([]);
       expect(state.lifetimeStats.totalRuns).toBe(0);
+      expect(state.loadError).toBeNull();
+    });
+
+    it("sets loadError when IndexedDB read fails", async () => {
+      const originalOpen = indexedDB.open.bind(indexedDB);
+      _resetDBConnection(); // Clear cached connection so openDB() must re-open
+      Object.defineProperty(indexedDB, "open", {
+        value: () => { throw new Error("DB blocked"); },
+        writable: true,
+      });
+
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await usePersistenceStore.getState().loadFromDB();
+
+      const state = usePersistenceStore.getState();
+      expect(state.loaded).toBe(true);
+      expect(state.available).toBe(false);
+      expect(state.loadError).toBeTruthy();
+      expect(state.loadError).toContain("Failed to load");
+
+      // Restore before afterEach/next beforeEach runs clearAllRuns
+      Object.defineProperty(indexedDB, "open", { value: originalOpen, writable: true });
+      errorSpy.mockRestore();
+    });
+
+    it("clears loadError on successful load", async () => {
+      usePersistenceStore.setState({ loadError: "prior error" });
+
+      await usePersistenceStore.getState().loadFromDB();
+
+      const state = usePersistenceStore.getState();
+      expect(state.loadError).toBeNull();
     });
   });
 
@@ -136,6 +172,58 @@ describe("usePersistenceStore", () => {
       expect(stats.totalTimePlayed).toBe(700);
       expect(stats.longestRunTime).toBe(500);
       expect(stats.highestDay).toBe(3);
+    });
+
+    it("sets saveError when saveRun fails", async () => {
+      await usePersistenceStore.getState().loadFromDB();
+
+      // Break the DB after successful load — clear cache so openDB must re-open
+      const originalOpen = indexedDB.open.bind(indexedDB);
+      _resetDBConnection();
+      Object.defineProperty(indexedDB, "open", {
+        value: () => { throw new Error("DB blocked"); },
+        writable: true,
+      });
+
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await usePersistenceStore.getState().recordRun({
+        seed: "test",
+        elapsedTotal: 100,
+        dayNumber: 1,
+        waveNumber: 1,
+        totalKills: 5,
+        killsByType: {},
+        barricadesBuilt: 0,
+        distanceTraveled: 1000,
+        objectsUsed: 0,
+      });
+
+      const state = usePersistenceStore.getState();
+      expect(state.saveError).toBeTruthy();
+      expect(state.saveError).toContain("may not have been saved");
+
+      // Restore before afterEach/next beforeEach runs clearAllRuns
+      Object.defineProperty(indexedDB, "open", { value: originalOpen, writable: true });
+      errorSpy.mockRestore();
+    });
+
+    it("clears saveError on successful save", async () => {
+      usePersistenceStore.setState({ saveError: "prior save error" });
+      await usePersistenceStore.getState().loadFromDB();
+
+      await usePersistenceStore.getState().recordRun({
+        seed: "test",
+        elapsedTotal: 100,
+        dayNumber: 1,
+        waveNumber: 1,
+        totalKills: 5,
+        killsByType: {},
+        barricadesBuilt: 0,
+        distanceTraveled: 1000,
+        objectsUsed: 0,
+      });
+
+      expect(usePersistenceStore.getState().saveError).toBeNull();
     });
 
     it("orders leaderboard by score descending", async () => {
