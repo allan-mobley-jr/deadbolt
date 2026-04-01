@@ -73,6 +73,9 @@ export function PauseMenu() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Pause menu"
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 animate-in fade-in duration-300"
       data-testid="pause-menu"
     >
