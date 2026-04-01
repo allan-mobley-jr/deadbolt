@@ -637,7 +637,7 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
             delta: actualDelta,
           });
 
-          if (targetEntity.health.current <= 0) {
+          if (targetEntity.health.current <= 0 && prevHealth > 0) {
             safeEmit(ctx.eventBus, "player-died", {
               dayNumber: ctx.clockState.dayNumber,
               totalKills,
