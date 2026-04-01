@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import "fake-indexeddb/auto";
 import {
   saveRun,
@@ -201,5 +201,52 @@ describe("computeLifetimeFromRuns (pure)", () => {
   it("returns empty stats for empty array", () => {
     const stats = computeLifetimeFromRuns([]);
     expect(stats.totalRuns).toBe(0);
+  });
+});
+
+describe("error propagation", () => {
+  let originalOpen: typeof indexedDB.open;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _resetDBConnection();
+    originalOpen = indexedDB.open.bind(indexedDB);
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    Object.defineProperty(indexedDB, "open", { value: originalOpen, writable: true });
+    errorSpy.mockRestore();
+  });
+
+  function breakDB() {
+    Object.defineProperty(indexedDB, "open", {
+      value: () => { throw new Error("DB blocked"); },
+      writable: true,
+    });
+  }
+
+  it("loadRunHistory rejects when IndexedDB fails", async () => {
+    breakDB();
+    await expect(loadRunHistory()).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("getLeaderboard rejects when IndexedDB fails", async () => {
+    breakDB();
+    await expect(getLeaderboard()).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("getLifetimeStats rejects when IndexedDB fails", async () => {
+    breakDB();
+    await expect(getLifetimeStats()).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("saveRun rejects when IndexedDB fails", async () => {
+    breakDB();
+    await expect(saveRun(makeRun())).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalled();
   });
 });

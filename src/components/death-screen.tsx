@@ -54,6 +54,7 @@ const VARIANT_LABELS: Record<string, string> = {
 export function DeathScreen() {
   const router = useRouter();
   const activeMenu = useUIStore((s) => s.activeMenu);
+  const saveError = usePersistenceStore((s) => s.saveError);
 
   // --- Run stats from game store ---
   const elapsedTotal = useGameStore((s) => s.elapsedTotal);
@@ -272,6 +273,16 @@ export function DeathScreen() {
                   {copied ? "Copied!" : "Copy"}
                 </Button>
               </div>
+            </div>
+          )}
+          {/* Save error warning */}
+          {saveError && (
+            <div
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-400"
+              data-testid="persistence-save-error"
+              role="alert"
+            >
+              {saveError}
             </div>
           )}
         </CardContent>

@@ -10,6 +10,8 @@ beforeEach(() => {
   usePersistenceStore.setState({
     loaded: false,
     available: false,
+    loadError: null,
+    saveError: null,
     runHistory: [],
     leaderboard: [],
     lifetimeStats: { ...EMPTY_LIFETIME_STATS, killsByType: {} },
@@ -125,6 +127,35 @@ describe("LandingStats", () => {
       const input = screen.getByTestId("seed-input") as HTMLInputElement;
       fireEvent.change(input, { target: { value: "my-seed" } });
       expect(input.value).toBe("my-seed");
+    });
+  });
+
+  describe("persistence load error", () => {
+    it("shows error banner when loadError is set", () => {
+      usePersistenceStore.setState({
+        loaded: true,
+        available: false,
+        loadError: "Failed to load saved data. Your run history may be unavailable.",
+      });
+      render(<LandingStats />);
+      expect(screen.getByTestId("persistence-load-error")).toBeTruthy();
+      expect(screen.getByText(/Failed to load/)).toBeTruthy();
+    });
+
+    it("still shows the play button when load fails", () => {
+      usePersistenceStore.setState({
+        loaded: true,
+        available: false,
+        loadError: "Failed to load saved data.",
+      });
+      render(<LandingStats />);
+      expect(screen.getByText("Play")).toBeTruthy();
+    });
+
+    it("does not show error banner when load succeeds", () => {
+      usePersistenceStore.setState({ loaded: true, available: true, loadError: null });
+      render(<LandingStats />);
+      expect(screen.queryByTestId("persistence-load-error")).toBeNull();
     });
   });
 
