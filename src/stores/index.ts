@@ -26,3 +26,19 @@ export type { SettingsStoreActions } from "./useSettingsStore";
 // Persistence (IndexedDB — run history, leaderboard, lifetime stats)
 export { usePersistenceStore } from "./usePersistenceStore";
 export type { PersistenceStoreState, PersistenceStoreActions } from "./usePersistenceStore";
+
+// ---------------------------------------------------------------------------
+// Session lifecycle
+// ---------------------------------------------------------------------------
+
+/**
+ * Reset all session-scoped Zustand stores to initial values.
+ *
+ * Call when a game session ends — on unmount, death-screen actions,
+ * or pause-menu abandon.  Does NOT reset settings or persistence stores
+ * (those survive across sessions).
+ *
+ * Important: disconnect the bridge BEFORE calling this to avoid
+ * spurious cmd:resume events from the paused subscription.
+ */
+export { resetSessionStores } from "./resetSessionStores";

@@ -29,6 +29,10 @@ vi.mock("@/lib/bridge", () => ({
 }));
 
 import GameContainer from "@/components/game-container";
+import { useGameStore } from "@/stores/useGameStore";
+import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useUIStore } from "@/stores/useUIStore";
+import { useMinimapStore } from "@/stores/useMinimapStore";
 
 /** Minimal error boundary for testing the throw-on-render path. */
 class TestErrorBoundary extends React.Component<
@@ -336,4 +340,34 @@ test("throws to error boundary when runtime crash detected after bridge connects
   );
 
   consoleSpy.mockRestore();
+});
+
+test("resets all session stores on unmount", async () => {
+  vi.useFakeTimers();
+  const fakeBus = { on: vi.fn(), off: vi.fn(), listeners: vi.fn().mockReturnValue([]) };
+  mockGetActiveBus.mockReturnValue(fakeBus);
+  mockConnectBridge.mockReturnValue({ disconnect: mockDisconnect });
+
+  // Set stale data in all session stores
+  useGameStore.setState({ totalKills: 42 });
+  usePlayerStore.setState({ health: 25, alive: false });
+  useUIStore.setState({ activeMenu: "death" as const });
+  useMinimapStore.setState({ playerPosition: { x: 100, y: 200 } });
+
+  const { unmount } = render(<GameContainer />);
+
+  // Wait for bridge to connect
+  await vi.advanceTimersByTimeAsync(20);
+  await vi.waitFor(() => {
+    expect(mockConnectBridge).toHaveBeenCalled();
+  });
+
+  unmount();
+
+  // All session stores should be reset to initial values
+  expect(useGameStore.getState().totalKills).toBe(0);
+  expect(usePlayerStore.getState().health).toBe(100);
+  expect(usePlayerStore.getState().alive).toBe(true);
+  expect(useUIStore.getState().activeMenu).toBe("none");
+  expect(useMinimapStore.getState().playerPosition).toEqual({ x: 0, y: 0 });
 });
