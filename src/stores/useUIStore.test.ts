@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useUIStore } from "./useUIStore";
+import { useUIStore, MAX_NOTIFICATIONS } from "./useUIStore";
 
 describe("useUIStore", () => {
   beforeEach(() => {
@@ -67,6 +67,25 @@ describe("useUIStore", () => {
       const notifications = useUIStore.getState().notifications;
       expect(notifications).toHaveLength(1);
       expect(notifications[0].message).toBe("Test notification");
+    });
+
+    it("caps notifications at MAX_NOTIFICATIONS, keeping newest", () => {
+      for (let i = 0; i < MAX_NOTIFICATIONS + 10; i++) {
+        useUIStore.getState().addNotification({
+          id: `n${i}`,
+          message: `Notification ${i}`,
+          type: "info",
+          timestamp: i * 1000,
+        });
+      }
+
+      const notifications = useUIStore.getState().notifications;
+      expect(notifications).toHaveLength(MAX_NOTIFICATIONS);
+      // Oldest entries (0-9) should have been evicted
+      expect(notifications[0].id).toBe("n10");
+      expect(notifications[notifications.length - 1].id).toBe(
+        `n${MAX_NOTIFICATIONS + 9}`,
+      );
     });
 
     it("dismisses a notification by ID", () => {
