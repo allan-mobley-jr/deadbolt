@@ -31,6 +31,10 @@ import { ConstraintRegistry } from "@/game/systems/constraint-registry";
 import { WallAnchorRegistry } from "@/game/systems/wall-anchor-registry";
 import { createPlayerEntity, createObjectEntity } from "@/game/ecs/archetypes";
 import { resetWorld } from "@/game/ecs/world";
+import { PoolManager, setPoolManager } from "@/game/ecs/pool-manager";
+import { createZombiePool } from "@/game/ecs/zombie-pool";
+import { SensorBodyPool } from "@/game/ecs/sensor-pool";
+import { COMBAT } from "@/game/systems/combat-constants";
 import { createGameEventBus, safeEmit } from "@/game/events/event-bus";
 import { setActiveBus, setActiveSeed, setActiveMinimapInit } from "@/game/PhaserGame";
 import { TILE_SIZE, TileType, TILE_PROPERTIES } from "@/game/tiles/tile-types";
@@ -121,6 +125,24 @@ export default class GameScene extends Phaser.Scene {
     const materialRegistry = new MaterialRegistry();
     const noiseMap = new NoiseMap();
 
+    // --- Entity pools (pre-warm for zero allocation during gameplay) ---
+    const poolManager = new PoolManager();
+    setPoolManager(poolManager);
+
+    const zombiePool = createZombiePool({
+      matterAdd: this.matter.add,
+      bodyRegistry,
+    });
+    poolManager.register("zombie", zombiePool);
+
+    const sensorPool = new SensorBodyPool(
+      this.matter.add,
+      bodyRegistry,
+      COMBAT.SWING_SENSOR_WIDTH,
+      COMBAT.SWING_SENSOR_HEIGHT,
+      5,
+    );
+
     // --- Scene context (shared by all system factories) ---
     const ctx: SceneContext = {
       scene: this,
@@ -139,6 +161,9 @@ export default class GameScene extends Phaser.Scene {
       entryPoints: this.worldData.safehouse.entryPointsToDefend,
       safehouseCenter: this.worldData.safehouse.minimapPosition,
       spawnZones: this.worldData.spawnZones,
+      zombiePool,
+      sensorPool,
+      poolManager,
     };
 
     // Store clock state reference for pause checking in update()

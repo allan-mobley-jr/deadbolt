@@ -19,6 +19,8 @@ import {
 } from "./zombie-ai-constants";
 import { createZombieEntity, type ZombieEntity } from "@/game/ecs/archetypes";
 import type { BodyRegistry } from "./body-registry";
+import type { EntityPool } from "@/game/ecs/pool";
+import { configureZombie } from "@/game/ecs/zombie-pool";
 
 // ---------------------------------------------------------------------------
 // Variant selection
@@ -106,6 +108,9 @@ export interface SpawnContext {
     ): { id: number; inertia: number; inverseInertia: number };
   };
   bodyRegistry: BodyRegistry;
+  /** Optional zombie entity pool. When provided, zombies are acquired
+   *  from the pool instead of being freshly created. */
+  zombiePool?: EntityPool<ZombieEntity>;
 }
 
 /**
@@ -138,6 +143,11 @@ function createZombieBody(
 /**
  * Spawn a single zombie of the given variant at the specified position.
  *
+ * When a zombie pool is available on the context, the entity is acquired
+ * from the pool (recycling a previously killed zombie). Otherwise, a fresh
+ * entity and physics body are created. Both paths return an identical
+ * ZombieEntity.
+ *
  * @param tickOffset — stagger offset for pathfinding desynchronisation.
  * @returns The created zombie entity.
  */
@@ -148,6 +158,14 @@ export function spawnZombie(
   y: number,
   tickOffset: number = 0,
 ): ZombieEntity {
+  // Pool path — recycle a dormant entity
+  if (ctx.zombiePool) {
+    const entity = ctx.zombiePool.acquire();
+    configureZombie(entity, variant, x, y, tickOffset);
+    return entity;
+  }
+
+  // Fallback path — create fresh (used in tests without pool)
   const stats = { ...VARIANT_STATS[variant] };
   const hp = VARIANT_HEALTH[variant];
   const bodyId = createZombieBody(ctx, x, y, stats.bodySize);

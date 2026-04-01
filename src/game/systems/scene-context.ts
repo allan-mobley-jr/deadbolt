@@ -9,6 +9,10 @@ import { DAY_NIGHT, getPhaseDuration } from "./day-night-constants";
 import type { GameEventBus } from "@/game/events/event-bus";
 import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
 import type { EntryPoint, SpawnZone, TileCoord } from "@/types/procgen";
+import type { EntityPool } from "@/game/ecs/pool";
+import type { ZombieEntity } from "@/game/ecs/archetypes";
+import type { SensorBodyPool } from "@/game/ecs/sensor-pool";
+import type { PoolManager } from "@/game/ecs/pool-manager";
 
 /**
  * Snapshot of normalised input state, written by InputSystem each fixed tick
@@ -101,6 +105,12 @@ export interface SceneContext {
   tilemap?: Phaser.Tilemaps.Tilemap;
   /** Spatial noise map for zombie hearing (noise propagation system). */
   noiseMap?: NoiseMap;
+  /** Zombie entity pool for recycling spawned/killed zombies. */
+  zombiePool?: EntityPool<ZombieEntity>;
+  /** Sensor body pool for recycling melee swing sensor bodies. */
+  sensorPool?: SensorBodyPool;
+  /** Pool manager aggregating all entity pools for diagnostics. */
+  poolManager?: PoolManager;
 }
 
 /** Create a zeroed-out input state. */

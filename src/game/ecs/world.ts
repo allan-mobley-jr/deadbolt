@@ -1,5 +1,7 @@
 import { World } from "miniplex";
 import type { Entity } from "./entity";
+import { getPoolManager } from "./pool-manager";
+import { clearZombiePoolBodies } from "./zombie-pool";
 
 /**
  * The single ECS world for the current game session.
@@ -19,8 +21,11 @@ export const world = new World<Entity>();
  * (permadeath restart) and test cleanup.
  *
  * Uses `world.clear()` rather than recreating the World instance so that
- * query references held by system modules remain valid.
+ * query references held by system modules remain valid. Also drains all
+ * entity pools so dormant entities are released.
  */
 export function resetWorld(): void {
+  getPoolManager()?.clearAll();
+  clearZombiePoolBodies();
   world.clear();
 }

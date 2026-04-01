@@ -21,6 +21,7 @@ import type { With } from "miniplex";
 import type { SceneContext } from "./scene-context";
 import type { SystemFn } from "./system-runner";
 import type { Entity } from "@/game/ecs/entity";
+import type { ZombieEntity } from "@/game/ecs/archetypes";
 import type { AIState, ZombieType, ZombieVariant } from "@/game/ecs/components";
 import type { PathfindingGrid } from "@/game/procgen/pathfinding-grid";
 import type { TileCoord } from "@/types/procgen";
@@ -30,6 +31,7 @@ import { zombieEntities, barricadeEntities, playerEntities } from "@/game/ecs/qu
 import { safeEmit } from "@/game/events/event-bus";
 import { TILE_SIZE } from "@/game/procgen/constants";
 import { ZOMBIE_AI } from "./zombie-ai-constants";
+import { releaseZombie } from "@/game/ecs/zombie-pool";
 
 // ---------------------------------------------------------------------------
 // Local type alias matching the zombieEntities query result.
@@ -196,15 +198,22 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
 
     // Deferred removal of dead entities
     for (const entity of toRemove) {
-      // Unregister physics body
-      if (entity.physicsBody) {
-        const body = ctx.bodyRegistry.get(entity.physicsBody.bodyId);
-        if (body) {
-          ctx.scene.matter.world.remove(body);
+      if (ctx.zombiePool) {
+        // Pool path — recycle the entity and its physics body.
+        // ZombieAIEntity is narrower than ZombieEntity but the entity
+        // always has renderable since it was created with one.
+        releaseZombie(ctx.zombiePool, entity as unknown as ZombieEntity, ctx.bodyRegistry);
+      } else {
+        // Fallback — destroy the entity and physics body (no pool)
+        if (entity.physicsBody) {
+          const body = ctx.bodyRegistry.get(entity.physicsBody.bodyId);
+          if (body) {
+            ctx.scene.matter.world.remove(body);
+          }
+          ctx.bodyRegistry.unregister(entity.physicsBody.bodyId);
         }
-        ctx.bodyRegistry.unregister(entity.physicsBody.bodyId);
+        world.remove(entity);
       }
-      world.remove(entity);
     }
   };
 }

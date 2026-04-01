@@ -130,24 +130,32 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
    */
   let activeSensorId: number | null = null;
 
+  /** Reference to the active sensor body (for pool release). */
+  let activeSensorBody: MatterJS.BodyType | null = null;
+
   return (dt: number): void => {
     const player = combatPlayerEntities.entities[0];
     if (!player) {
       // Clean up orphaned sensor body if player was removed mid-swing
       if (activeSensorId !== null) {
-        const sensorBody = ctx.bodyRegistry.get(activeSensorId);
-        if (sensorBody) {
-          try {
-            ctx.scene.matter.world.remove(sensorBody);
-          } catch (err) {
-            console.error(
-              `[CombatSystem] Failed to remove orphan sensor body (id=${activeSensorId}):`,
-              err,
-            );
+        if (ctx.sensorPool && activeSensorBody) {
+          ctx.sensorPool.release(activeSensorBody);
+        } else {
+          const sensorBody = ctx.bodyRegistry.get(activeSensorId);
+          if (sensorBody) {
+            try {
+              ctx.scene.matter.world.remove(sensorBody);
+            } catch (err) {
+              console.error(
+                `[CombatSystem] Failed to remove orphan sensor body (id=${activeSensorId}):`,
+                err,
+              );
+            }
           }
+          ctx.bodyRegistry.unregister(activeSensorId);
         }
-        ctx.bodyRegistry.unregister(activeSensorId);
         activeSensorId = null;
+        activeSensorBody = null;
         swingHitSet.clear();
       }
       return;
@@ -168,20 +176,25 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
 
     // ---- 2. Clean up expired sensor body ----
     if (cs.swingTimeRemaining <= 0 && cs.sensorBodyId !== null) {
-      const sensorBody = ctx.bodyRegistry.get(cs.sensorBodyId);
-      if (sensorBody) {
-        try {
-          ctx.scene.matter.world.remove(sensorBody);
-        } catch (err) {
-          console.error(
-            `[CombatSystem] Failed to remove expired sensor body (id=${cs.sensorBodyId}):`,
-            err,
-          );
+      if (ctx.sensorPool && activeSensorBody) {
+        ctx.sensorPool.release(activeSensorBody);
+      } else {
+        const sensorBody = ctx.bodyRegistry.get(cs.sensorBodyId);
+        if (sensorBody) {
+          try {
+            ctx.scene.matter.world.remove(sensorBody);
+          } catch (err) {
+            console.error(
+              `[CombatSystem] Failed to remove expired sensor body (id=${cs.sensorBodyId}):`,
+              err,
+            );
+          }
         }
+        ctx.bodyRegistry.unregister(cs.sensorBodyId);
       }
-      ctx.bodyRegistry.unregister(cs.sensorBodyId);
       cs.sensorBodyId = null;
       activeSensorId = null;
+      activeSensorBody = null;
       swingHitSet.clear();
     }
 
@@ -207,17 +220,23 @@ export function createCombatSystem(ctx: SceneContext): SystemFn {
       sensorCenterX = pos.x + nx * stats.range;
       sensorCenterY = pos.y + ny * stats.range;
 
-      // Create Matter.js sensor body
-      const sensorBody = ctx.scene.matter.add.rectangle(
-        sensorCenterX,
-        sensorCenterY,
-        COMBAT.SWING_SENSOR_WIDTH,
-        COMBAT.SWING_SENSOR_HEIGHT,
-        { isSensor: true, isStatic: true },
-      );
-      ctx.bodyRegistry.register(sensorBody);
+      // Create or acquire Matter.js sensor body
+      let sensorBody: MatterJS.BodyType;
+      if (ctx.sensorPool) {
+        sensorBody = ctx.sensorPool.acquire(sensorCenterX, sensorCenterY);
+      } else {
+        sensorBody = ctx.scene.matter.add.rectangle(
+          sensorCenterX,
+          sensorCenterY,
+          COMBAT.SWING_SENSOR_WIDTH,
+          COMBAT.SWING_SENSOR_HEIGHT,
+          { isSensor: true, isStatic: true },
+        );
+        ctx.bodyRegistry.register(sensorBody);
+      }
       cs.sensorBodyId = sensorBody.id;
       activeSensorId = sensorBody.id;
+      activeSensorBody = sensorBody;
 
       // Set swing state
       cs.swingTimeRemaining = COMBAT.SWING_DURATION;
