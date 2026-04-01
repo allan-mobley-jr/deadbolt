@@ -35,6 +35,7 @@ let activeSeed: string | null = null;
  */
 let activeMinimapInit: MinimapInitEvent | null = null;
 
+
 /**
  * Build the Phaser game configuration without creating an instance.
  * Exported so tests can validate the config without needing a real canvas.
@@ -156,3 +157,4 @@ export function setActiveMinimapInit(data: MinimapInitEvent | null): void {
 export function getActiveMinimapInit(): MinimapInitEvent | null {
   return activeMinimapInit;
 }
+

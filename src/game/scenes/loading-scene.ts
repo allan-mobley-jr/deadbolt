@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { generateSeed } from "@/lib/rng";
 import { RUN_DEFAULTS } from "@/types/run";
+import { consumeNextRunSeed } from "@/lib/next-run-seed";
 import type { WorldData, GenerationProgress } from "@/types/world";
 import { generateWorld } from "@/game/procgen/world-generator";
 
@@ -80,8 +81,8 @@ export default class LoadingScene extends Phaser.Scene {
       this.barGraphics = this.add.graphics();
       this.drawProgressBar(0);
 
-      // --- Seed ---
-      const seed = generateSeed();
+      // --- Seed (use injected seed from "Try Same Seed", or generate new) ---
+      const seed = consumeNextRunSeed() ?? generateSeed();
       this.add
         .text(centerX, centerY + 80, `Seed: ${seed}`, SEED_STYLE)
         .setOrigin(0.5);
