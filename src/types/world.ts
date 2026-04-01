@@ -5,8 +5,7 @@
  * NO React imports allowed — this is pure TypeScript.
  */
 
-import type { CityLayout, BuildingClass, SafehouseResult, SpawnZone } from './procgen';
-import type { PathfindingGrid } from '@/game/procgen/pathfinding-grid';
+import type { CityLayout, BuildingClass, SafehouseResult, SpawnZone, PathfindingGrid } from './procgen';
 import type { RunConfig } from './run';
 
 // ---------------------------------------------------------------------------

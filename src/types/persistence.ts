@@ -7,7 +7,7 @@
  * NO React imports — pure TypeScript types.
  */
 
-import type { ZombieVariant } from "@/game/ecs/components";
+import type { ZombieVariant } from "./entities";
 
 // ---------------------------------------------------------------------------
 // Run record

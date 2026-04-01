@@ -15,6 +15,7 @@ import type {
   TileCoord,
   PathResult,
   Building,
+  PathfindingGrid as IPathfindingGrid,
 } from '@/types/procgen';
 import { TileType } from '@/types/procgen';
 import { PATHFINDING } from './constants';
@@ -97,7 +98,7 @@ function noPath(): PathResult {
   return { path: [], found: false, length: 0 };
 }
 
-export class PathfindingGrid {
+export class PathfindingGrid implements IPathfindingGrid {
   private grid: PF.Grid;
   private readonly finder: PF.AStarFinder;
   readonly width: number;
