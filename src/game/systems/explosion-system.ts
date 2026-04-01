@@ -76,12 +76,18 @@ function pixelToTile(px: number): number {
   return Math.floor(px / TILE_SIZE);
 }
 
-/** Run a callback, silently swallowing errors (Phaser APIs may not exist in tests). */
+/** One-time flag to avoid spamming the console if a visual effect fails. */
+let warnedVisualFailure = false;
+
+/** Run a visual callback, logging the first failure instead of silently swallowing. */
 function tryVisual(fn: () => void): void {
   try {
     fn();
-  } catch {
-    // Phaser scene/camera APIs may not be available in test environments
+  } catch (err) {
+    if (!warnedVisualFailure) {
+      warnedVisualFailure = true;
+      console.warn("[ExplosionSystem] Visual effect failed:", err);
+    }
   }
 }
 

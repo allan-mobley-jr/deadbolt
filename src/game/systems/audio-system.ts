@@ -52,6 +52,9 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
   let sfxVolume = 0.8;
   let musicVolume = 0.6;
 
+  // --- Warn-once tracking for sound playback failures ---
+  const warnedSoundKeys = new Set<string>();
+
   // --- Mute state ---
   let muted = false;
   let prevMuteKeyDown = false;
@@ -126,8 +129,11 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
     if (vol <= 0) return;
     try {
       soundManager.play(key, { volume: vol });
-    } catch {
-      // Sound may not be loaded — silently skip
+    } catch (err) {
+      if (!warnedSoundKeys.has(key)) {
+        warnedSoundKeys.add(key);
+        console.warn(`[AudioSystem] Failed to play UI SFX "${key}":`, err);
+      }
     }
   }
 
@@ -160,8 +166,11 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
         pan,
         ...extraConfig,
       });
-    } catch {
-      // Sound may not be loaded — silently skip
+    } catch (err) {
+      if (!warnedSoundKeys.has(key)) {
+        warnedSoundKeys.add(key);
+        console.warn(`[AudioSystem] Failed to play spatial SFX "${key}":`, err);
+      }
     }
   }
 
@@ -180,7 +189,9 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
       try {
         (music.incomingSound as Phaser.Sound.WebAudioSound).stop();
         music.incomingSound.destroy();
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn("[AudioSystem] Failed to stop outgoing music during crossfade:", err);
+      }
     }
 
     // Begin crossfade — store outgoing volume for smooth fade-out
@@ -202,7 +213,8 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
           0.001 * musicVol,
         );
       }
-    } catch {
+    } catch (err) {
+      console.warn(`[AudioSystem] Failed to start music track "${key}":`, err);
       music.phase = "idle";
     }
   }
@@ -221,7 +233,9 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
         try {
           (music.currentSound as Phaser.Sound.WebAudioSound).stop();
           music.currentSound.destroy();
-        } catch { /* ignore */ }
+        } catch (err) {
+          console.warn("[AudioSystem] Failed to stop outgoing track after crossfade:", err);
+        }
       }
 
       music.currentKey = music.incomingKey;
@@ -375,12 +389,12 @@ export function createAudioSystem(ctx: SceneContext): SystemFn {
     // --- Pause sync ---
     const isPaused = ctx.clockState.paused;
     if (isPaused && !wasPausedLastTick) {
-      try { soundManager.pauseAll(); } catch { /* ignore */ }
+      try { soundManager.pauseAll(); } catch (err) { console.warn("[AudioSystem] pauseAll failed:", err); }
       wasPausedLastTick = true;
       return;
     }
     if (!isPaused && wasPausedLastTick) {
-      try { soundManager.resumeAll(); } catch { /* ignore */ }
+      try { soundManager.resumeAll(); } catch (err) { console.warn("[AudioSystem] resumeAll failed:", err); }
       wasPausedLastTick = false;
     }
     if (isPaused) return;

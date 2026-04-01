@@ -931,7 +931,7 @@ describe("MaterialSystem missing engine", () => {
   }
 
   it("runs without crashing when Matter.js engine is missing", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const ctx = createNoEngineContext();
     const system = createMaterialSystem(ctx);
     spawnGasCan(ctx, 100, 100);
@@ -939,11 +939,11 @@ describe("MaterialSystem missing engine", () => {
     expect(() => system(DT)).not.toThrow();
     expect(() => system(DT)).not.toThrow();
 
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
-  it("warns exactly once when engine is missing", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("errors exactly once when engine is missing", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const ctx = createNoEngineContext();
     const system = createMaterialSystem(ctx);
     spawnGasCan(ctx, 100, 100);
@@ -952,17 +952,17 @@ describe("MaterialSystem missing engine", () => {
     system(DT);
     system(DT);
 
-    const engineWarnings = warnSpy.mock.calls.filter((args) =>
+    const engineErrors = errorSpy.mock.calls.filter((args) =>
       String(args[0]).includes("[MaterialSystem]"),
     );
-    expect(engineWarnings).toHaveLength(1);
-    expect(engineWarnings[0][0]).toContain("engine not found");
+    expect(engineErrors).toHaveLength(1);
+    expect(engineErrors[0][0]).toContain("engine not found");
 
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it("adjacency is empty (not stale) when engine is missing", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const ctx = createNoEngineContext();
     const system = createMaterialSystem(ctx);
 
@@ -976,7 +976,7 @@ describe("MaterialSystem missing engine", () => {
     expect(ctx.materialRegistry!.getAdjacentEntities(wire.physicsBody.bodyId)).toHaveLength(0);
     expect(ctx.materialRegistry!.getAdjacentEntities(metal.physicsBody.bodyId)).toHaveLength(0);
 
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });
 

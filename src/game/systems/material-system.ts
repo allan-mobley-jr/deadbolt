@@ -299,7 +299,7 @@ export function createMaterialSystem(ctx: SceneContext): SystemFn {
     const engine = matterWorld.engine as MatterEngine | undefined;
 
     if (!engine && !warnedMissingEngine) {
-      console.warn(
+      console.error(
         "[MaterialSystem] Matter.js engine not found on ctx.scene.matter.world. Adjacency detection disabled.",
       );
       warnedMissingEngine = true;
