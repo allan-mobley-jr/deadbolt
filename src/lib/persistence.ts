@@ -109,14 +109,13 @@ function openDB(): Promise<IDBDatabase> {
 export async function saveRun(run: CompletedRun): Promise<void> {
   try {
     const db = await openDB();
-    const tx = db.transaction(STORE_RUNS, "readwrite");
-    const store = tx.objectStore(store_name(tx));
 
     // Add the new run
-    await idbRequest(store.put(run));
-    await idbTransaction(tx);
+    const tx1 = db.transaction(STORE_RUNS, "readwrite");
+    tx1.objectStore(STORE_RUNS).put(run);
+    await idbTransaction(tx1);
 
-    // Prune old runs beyond MAX_HISTORY
+    // Prune old runs beyond MAX_HISTORY (separate transaction)
     await pruneOldRuns(db);
   } catch (err) {
     console.warn("[Persistence] Failed to save run:", err);
@@ -125,36 +124,42 @@ export async function saveRun(run: CompletedRun): Promise<void> {
 
 /**
  * Remove runs beyond MAX_HISTORY, keeping the most recent ones.
+ *
+ * Collects all run IDs sorted by date (oldest first), then deletes
+ * the excess in a single transaction.
  */
 async function pruneOldRuns(db: IDBDatabase): Promise<void> {
-  const tx = db.transaction(STORE_RUNS, "readwrite");
-  const store = tx.objectStore(STORE_RUNS);
-  const index = store.index("by-date");
+  // First: read all IDs sorted by date (ascending = oldest first)
+  const readTx = db.transaction(STORE_RUNS, "readonly");
+  const readIndex = readTx.objectStore(STORE_RUNS).index("by-date");
 
-  // Count total runs
-  const countReq = store.count();
-  const count = await idbRequest(countReq) as number;
-
-  if (count <= MAX_HISTORY) return;
-
-  // Open cursor from oldest (ascending by date) and delete extras
-  const toDelete = count - MAX_HISTORY;
-  let deleted = 0;
-
-  return new Promise<void>((resolve, reject) => {
-    const cursor = index.openCursor(null, "next"); // ascending = oldest first
+  const allIds = await new Promise<string[]>((resolve, reject) => {
+    const ids: string[] = [];
+    const cursor = readIndex.openCursor(null, "next");
     cursor.onsuccess = () => {
       const c = cursor.result;
-      if (c && deleted < toDelete) {
-        c.delete();
-        deleted++;
+      if (c) {
+        ids.push(c.value.id as string);
         c.continue();
       } else {
-        resolve();
+        resolve(ids);
       }
     };
     cursor.onerror = () => reject(cursor.error);
   });
+
+  if (allIds.length <= MAX_HISTORY) return;
+
+  // Second: delete the oldest excess runs
+  const toDelete = allIds.slice(0, allIds.length - MAX_HISTORY);
+  const delTx = db.transaction(STORE_RUNS, "readwrite");
+  const delStore = delTx.objectStore(STORE_RUNS);
+
+  for (const id of toDelete) {
+    delStore.delete(id);
+  }
+
+  await idbTransaction(delTx);
 }
 
 /**
@@ -306,11 +311,6 @@ function idbTransaction(tx: IDBTransaction): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
-}
-
-/** Helper to get store name (avoids shadowing). */
-function store_name(_tx: IDBTransaction): string {
-  return STORE_RUNS;
 }
 
 // ---------------------------------------------------------------------------
