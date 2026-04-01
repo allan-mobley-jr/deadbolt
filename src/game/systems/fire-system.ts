@@ -27,7 +27,6 @@ import {
 import { safeEmit } from "@/game/events/event-bus";
 import { FIRE } from "./fire-constants";
 import { MATERIAL } from "./material-constants";
-import { TILE_SIZE } from "@/game/procgen/constants";
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -58,11 +57,6 @@ function distSq(ax: number, ay: number, bx: number, by: number): number {
 /** Linear interpolation. */
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
-}
-
-/** Convert world pixels to tile coordinates. */
-function pixelToTile(px: number): number {
-  return Math.floor(px / TILE_SIZE);
 }
 
 /**
@@ -343,17 +337,18 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           );
 
           if (!hasOtherBarricades) {
-            const tileX = pixelToTile(positionCopy.x);
-            const tileY = pixelToTile(positionCopy.y);
-            const updated = ctx.pathfindingGrid.setWalkable(tileX, tileY, true);
-            if (!updated) {
-              console.warn(
-                `[FireSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
-              );
-            }
-
-            if (ctx.entryPoints?.[entryPointIndex]) {
-              ctx.entryPoints[entryPointIndex].barricaded = false;
+            const ep = ctx.entryPoints?.[entryPointIndex];
+            if (ep) {
+              // Use entry point tile coordinate, not drifted entity position
+              const tileX = ep.position.x;
+              const tileY = ep.position.y;
+              const updated = ctx.pathfindingGrid.setWalkable(tileX, tileY, true);
+              if (!updated) {
+                console.warn(
+                  `[FireSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
+                );
+              }
+              ep.barricaded = false;
             }
           }
         }

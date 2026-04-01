@@ -414,12 +414,13 @@ export function createExplosionSystem(ctx: SceneContext): SystemFn {
             );
 
             if (!hasOtherBarricades) {
-              const tileX = pixelToTile(positionCopy.x);
-              const tileY = pixelToTile(positionCopy.y);
-              ctx.pathfindingGrid.setWalkable(tileX, tileY, true);
-
-              if (ctx.entryPoints?.[entryPointIndex]) {
-                ctx.entryPoints[entryPointIndex].barricaded = false;
+              const ep = ctx.entryPoints?.[entryPointIndex];
+              if (ep) {
+                // Use entry point tile coordinate, not drifted entity position
+                const tileX = ep.position.x;
+                const tileY = ep.position.y;
+                ctx.pathfindingGrid.setWalkable(tileX, tileY, true);
+                ep.barricaded = false;
               }
             }
           }

@@ -310,19 +310,22 @@ export function createBarricadeSystem(ctx: SceneContext): SystemFn {
       );
 
       if (!hasOtherBarricades) {
-        const tileX = pixelToTile(positionCopy.x);
-        const tileY = pixelToTile(positionCopy.y);
-        const updated = pathfindingGrid.setWalkable(tileX, tileY, true);
-        if (!updated) {
-          console.warn(
-            `[BarricadeSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
-          );
-        } else {
-          safeEmit(ctx.eventBus, "topology-changed", { tileX, tileY, walkable: true });
-        }
-
-        if (entryPoints[entryPointIndex]) {
-          entryPoints[entryPointIndex].barricaded = false;
+        const ep = entryPoints[entryPointIndex];
+        if (ep) {
+          // Use the entry point's tile coordinate — not the entity's runtime
+          // position — to ensure we unblock the same tile that was blocked
+          // during placement, even if the physics body drifted.
+          const tileX = ep.position.x;
+          const tileY = ep.position.y;
+          const updated = pathfindingGrid.setWalkable(tileX, tileY, true);
+          if (!updated) {
+            console.warn(
+              `[BarricadeSystem] Failed to unblock pathfinding at tile (${tileX}, ${tileY}) — out of grid bounds`,
+            );
+          } else {
+            safeEmit(ctx.eventBus, "topology-changed", { tileX, tileY, walkable: true });
+          }
+          ep.barricaded = false;
         } else {
           console.warn(
             `[BarricadeSystem] Entry point index ${entryPointIndex} out of bounds (${entryPoints.length} entry points)`,
