@@ -106,9 +106,15 @@ export function createCameraSystem(ctx: SceneContext): SystemFn {
 
   // --- Settings ---
 
+  let reducedMotionEnabled = false;
+
   ctx.eventBus.on("cmd:settings-changed", (e) => {
     if (e.key === "screenShake" && typeof e.value === "boolean") {
       screenShakeEnabled = e.value;
+    }
+    if (e.key === "reducedMotion" && typeof e.value === "boolean") {
+      reducedMotionEnabled = e.value;
+      if (e.value) screenShakeEnabled = false;
     }
   });
 
@@ -132,20 +138,27 @@ export function createCameraSystem(ctx: SceneContext): SystemFn {
     }
 
     // --- Look-ahead offset based on movement input ---
-    const targetLAX = ctx.inputState.moveX * CAMERA.LOOK_AHEAD_DISTANCE;
-    const targetLAY = ctx.inputState.moveY * CAMERA.LOOK_AHEAD_DISTANCE;
-    lookAheadX += (targetLAX - lookAheadX) * CAMERA.LOOK_AHEAD_LERP;
-    lookAheadY += (targetLAY - lookAheadY) * CAMERA.LOOK_AHEAD_LERP;
+    if (reducedMotionEnabled) {
+      // Reduced motion: no look-ahead, instant camera snap
+      lookAheadX = 0;
+      lookAheadY = 0;
+    } else {
+      const targetLAX = ctx.inputState.moveX * CAMERA.LOOK_AHEAD_DISTANCE;
+      const targetLAY = ctx.inputState.moveY * CAMERA.LOOK_AHEAD_DISTANCE;
+      lookAheadX += (targetLAX - lookAheadX) * CAMERA.LOOK_AHEAD_LERP;
+      lookAheadY += (targetLAY - lookAheadY) * CAMERA.LOOK_AHEAD_LERP;
+    }
 
     // --- Follow target ---
     const targetX = playerX + lookAheadX;
     const targetY = playerY + lookAheadY;
 
-    // Lerp camera toward target
+    // Lerp camera toward target (reduced motion: snap instantly)
+    const followLerp = reducedMotionEnabled ? 1.0 : CAMERA.FOLLOW_LERP;
     const camCenterX = cam.scrollX + cam.width * 0.5 / currentZoom;
     const camCenterY = cam.scrollY + cam.height * 0.5 / currentZoom;
-    cam.scrollX += (targetX - camCenterX) * CAMERA.FOLLOW_LERP;
-    cam.scrollY += (targetY - camCenterY) * CAMERA.FOLLOW_LERP;
+    cam.scrollX += (targetX - camCenterX) * followLerp;
+    cam.scrollY += (targetY - camCenterY) * followLerp;
 
     // --- Zoom: keyboard edge detection ---
     if (plusKey) {
