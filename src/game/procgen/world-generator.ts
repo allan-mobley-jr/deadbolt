@@ -50,6 +50,7 @@ import { generateSpawnZones } from './spawn-zones';
  */
 export function* generateWorld(
   config: RunConfig,
+  options?: { gridWidth?: number; gridHeight?: number },
 ): Generator<GenerationProgress, WorldData, void> {
   const rng = new RNG(config.seed);
 
@@ -60,7 +61,10 @@ export function* generateWorld(
     progress: 0,
   };
 
-  const { layout, buildingClasses } = generateCityLayout(config.seed);
+  const { layout, buildingClasses } = generateCityLayout(config.seed, {
+    width: options?.gridWidth,
+    height: options?.gridHeight,
+  });
 
   // --- Stage 2: Building interiors (BSP) ---
   yield {
