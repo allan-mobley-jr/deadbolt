@@ -1,6 +1,7 @@
 import type { SystemFn } from "./system-runner";
 import type { SceneContext } from "./scene-context";
 import { movingEntities, physicsBodies } from "@/game/ecs/queries";
+import { setBodyVelocity, setBodyAngularVelocity } from "@/game/physics/matter-body";
 
 /**
  * Factory that returns a PhysicsSyncSystem.
@@ -52,12 +53,8 @@ export function createPhysicsSyncSystem(ctx: SceneContext): SystemFn {
       const stepVx = entity.velocity.vx * dt;
       const stepVy = entity.velocity.vy * dt;
 
-      body.velocity.x = stepVx;
-      body.velocity.y = stepVy;
-
-      // Also update speed/angle fields that some collision checks use
-      body.speed = Math.sqrt(stepVx * stepVx + stepVy * stepVy);
-      body.angularVelocity = 0;
+      setBodyVelocity(body, { x: stepVx, y: stepVy });
+      setBodyAngularVelocity(body, 0);
     }
 
     // 2. Step: advance physics by one fixed timestep (ms)

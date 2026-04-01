@@ -20,6 +20,11 @@ import {
   SHAMBLER_HEALTH,
 } from "@/game/systems/zombie-ai-constants";
 import { EntityPool } from "./pool";
+import {
+  setBodyPosition,
+  setBodyStatic,
+  setBodyInertia,
+} from "@/game/physics/matter-body";
 
 // ---------------------------------------------------------------------------
 // Sprite key mapping (duplicated from archetypes.ts to avoid circular dep)
@@ -104,8 +109,7 @@ export function createZombiePool(
       isStatic: true,    // Sleeping: static + sensor
       isSensor: true,
     });
-    body.inertia = Infinity;
-    body.inverseInertia = 0;
+    setBodyInertia(body, Infinity);
 
     // Build the entity object (NOT added to world — pool handles that)
     const entity: ZombieEntity = {
@@ -163,8 +167,8 @@ export function createZombiePool(
     // Wake the body and register it
     const body = bodyMap.get(entity);
     if (body) {
-      body.isStatic = false;
-      body.isSensor = false;
+      setBodyStatic(body, false);
+      body.isSensor = false; // No Matter.js API for isSensor
       bodyRegistry.register(body);
     }
   }
@@ -221,9 +225,7 @@ export function configureZombie(
   // Reposition and resize the Matter.js body
   const body = bodyMap.get(entity);
   if (body) {
-    // Matter.js Body.setPosition equivalent
-    body.position.x = x;
-    body.position.y = y;
+    setBodyPosition(body, { x, y });
     // Update body bounds for the variant's size (Matter.js vertices aren't
     // easily resizable, but since all variants use similar-sized rectangles
     // and we're using placeholder graphics, the base shambler body works
@@ -247,11 +249,10 @@ export function releaseZombie(
   const body = bodyMap.get(entity);
   if (body) {
     bodyRegistry.unregister(body.id);
-    body.isStatic = true;
-    body.isSensor = true;
+    setBodyStatic(body, true);
+    body.isSensor = true; // No Matter.js API for isSensor
     // Move off-screen to avoid stale collision
-    body.position.x = -9999;
-    body.position.y = -9999;
+    setBodyPosition(body, { x: -9999, y: -9999 });
   }
 
   pool.release(entity);
