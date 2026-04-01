@@ -74,13 +74,6 @@ describe("zombie AI constants", () => {
       expect(ZOMBIE_AI.CONVERGENCE_SPREAD).toBeGreaterThan(0);
     });
 
-    it("has positive body size", () => {
-      expect(ZOMBIE_AI.BODY_SIZE).toBeGreaterThan(0);
-    });
-
-    it("has body size smaller than player (24)", () => {
-      expect(ZOMBIE_AI.BODY_SIZE).toBeLessThan(24);
-    });
   });
 
   // -----------------------------------------------------------------------

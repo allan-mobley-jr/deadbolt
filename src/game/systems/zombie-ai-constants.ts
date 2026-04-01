@@ -168,12 +168,6 @@ export const ZOMBIE_AI = {
    * target the same barricade.
    */
   CONVERGENCE_SPREAD: 8,
-
-  /**
-   * Size of the zombie physics body (pixels). Slightly smaller than the
-   * player (24) for visual distinction and to allow them to bunch up.
-   */
-  BODY_SIZE: 20,
 } as const;
 
 // ---------------------------------------------------------------------------
