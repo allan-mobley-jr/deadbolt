@@ -74,9 +74,6 @@ export function DeathScreen() {
   const objectsUsed = useGameStore((s) => s.objectsUsed);
   const seed = useGameStore((s) => s.seed);
 
-  // --- Personal bests from persistence store ---
-  const lifetimeStats = usePersistenceStore((s) => s.lifetimeStats);
-
   // --- Clipboard state ---
   const [copied, setCopied] = useState(false);
 
@@ -84,18 +81,30 @@ export function DeathScreen() {
   const score = computeRunScore({ dayNumber, totalKills, barricadesBuilt, elapsedTotal });
 
   // --- Personal best detection (compare against PREVIOUS bests, before this run is saved) ---
-  const prevBests = useRef(lifetimeStats);
-  const isNewHighScore = score > prevBests.current.highestScore;
-  const isNewHighDay = dayNumber > prevBests.current.highestDay;
-  const isNewLongestRun = elapsedTotal > prevBests.current.longestRunTime;
+  // Uses React's "adjusting state when props change" pattern: state is updated
+  // during render when activeMenu transitions to "death", capturing the pre-save
+  // lifetime stats before the effect persists the current run.
+  const [prevMenu, setPrevMenu] = useState<string | null>(null);
+  const [records, setRecords] = useState({ score: false, day: false, time: false });
+
+  if (activeMenu === "death" && prevMenu !== "death") {
+    setPrevMenu("death");
+    const prev = usePersistenceStore.getState().lifetimeStats;
+    setRecords({
+      score: score > prev.highestScore,
+      day: dayNumber > prev.highestDay,
+      time: elapsedTotal > prev.longestRunTime,
+    });
+  } else if (activeMenu !== "death" && prevMenu === "death") {
+    setPrevMenu(activeMenu);
+    setRecords({ score: false, day: false, time: false });
+  }
 
   // --- Persist run data to IndexedDB when the death screen opens ---
   const hasSaved = useRef(false);
 
   useEffect(() => {
     if (activeMenu !== "death" || hasSaved.current) return;
-    // Capture previous bests before saving (so comparison is against pre-save state)
-    prevBests.current = { ...usePersistenceStore.getState().lifetimeStats };
     hasSaved.current = true;
 
     usePersistenceStore.getState().recordRun({
@@ -189,7 +198,7 @@ export function DeathScreen() {
               {score.toLocaleString()}
             </span>
             <p className="text-xs text-muted-foreground">Score</p>
-            {isNewHighScore && (
+            {records.score && (
               <span
                 className="inline-block mt-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 animate-in zoom-in duration-300"
                 data-testid="new-record-score"
@@ -206,12 +215,12 @@ export function DeathScreen() {
             <StatItem
               label="Time Survived"
               value={formatTime(elapsedTotal)}
-              isRecord={isNewLongestRun}
+              isRecord={records.time}
             />
             <StatItem
               label="Day Reached"
               value={String(dayNumber)}
-              isRecord={isNewHighDay}
+              isRecord={records.day}
             />
             <StatItem
               label="Wave Reached"
