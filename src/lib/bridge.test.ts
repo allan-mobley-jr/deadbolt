@@ -504,6 +504,24 @@ describe("bridge", () => {
 
       bridge.disconnect();
     });
+
+    it("adds danger notification on system-disabled event", () => {
+      const bridge = connectBridge(bus);
+
+      safeEmit(bus, "system-disabled", {
+        systemIndex: 7,
+        systemName: "MovementSystem",
+        errorCount: 5,
+      });
+
+      const notifications = useUIStore.getState().notifications;
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].message).toContain("MovementSystem");
+      expect(notifications[0].message).toContain("restart");
+      expect(notifications[0].type).toBe("danger");
+
+      bridge.disconnect();
+    });
   });
 
   // -------------------------------------------------------------------------
