@@ -55,6 +55,11 @@ export function buildGameConfig(
     parent: parentId,
     backgroundColor: "#000000",
     banner: false,
+    input: {
+      keyboard: {
+        target: window,
+      },
+    },
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
