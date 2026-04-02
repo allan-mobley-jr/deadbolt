@@ -9,6 +9,9 @@
  * All shapes use `fillRect()` exclusively (no `arc()`) for pixel-perfect
  * edges that tint cleanly without anti-aliasing artifacts.
  *
+ * Walk cycle frames shift limb positions by 1-2px from the idle frame to
+ * create a two-step walk cycle animation.
+ *
  * NO React imports allowed — this is pure TypeScript.
  */
 
@@ -40,405 +43,496 @@ const MID = "#cccccc";
 const SHADOW = "#aaaaaa";
 
 // ---------------------------------------------------------------------------
-// Player sprite (4 directional frames)
+// Player sprite (12 frames: 3 per direction × 4 directions)
 // ---------------------------------------------------------------------------
 
-/** Frame order: S=0, E=1, N=2, W=3 */
+/**
+ * Frame layout: 3 per direction (idle, walk1, walk2).
+ *   0-2:  South (idle, walk1, walk2)
+ *   3-5:  East  (idle, walk1, walk2)
+ *   6-8:  North (idle, walk1, walk2)
+ *   9-11: West  (idle, walk1, walk2)
+ */
 const PLAYER_FRAME_SIZE = 24;
-const PLAYER_FRAME_COUNT = 4;
+const PLAYER_FRAMES_PER_DIR = 3;
+const PLAYER_DIRECTIONS = 4;
+const PLAYER_FRAME_COUNT = PLAYER_FRAMES_PER_DIR * PLAYER_DIRECTIONS; // 12
 
-/**
- * Draw the player facing South (front view).
- * Top-down humanoid: head circle (pixel approximation), torso, arms, legs.
- */
-function drawPlayerSouth(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
-  const cx = ox + 12; // center x
-  const cy = oy;      // top
+// --- Shared player head/torso drawing helpers ---
 
-  // Head (6×6 rounded with pixel corners)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, cy + 1, 4, 1);   // top
-  ctx.fillRect(cx - 3, cy + 2, 6, 4);   // middle
-  ctx.fillRect(cx - 2, cy + 6, 4, 1);   // bottom
-
-  // Eyes (two dark dots on the face)
-  ctx.fillStyle = SHADOW;
-  ctx.fillRect(cx - 2, cy + 3, 1, 1);
-  ctx.fillRect(cx + 1, cy + 3, 1, 1);
-
-  // Neck
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 1, cy + 7, 2, 1);
-
-  // Torso (6×6)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 3, cy + 8, 6, 6);
-
-  // Belt/detail
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 3, cy + 13, 6, 1);
-
-  // Arms (2×5 each, beside torso)
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 5, cy + 8, 2, 5);
-  ctx.fillRect(cx + 3, cy + 8, 2, 5);
-
-  // Legs (2×5 each, below torso)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 3, cy + 14, 2, 5);
-  ctx.fillRect(cx + 1, cy + 14, 2, 5);
-
-  // Shoes
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 3, cy + 19, 2, 1);
-  ctx.fillRect(cx + 1, cy + 19, 2, 1);
-}
-
-/**
- * Draw the player facing East (right side profile).
- */
-function drawPlayerEast(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
-  const cx = ox + 12;
-  const cy = oy;
-
-  // Head (5×6 side view)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, cy + 1, 4, 1);
-  ctx.fillRect(cx - 2, cy + 2, 5, 4);
-  ctx.fillRect(cx - 2, cy + 6, 4, 1);
-
-  // Eye (single dot, right side)
-  ctx.fillStyle = SHADOW;
-  ctx.fillRect(cx + 1, cy + 3, 1, 1);
-
-  // Neck
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 1, cy + 7, 2, 1);
-
-  // Torso (4×6, slightly narrower in profile)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, cy + 8, 4, 6);
-
-  // Arm (forward-reaching, 4×2)
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx + 2, cy + 9, 3, 2);
-
-  // Back arm (partially hidden)
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 3, cy + 9, 1, 3);
-
-  // Belt
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 2, cy + 13, 4, 1);
-
-  // Legs (staggered for walking appearance)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 1, cy + 14, 2, 5);
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx + 1, cy + 15, 2, 4);
-
-  // Shoes
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 1, cy + 19, 2, 1);
-}
-
-/**
- * Draw the player facing North (back view).
- */
-function drawPlayerNorth(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
-  const cx = ox + 12;
-  const cy = oy;
-
-  // Head (6×6, no face details — back of head)
+function drawPlayerHeadSouth(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 2, cy + 1, 4, 1);
   ctx.fillRect(cx - 3, cy + 2, 6, 4);
   ctx.fillRect(cx - 2, cy + 6, 4, 1);
-
-  // Hair detail on back
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 2, cy + 2, 4, 1);
-
-  // Neck
+  ctx.fillStyle = SHADOW;
+  ctx.fillRect(cx - 2, cy + 3, 1, 1);
+  ctx.fillRect(cx + 1, cy + 3, 1, 1);
   ctx.fillStyle = LIGHT;
   ctx.fillRect(cx - 1, cy + 7, 2, 1);
+}
 
-  // Torso (6×6)
+function drawPlayerTorsoSouth(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 3, cy + 8, 6, 6);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 13, 6, 1);
+}
 
-  // Backpack/detail line
+function drawPlayerHeadEast(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 2, cy + 1, 4, 1);
+  ctx.fillRect(cx - 2, cy + 2, 5, 4);
+  ctx.fillRect(cx - 2, cy + 6, 4, 1);
+  ctx.fillStyle = SHADOW;
+  ctx.fillRect(cx + 1, cy + 3, 1, 1);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 1, cy + 7, 2, 1);
+}
+
+function drawPlayerTorsoEast(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 2, cy + 8, 4, 6);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 2, cy + 13, 4, 1);
+}
+
+function drawPlayerHeadNorth(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 2, cy + 1, 4, 1);
+  ctx.fillRect(cx - 3, cy + 2, 6, 4);
+  ctx.fillRect(cx - 2, cy + 6, 4, 1);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 2, cy + 2, 4, 1);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 1, cy + 7, 2, 1);
+}
+
+function drawPlayerTorsoNorth(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 3, cy + 8, 6, 6);
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 2, cy + 9, 4, 3);
+  ctx.fillRect(cx - 3, cy + 13, 6, 1);
+}
 
-  // Arms
+function drawPlayerHeadWest(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 2, cy + 1, 4, 1);
+  ctx.fillRect(cx - 3, cy + 2, 5, 4);
+  ctx.fillRect(cx - 2, cy + 6, 4, 1);
+  ctx.fillStyle = SHADOW;
+  ctx.fillRect(cx - 2, cy + 3, 1, 1);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 1, cy + 7, 2, 1);
+}
+
+// --- South frames ---
+
+function drawPlayerSouth(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadSouth(ctx, cx, cy);
+  drawPlayerTorsoSouth(ctx, cx, cy);
   ctx.fillStyle = LIGHT;
   ctx.fillRect(cx - 5, cy + 8, 2, 5);
   ctx.fillRect(cx + 3, cy + 8, 2, 5);
-
-  // Belt
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 3, cy + 13, 6, 1);
-
-  // Legs
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 3, cy + 14, 2, 5);
   ctx.fillRect(cx + 1, cy + 14, 2, 5);
-
-  // Shoes
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 3, cy + 19, 2, 1);
   ctx.fillRect(cx + 1, cy + 19, 2, 1);
 }
 
-/**
- * Draw the player facing West (left side profile — mirror of East).
- */
-function drawPlayerWest(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
-  const cx = ox + 12;
-  const cy = oy;
-
-  // Head (5×6 side view, mirrored)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, cy + 1, 4, 1);
-  ctx.fillRect(cx - 3, cy + 2, 5, 4);
-  ctx.fillRect(cx - 2, cy + 6, 4, 1);
-
-  // Eye (single dot, left side)
-  ctx.fillStyle = SHADOW;
-  ctx.fillRect(cx - 2, cy + 3, 1, 1);
-
-  // Neck
+function drawPlayerSouthWalk1(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadSouth(ctx, cx, cy);
+  drawPlayerTorsoSouth(ctx, cx, cy);
+  // Arms swing: left forward, right back
   ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 1, cy + 7, 2, 1);
-
-  // Torso (4×6)
+  ctx.fillRect(cx - 5, cy + 7, 2, 5);  // left arm forward (1px up)
+  ctx.fillRect(cx + 3, cy + 9, 2, 5);  // right arm back (1px down)
+  // Legs: left forward, right back
   ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, cy + 8, 4, 6);
+  ctx.fillRect(cx - 3, cy + 13, 2, 5); // left leg forward (1px up)
+  ctx.fillRect(cx + 1, cy + 15, 2, 5); // right leg back (1px down)
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 18, 2, 1);
+  ctx.fillRect(cx + 1, cy + 20, 2, 1);
+}
 
-  // Arm (forward-reaching, mirrored)
+function drawPlayerSouthWalk2(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadSouth(ctx, cx, cy);
+  drawPlayerTorsoSouth(ctx, cx, cy);
+  // Arms swing: right forward, left back (mirror of walk1)
   ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 5, cy + 9, 3, 2);
-
-  // Back arm
+  ctx.fillRect(cx - 5, cy + 9, 2, 5);
+  ctx.fillRect(cx + 3, cy + 7, 2, 5);
+  // Legs: right forward, left back
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 3, cy + 15, 2, 5);
+  ctx.fillRect(cx + 1, cy + 13, 2, 5);
   ctx.fillStyle = MID;
-  ctx.fillRect(cx + 2, cy + 9, 1, 3);
+  ctx.fillRect(cx - 3, cy + 20, 2, 1);
+  ctx.fillRect(cx + 1, cy + 18, 2, 1);
+}
 
-  // Belt
+// --- East frames ---
+
+function drawPlayerEast(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadEast(ctx, cx, cy);
+  drawPlayerTorsoEast(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx + 2, cy + 9, 3, 2);
   ctx.fillStyle = MID;
-  ctx.fillRect(cx - 2, cy + 13, 4, 1);
-
-  // Legs (staggered, mirrored)
+  ctx.fillRect(cx - 3, cy + 9, 1, 3);
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 1, cy + 14, 2, 5);
   ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 3, cy + 15, 2, 4);
-
-  // Shoes
+  ctx.fillRect(cx + 1, cy + 15, 2, 4);
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 1, cy + 19, 2, 1);
 }
 
-/** Draw the full 4-frame player sprite strip. */
+function drawPlayerEastWalk1(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadEast(ctx, cx, cy);
+  drawPlayerTorsoEast(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx + 2, cy + 8, 3, 2);  // front arm up
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 10, 1, 3); // back arm down
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 1, cy + 13, 2, 5); // front leg forward
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx + 1, cy + 16, 2, 4); // back leg back
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 1, cy + 18, 2, 1);
+}
+
+function drawPlayerEastWalk2(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadEast(ctx, cx, cy);
+  drawPlayerTorsoEast(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx + 2, cy + 10, 3, 2); // front arm down
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 8, 1, 3);  // back arm up
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 1, cy + 15, 2, 5); // front leg back
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx + 1, cy + 14, 2, 4); // back leg forward
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 1, cy + 20, 2, 1);
+}
+
+// --- North frames ---
+
+function drawPlayerNorth(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadNorth(ctx, cx, cy);
+  drawPlayerTorsoNorth(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 5, cy + 8, 2, 5);
+  ctx.fillRect(cx + 3, cy + 8, 2, 5);
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 3, cy + 14, 2, 5);
+  ctx.fillRect(cx + 1, cy + 14, 2, 5);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 19, 2, 1);
+  ctx.fillRect(cx + 1, cy + 19, 2, 1);
+}
+
+function drawPlayerNorthWalk1(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadNorth(ctx, cx, cy);
+  drawPlayerTorsoNorth(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 5, cy + 7, 2, 5);
+  ctx.fillRect(cx + 3, cy + 9, 2, 5);
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 3, cy + 13, 2, 5);
+  ctx.fillRect(cx + 1, cy + 15, 2, 5);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 18, 2, 1);
+  ctx.fillRect(cx + 1, cy + 20, 2, 1);
+}
+
+function drawPlayerNorthWalk2(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadNorth(ctx, cx, cy);
+  drawPlayerTorsoNorth(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 5, cy + 9, 2, 5);
+  ctx.fillRect(cx + 3, cy + 7, 2, 5);
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 3, cy + 15, 2, 5);
+  ctx.fillRect(cx + 1, cy + 13, 2, 5);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 3, cy + 20, 2, 1);
+  ctx.fillRect(cx + 1, cy + 18, 2, 1);
+}
+
+// --- West frames ---
+
+function drawPlayerWest(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadWest(ctx, cx, cy);
+  drawPlayerTorsoEast(ctx, cx, cy); // same torso as East
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 5, cy + 9, 3, 2);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx + 2, cy + 9, 1, 3);
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 1, cy + 14, 2, 5);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 3, cy + 15, 2, 4);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 1, cy + 19, 2, 1);
+}
+
+function drawPlayerWestWalk1(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadWest(ctx, cx, cy);
+  drawPlayerTorsoEast(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 5, cy + 8, 3, 2);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx + 2, cy + 10, 1, 3);
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 1, cy + 13, 2, 5);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 3, cy + 16, 2, 4);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 1, cy + 18, 2, 1);
+}
+
+function drawPlayerWestWalk2(ctx: CanvasRenderingContext2D, ox: number, oy: number): void {
+  const cx = ox + 12, cy = oy;
+  drawPlayerHeadWest(ctx, cx, cy);
+  drawPlayerTorsoEast(ctx, cx, cy);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 5, cy + 10, 3, 2);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx + 2, cy + 8, 1, 3);
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 1, cy + 15, 2, 5);
+  ctx.fillStyle = LIGHT;
+  ctx.fillRect(cx - 3, cy + 14, 2, 4);
+  ctx.fillStyle = MID;
+  ctx.fillRect(cx - 1, cy + 20, 2, 1);
+}
+
+/** Draw the full 12-frame player sprite strip. */
 function drawPlayerStrip(ctx: CanvasRenderingContext2D): void {
   const fw = PLAYER_FRAME_SIZE;
-  drawPlayerSouth(ctx, 0 * fw, 0);  // Frame 0: South
-  drawPlayerEast(ctx, 1 * fw, 0);   // Frame 1: East
-  drawPlayerNorth(ctx, 2 * fw, 0);  // Frame 2: North
-  drawPlayerWest(ctx, 3 * fw, 0);   // Frame 3: West
+  // South: frames 0-2
+  drawPlayerSouth(ctx, 0, 0);
+  drawPlayerSouthWalk1(ctx, fw, 0);
+  drawPlayerSouthWalk2(ctx, 2 * fw, 0);
+  // East: frames 3-5
+  drawPlayerEast(ctx, 3 * fw, 0);
+  drawPlayerEastWalk1(ctx, 4 * fw, 0);
+  drawPlayerEastWalk2(ctx, 5 * fw, 0);
+  // North: frames 6-8
+  drawPlayerNorth(ctx, 6 * fw, 0);
+  drawPlayerNorthWalk1(ctx, 7 * fw, 0);
+  drawPlayerNorthWalk2(ctx, 8 * fw, 0);
+  // West: frames 9-11
+  drawPlayerWest(ctx, 9 * fw, 0);
+  drawPlayerWestWalk1(ctx, 10 * fw, 0);
+  drawPlayerWestWalk2(ctx, 11 * fw, 0);
 }
 
 // ---------------------------------------------------------------------------
-// Zombie sprites (single-frame each)
+// Zombie sprites (2 frames each: idle + walk alternate)
 // ---------------------------------------------------------------------------
 
-/**
- * Shambler — baseline zombie. Hunched posture, ragged silhouette.
- * 20×20 visual size.
- */
-function drawZombieShambler(ctx: CanvasRenderingContext2D): void {
-  const cx = 10; // center
+/** Shambler — hunched zombie. 20×20, 2 frames. */
+function drawShamblerStrip(ctx: CanvasRenderingContext2D): void {
+  const sz = 20;
+  // Frame 0: idle (right arm reaching, left dragging)
+  drawShamblerFrame(ctx, 0, true);
+  // Frame 1: walk alternate (swap arms, shift legs)
+  drawShamblerFrame(ctx, sz, false);
+}
 
-  // Head (tilted slightly — asymmetric)
+function drawShamblerFrame(ctx: CanvasRenderingContext2D, ox: number, rightReach: boolean): void {
+  const cx = ox + 10;
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 2, 1, 5, 1);
   ctx.fillRect(cx - 3, 2, 6, 3);
   ctx.fillRect(cx - 2, 5, 5, 1);
-
-  // Hunched neck/shoulders (wide, slouching)
   ctx.fillStyle = LIGHT;
   ctx.fillRect(cx - 4, 6, 8, 2);
-
-  // Torso (slightly hunched forward)
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 3, 8, 6, 4);
-
-  // Ragged detail (torn clothing)
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 3, 11, 2, 1);
   ctx.fillRect(cx + 2, 10, 1, 2);
 
-  // Arms (one forward-reaching, one at side — asymmetric)
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx + 3, 7, 2, 4);   // right arm reaching
-  ctx.fillRect(cx + 4, 11, 1, 1);  // right hand
-  ctx.fillStyle = MID;
-  ctx.fillRect(cx - 5, 8, 2, 3);   // left arm dragging
+  if (rightReach) {
+    ctx.fillStyle = LIGHT;
+    ctx.fillRect(cx + 3, 7, 2, 4);
+    ctx.fillRect(cx + 4, 11, 1, 1);
+    ctx.fillStyle = MID;
+    ctx.fillRect(cx - 5, 8, 2, 3);
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(cx - 3, 12, 2, 5);
+    ctx.fillRect(cx + 1, 13, 2, 4);
+  } else {
+    // Swap: left arm reaching, right dragging; shift legs
+    ctx.fillStyle = LIGHT;
+    ctx.fillRect(cx - 5, 7, 2, 4);
+    ctx.fillRect(cx - 5, 11, 1, 1);
+    ctx.fillStyle = MID;
+    ctx.fillRect(cx + 3, 8, 2, 3);
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(cx - 3, 13, 2, 4);
+    ctx.fillRect(cx + 1, 12, 2, 5);
+  }
 
-  // Legs (shuffling stance)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 3, 12, 2, 5);
-  ctx.fillRect(cx + 1, 13, 2, 4);
-
-  // Feet
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 3, 17, 3, 1);
   ctx.fillRect(cx + 1, 17, 2, 1);
 }
 
-/**
- * Runner — fast, lean, angular zombie.
- * 18×18 visual size.
- */
-function drawZombieRunner(ctx: CanvasRenderingContext2D): void {
-  const cx = 9; // center
+/** Runner — lean angular zombie. 18×18, 2 frames. */
+function drawRunnerStrip(ctx: CanvasRenderingContext2D): void {
+  const sz = 18;
+  drawRunnerFrame(ctx, 0, false);
+  drawRunnerFrame(ctx, sz, true);
+}
 
-  // Small angular head
+function drawRunnerFrame(ctx: CanvasRenderingContext2D, ox: number, alternate: boolean): void {
+  const cx = ox + 9;
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 2, 0, 4, 1);
   ctx.fillRect(cx - 2, 1, 4, 3);
   ctx.fillRect(cx - 1, 4, 2, 1);
-
-  // Thin neck
   ctx.fillStyle = LIGHT;
   ctx.fillRect(cx - 1, 5, 2, 1);
-
-  // Lean torso (narrow, angular)
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 2, 6, 4, 5);
-
-  // Angular shoulders
   ctx.fillStyle = LIGHT;
   ctx.fillRect(cx - 3, 6, 1, 2);
   ctx.fillRect(cx + 2, 6, 1, 2);
 
-  // Arms (swept back, running posture)
-  ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 4, 7, 1, 3);
-  ctx.fillRect(cx - 5, 9, 1, 2);
-  ctx.fillRect(cx + 3, 7, 1, 3);
-  ctx.fillRect(cx + 4, 8, 1, 2);
+  if (!alternate) {
+    ctx.fillStyle = LIGHT;
+    ctx.fillRect(cx - 4, 7, 1, 3);
+    ctx.fillRect(cx - 5, 9, 1, 2);
+    ctx.fillRect(cx + 3, 7, 1, 3);
+    ctx.fillRect(cx + 4, 8, 1, 2);
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(cx - 2, 11, 2, 5);
+    ctx.fillRect(cx, 12, 2, 4);
+  } else {
+    // Alternate: arms and legs swap sides
+    ctx.fillStyle = LIGHT;
+    ctx.fillRect(cx + 3, 7, 1, 3);
+    ctx.fillRect(cx + 4, 9, 1, 2);
+    ctx.fillRect(cx - 4, 7, 1, 3);
+    ctx.fillRect(cx - 5, 8, 1, 2);
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(cx - 2, 12, 2, 4);
+    ctx.fillRect(cx, 11, 2, 5);
+  }
 
-  // Legs (long, sprint stance)
-  ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, 11, 2, 5);
-  ctx.fillRect(cx, 12, 2, 4);
-
-  // Clawed feet
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 3, 15, 1, 1);
   ctx.fillRect(cx - 2, 16, 2, 1);
   ctx.fillRect(cx + 1, 16, 2, 1);
 }
 
-/**
- * Brute — wide, imposing, heavy zombie.
- * 28×28 visual size.
- */
-function drawZombieBrute(ctx: CanvasRenderingContext2D): void {
-  const cx = 14; // center
+/** Brute — wide imposing zombie. 28×28, 2 frames. */
+function drawBruteStrip(ctx: CanvasRenderingContext2D): void {
+  const sz = 28;
+  drawBruteFrame(ctx, 0, false);
+  drawBruteFrame(ctx, sz, true);
+}
 
-  // Small head relative to body
+function drawBruteFrame(ctx: CanvasRenderingContext2D, ox: number, alternate: boolean): void {
+  const cx = ox + 14;
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 2, 1, 4, 1);
   ctx.fillRect(cx - 3, 2, 6, 4);
   ctx.fillRect(cx - 2, 6, 4, 1);
-
-  // Massive neck/shoulders
   ctx.fillStyle = LIGHT;
   ctx.fillRect(cx - 6, 7, 12, 2);
-
-  // Broad torso
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 6, 9, 12, 7);
-
-  // Chest detail (armour/muscles)
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 4, 10, 3, 3);
   ctx.fillRect(cx + 1, 10, 3, 3);
 
-  // Thick arms
+  const armShift = alternate ? 1 : 0;
   ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 9, 8, 3, 7);
-  ctx.fillRect(cx + 6, 8, 3, 7);
-
-  // Fists
+  ctx.fillRect(cx - 9, 8 + armShift, 3, 7);
+  ctx.fillRect(cx + 6, 8 - armShift, 3, 7);
   ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 9, 15, 3, 2);
-  ctx.fillRect(cx + 6, 15, 3, 2);
+  ctx.fillRect(cx - 9, 15 + armShift, 3, 2);
+  ctx.fillRect(cx + 6, 15 - armShift, 3, 2);
 
-  // Belt/waist
   ctx.fillStyle = MID;
   ctx.fillRect(cx - 6, 16, 12, 1);
 
-  // Thick legs
+  const legShift = alternate ? 1 : 0;
   ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 5, 17, 4, 7);
-  ctx.fillRect(cx + 1, 17, 4, 7);
-
-  // Feet
+  ctx.fillRect(cx - 5, 17 - legShift, 4, 7);
+  ctx.fillRect(cx + 1, 17 + legShift, 4, 7);
   ctx.fillStyle = MID;
-  ctx.fillRect(cx - 6, 24, 5, 2);
-  ctx.fillRect(cx + 1, 24, 5, 2);
+  ctx.fillRect(cx - 6, 24 - legShift, 5, 2);
+  ctx.fillRect(cx + 1, 24 + legShift, 5, 2);
 }
 
-/**
- * Horde member — tiny, individually weak blob.
- * 12×12 visual size.
- */
-function drawZombieHorde(ctx: CanvasRenderingContext2D): void {
-  const cx = 6; // center
+/** Horde member — tiny blob. 12×12, 2 frames. */
+function drawHordeStrip(ctx: CanvasRenderingContext2D): void {
+  const sz = 12;
+  drawHordeFrame(ctx, 0, false);
+  drawHordeFrame(ctx, sz, true);
+}
 
-  // Small round head-body blob
+function drawHordeFrame(ctx: CanvasRenderingContext2D, ox: number, alternate: boolean): void {
+  const cx = ox + 6;
   ctx.fillStyle = WHITE;
   ctx.fillRect(cx - 2, 1, 4, 1);
   ctx.fillRect(cx - 3, 2, 6, 4);
   ctx.fillRect(cx - 2, 6, 4, 1);
 
-  // Tiny arm nubs
+  // Arm nubs alternate sides
   ctx.fillStyle = LIGHT;
-  ctx.fillRect(cx - 4, 3, 1, 2);
-  ctx.fillRect(cx + 3, 3, 1, 2);
+  if (!alternate) {
+    ctx.fillRect(cx - 4, 3, 1, 2);
+    ctx.fillRect(cx + 3, 3, 1, 2);
+  } else {
+    ctx.fillRect(cx - 4, 4, 1, 2);
+    ctx.fillRect(cx + 3, 2, 1, 2);
+  }
 
-  // Stubby legs
+  // Legs shift
+  const legShift = alternate ? 1 : 0;
   ctx.fillStyle = WHITE;
-  ctx.fillRect(cx - 2, 7, 2, 3);
-  ctx.fillRect(cx, 7, 2, 3);
-
-  // Feet dots
+  ctx.fillRect(cx - 2, 7 - legShift, 2, 3);
+  ctx.fillRect(cx, 7 + legShift, 2, 3);
   ctx.fillStyle = MID;
-  ctx.fillRect(cx - 2, 10, 2, 1);
-  ctx.fillRect(cx, 10, 2, 1);
+  ctx.fillRect(cx - 2, 10 - legShift, 2, 1);
+  ctx.fillRect(cx, 10 + legShift, 2, 1);
 }
 
 // ---------------------------------------------------------------------------
-// Bullet sprite
+// Bullet sprite (single-frame)
 // ---------------------------------------------------------------------------
 
-/**
- * Bullet — bright diamond/streak shape.
- * 6×6 visual size.
- */
 function drawBullet(ctx: CanvasRenderingContext2D): void {
-  // Diamond shape
   ctx.fillStyle = WHITE;
-  ctx.fillRect(2, 0, 2, 1);  // top
-  ctx.fillRect(1, 1, 4, 1);  // upper
-  ctx.fillRect(0, 2, 6, 2);  // middle (wide)
-  ctx.fillRect(1, 4, 4, 1);  // lower
-  ctx.fillRect(2, 5, 2, 1);  // bottom
-
-  // Bright center
+  ctx.fillRect(2, 0, 2, 1);
+  ctx.fillRect(1, 1, 4, 1);
+  ctx.fillRect(0, 2, 6, 2);
+  ctx.fillRect(1, 4, 4, 1);
+  ctx.fillRect(2, 5, 2, 1);
   ctx.fillRect(2, 2, 2, 2);
 }
 
@@ -455,31 +549,31 @@ const GENERATORS: Readonly<Record<string, EntitySpriteGenerator>> = {
     frameWidth: PLAYER_FRAME_SIZE,
   },
   zombie: {
-    draw: drawZombieShambler,
-    width: 20,
+    draw: drawShamblerStrip,
+    width: 20 * 2,
     height: 20,
-    frameCount: 1,
+    frameCount: 2,
     frameWidth: 20,
   },
   zombie_runner: {
-    draw: drawZombieRunner,
-    width: 18,
+    draw: drawRunnerStrip,
+    width: 18 * 2,
     height: 18,
-    frameCount: 1,
+    frameCount: 2,
     frameWidth: 18,
   },
   zombie_brute: {
-    draw: drawZombieBrute,
-    width: 28,
+    draw: drawBruteStrip,
+    width: 28 * 2,
     height: 28,
-    frameCount: 1,
+    frameCount: 2,
     frameWidth: 28,
   },
   zombie_horde: {
-    draw: drawZombieHorde,
-    width: 12,
+    draw: drawHordeStrip,
+    width: 12 * 2,
     height: 12,
-    frameCount: 1,
+    frameCount: 2,
     frameWidth: 12,
   },
   bullet: {
@@ -491,19 +585,12 @@ const GENERATORS: Readonly<Record<string, EntitySpriteGenerator>> = {
   },
 };
 
-/**
- * Look up a sprite generator for an entity key.
- *
- * Returns `null` for keys without custom generators (e.g. world objects),
- * which should use the default white-rectangle fallback.
- */
 export function getEntitySpriteGenerator(
   spriteKey: string,
 ): EntitySpriteGenerator | null {
   return GENERATORS[spriteKey] ?? null;
 }
 
-/** All sprite keys that have custom generators. */
 export function getGeneratorKeys(): string[] {
   return Object.keys(GENERATORS);
 }

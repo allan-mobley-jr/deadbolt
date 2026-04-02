@@ -73,40 +73,43 @@ describe("getEntitySpriteGenerator", () => {
 // ---------------------------------------------------------------------------
 
 describe("generator metadata", () => {
-  it("player has 4 frames at 24px each", () => {
+  it("player has 12 frames at 24px each (3 per direction × 4 directions)", () => {
     const gen = getEntitySpriteGenerator("player")!;
-    expect(gen.frameCount).toBe(4);
+    expect(gen.frameCount).toBe(12);
     expect(gen.frameWidth).toBe(24);
-    expect(gen.width).toBe(96); // 4 × 24
+    expect(gen.width).toBe(288); // 12 × 24
     expect(gen.height).toBe(24);
   });
 
-  it("zombie has 1 frame at 20×20", () => {
+  it("zombie has 2 frames at 20×20", () => {
     const gen = getEntitySpriteGenerator("zombie")!;
-    expect(gen.frameCount).toBe(1);
+    expect(gen.frameCount).toBe(2);
     expect(gen.frameWidth).toBe(20);
-    expect(gen.width).toBe(20);
+    expect(gen.width).toBe(40);
     expect(gen.height).toBe(20);
   });
 
-  it("zombie_runner has 1 frame at 18×18", () => {
+  it("zombie_runner has 2 frames at 18×18", () => {
     const gen = getEntitySpriteGenerator("zombie_runner")!;
-    expect(gen.frameCount).toBe(1);
-    expect(gen.width).toBe(18);
+    expect(gen.frameCount).toBe(2);
+    expect(gen.frameWidth).toBe(18);
+    expect(gen.width).toBe(36);
     expect(gen.height).toBe(18);
   });
 
-  it("zombie_brute has 1 frame at 28×28", () => {
+  it("zombie_brute has 2 frames at 28×28", () => {
     const gen = getEntitySpriteGenerator("zombie_brute")!;
-    expect(gen.frameCount).toBe(1);
-    expect(gen.width).toBe(28);
+    expect(gen.frameCount).toBe(2);
+    expect(gen.frameWidth).toBe(28);
+    expect(gen.width).toBe(56);
     expect(gen.height).toBe(28);
   });
 
-  it("zombie_horde has 1 frame at 12×12", () => {
+  it("zombie_horde has 2 frames at 12×12", () => {
     const gen = getEntitySpriteGenerator("zombie_horde")!;
-    expect(gen.frameCount).toBe(1);
-    expect(gen.width).toBe(12);
+    expect(gen.frameCount).toBe(2);
+    expect(gen.frameWidth).toBe(12);
+    expect(gen.width).toBe(24);
     expect(gen.height).toBe(12);
   });
 
@@ -161,7 +164,7 @@ describe("drawing operations", () => {
     }
   });
 
-  it("player generator draws across all 4 frames", () => {
+  it("player generator draws across all 12 frames", () => {
     const gen = getEntitySpriteGenerator("player")!;
     const ctx = createMockCtx();
     gen.draw(ctx);
@@ -171,16 +174,13 @@ describe("drawing operations", () => {
       (args: unknown[]) => args[0] as number,
     );
 
-    // Should have drawing in frames 0 (x: 0-23), 1 (x: 24-47), 2 (x: 48-71), 3 (x: 72-95)
-    const hasFrame0 = xPositions.some((x) => x >= 0 && x < 24);
-    const hasFrame1 = xPositions.some((x) => x >= 24 && x < 48);
-    const hasFrame2 = xPositions.some((x) => x >= 48 && x < 72);
-    const hasFrame3 = xPositions.some((x) => x >= 72 && x < 96);
-
-    expect(hasFrame0, "missing frame 0 (South)").toBe(true);
-    expect(hasFrame1, "missing frame 1 (East)").toBe(true);
-    expect(hasFrame2, "missing frame 2 (North)").toBe(true);
-    expect(hasFrame3, "missing frame 3 (West)").toBe(true);
+    // Should have drawing in all 12 frames (each 24px wide)
+    for (let i = 0; i < 12; i++) {
+      const lo = i * 24;
+      const hi = lo + 24;
+      const hasFrame = xPositions.some((x) => x >= lo && x < hi);
+      expect(hasFrame, `missing frame ${i}`).toBe(true);
+    }
   });
 
   it("single-frame generators draw within their bounds", () => {

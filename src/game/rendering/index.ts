@@ -26,3 +26,7 @@ export type { TileSpriteDrawFn } from "./generators/tile-sprites";
 
 // Particle sprite generators
 export { PARTICLE_GENERATORS } from "./generators/particle-sprites";
+
+// Animation constants
+export { PLAYER_ANIMS, ZOMBIE_ANIMS, ANIM_FPS, DIRECTION_SUFFIXES, getZombieWalkFps } from "./animation-constants";
+export type { AnimDef } from "./animation-constants";
