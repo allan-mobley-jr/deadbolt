@@ -126,6 +126,22 @@ describe("NotificationToasts", () => {
     expect(screen.getByText(/restart/i)).toBeTruthy();
   });
 
+  it("clears auto-dismiss timer on unmount", () => {
+    vi.useFakeTimers();
+
+    addNotification({ id: "unmount-test", type: "danger", message: "Unmount" });
+    const { unmount } = render(<NotificationToasts />);
+
+    // Unmount before the timer fires
+    unmount();
+
+    // Advance past the danger timeout
+    vi.advanceTimersByTime(10_000);
+
+    // Notification should still be in the store (timer was cleared)
+    expect(useUIStore.getState().notifications).toHaveLength(1);
+  });
+
   it("has accessible role and aria attributes", () => {
     addNotification({ message: "Accessible" });
     render(<NotificationToasts />);
