@@ -3,7 +3,7 @@ import { generateTileset } from "@/game/tiles/tileset-generator";
 import { TILE_SIZE } from "@/game/tiles/tile-types";
 import { ALL_SOUND_KEYS } from "@/game/systems/audio-constants";
 import { PARTICLE_TEXTURES } from "@/game/systems/particle-constants";
-import { initializeSpriteRegistry } from "@/game/rendering/sprite-registry";
+import { initializeSpriteRegistry, ATLAS_KEYS } from "@/game/rendering/sprite-registry";
 import { PARTICLE_GENERATORS } from "@/game/rendering/generators/particle-sprites";
 
 /** Texture key for the player sprite. */
@@ -20,6 +20,51 @@ export const PLAYER_SIZE = 24;
 export default class BootScene extends Phaser.Scene {
   constructor() {
     super({ key: "BootScene" });
+  }
+
+  /**
+   * Attempt to load external atlas files from public/assets/sprites/.
+   *
+   * Atlas files are optional — if they don't exist, Phaser's loader fires
+   * error events that we catch and silently ignore. Any successfully loaded
+   * atlas frames take priority over programmatic generation via the sprite
+   * registry's hot-swap check.
+   *
+   * Atlas format: Phaser-standard JSON Hash (TexturePacker / Aseprite / free-tex-packer).
+   */
+  preload(): void {
+    // Suppress individual file load errors (atlas files are optional)
+    const failedKeys = new Set<string>();
+    this.load.on("loaderror", (file: { key?: string }) => {
+      if (file.key) failedKeys.add(file.key);
+    });
+
+    // Queue atlas files — Phaser will skip missing files via the error handler
+    this.load.atlas(
+      ATLAS_KEYS.ENTITIES,
+      "/assets/sprites/entities.png",
+      "/assets/sprites/entities.json",
+    );
+    this.load.atlas(
+      ATLAS_KEYS.OBJECTS,
+      "/assets/sprites/objects.png",
+      "/assets/sprites/objects.json",
+    );
+    this.load.atlas(
+      ATLAS_KEYS.UI,
+      "/assets/sprites/ui.png",
+      "/assets/sprites/ui.json",
+    );
+
+    // After all loads complete/fail, log which atlases loaded
+    this.load.once("complete", () => {
+      for (const key of Object.values(ATLAS_KEYS)) {
+        if (failedKeys.has(key)) continue;
+        if (this.textures.exists(key)) {
+          console.info(`[BootScene] Atlas "${key}" loaded — sprites will use atlas frames.`);
+        }
+      }
+    });
   }
 
   create(): void {

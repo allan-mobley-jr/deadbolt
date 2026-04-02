@@ -3,7 +3,7 @@ import BootScene from "@/game/scenes/boot-scene";
 import { PLAYER_TEXTURE_KEY, PLAYER_SIZE } from "@/game/scenes/boot-scene";
 import { TILE_SIZE } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
-import { resetSpriteRegistry } from "@/game/rendering/sprite-registry";
+import { resetSpriteRegistry, ATLAS_KEYS } from "@/game/rendering/sprite-registry";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -30,8 +30,14 @@ function createMockScene() {
   scene.textures = {
     createCanvas: vi.fn().mockImplementation(() => createMockCanvasTexture()),
     exists: vi.fn().mockReturnValue(false),
-    get: vi.fn().mockReturnValue({ add: vi.fn() }),
+    get: vi.fn().mockReturnValue({ add: vi.fn(), has: vi.fn().mockReturnValue(false) }),
   } as unknown as Phaser.Textures.TextureManager;
+
+  scene.load = {
+    atlas: vi.fn(),
+    on: vi.fn(),
+    once: vi.fn(),
+  } as unknown as Phaser.Loader.LoaderPlugin;
 
   scene.game = {
     events: {
@@ -162,5 +168,51 @@ describe("BootScene", () => {
 
     expect(scene.scene.start).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  // -------------------------------------------------------------------------
+  // Atlas preloading (issue #181)
+  // -------------------------------------------------------------------------
+
+  describe("atlas preloading", () => {
+    it("has a preload method", () => {
+      expect(typeof scene.preload).toBe("function");
+    });
+
+    it("queues three atlas files in preload", () => {
+      scene.preload();
+
+      const loadAtlas = scene.load.atlas as ReturnType<typeof vi.fn>;
+      expect(loadAtlas).toHaveBeenCalledTimes(3);
+      expect(loadAtlas).toHaveBeenCalledWith(
+        ATLAS_KEYS.ENTITIES,
+        "/assets/sprites/entities.png",
+        "/assets/sprites/entities.json",
+      );
+      expect(loadAtlas).toHaveBeenCalledWith(
+        ATLAS_KEYS.OBJECTS,
+        "/assets/sprites/objects.png",
+        "/assets/sprites/objects.json",
+      );
+      expect(loadAtlas).toHaveBeenCalledWith(
+        ATLAS_KEYS.UI,
+        "/assets/sprites/ui.png",
+        "/assets/sprites/ui.json",
+      );
+    });
+
+    it("registers a loaderror handler for graceful fallback", () => {
+      scene.preload();
+
+      const loadOn = scene.load.on as ReturnType<typeof vi.fn>;
+      expect(loadOn).toHaveBeenCalledWith("loaderror", expect.any(Function));
+    });
+
+    it("registers a complete handler for logging", () => {
+      scene.preload();
+
+      const loadOnce = scene.load.once as ReturnType<typeof vi.fn>;
+      expect(loadOnce).toHaveBeenCalledWith("complete", expect.any(Function));
+    });
   });
 });
