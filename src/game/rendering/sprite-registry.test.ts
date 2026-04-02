@@ -198,32 +198,30 @@ describe("SpriteRegistry", () => {
   // Entity sprite generators (issue #176)
   // -------------------------------------------------------------------------
 
-  it("creates wider canvas for player sprite strip (4 frames)", () => {
+  it("creates wider canvas for player sprite strip (12 frames)", () => {
     const { scene, canvases } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
     const playerCanvas = canvases.find((c) => c.key === "spr_player");
     expect(playerCanvas).toBeDefined();
-    // 4 frames × 24px = 96px wide, 24px tall
-    expect(playerCanvas!.width).toBe(96);
+    // 12 frames × 24px = 288px wide, 24px tall
+    expect(playerCanvas!.width).toBe(288);
     expect(playerCanvas!.height).toBe(24);
   });
 
-  it("defines 4 frame regions on the player texture", () => {
+  it("defines 12 frame regions on the player texture", () => {
     const { scene, mockTextureAdd } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
-    // textures.get should have been called for multi-frame textures
     const getTextures = scene.textures.get as ReturnType<typeof vi.fn>;
     expect(getTextures).toHaveBeenCalledWith("spr_player");
 
-    // 4 frame definitions: (index, sourceIndex=0, x, y, width, height)
-    expect(mockTextureAdd).toHaveBeenCalledWith(0, 0, 0, 0, 24, 24);
-    expect(mockTextureAdd).toHaveBeenCalledWith(1, 0, 24, 0, 24, 24);
-    expect(mockTextureAdd).toHaveBeenCalledWith(2, 0, 48, 0, 24, 24);
-    expect(mockTextureAdd).toHaveBeenCalledWith(3, 0, 72, 0, 24, 24);
+    // 12 frame definitions at 24px offsets
+    for (let i = 0; i < 12; i++) {
+      expect(mockTextureAdd).toHaveBeenCalledWith(i, 0, i * 24, 0, 24, 24);
+    }
   });
 
   it("sets defaultFrame on player entry", () => {
@@ -235,30 +233,39 @@ describe("SpriteRegistry", () => {
     expect(entry.defaultFrame).toBe(0);
   });
 
+  it("sets defaultFrame on multi-frame zombie entries", () => {
+    const { scene } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    expect(registry.get("zombie").defaultFrame).toBe(0);
+    expect(registry.get("zombie_runner").defaultFrame).toBe(0);
+    expect(registry.get("zombie_brute").defaultFrame).toBe(0);
+    expect(registry.get("zombie_horde").defaultFrame).toBe(0);
+  });
+
   it("does not set defaultFrame on single-frame entities", () => {
     const { scene } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
-    expect(registry.get("zombie").defaultFrame).toBeUndefined();
-    expect(registry.get("zombie_runner").defaultFrame).toBeUndefined();
     expect(registry.get("bullet").defaultFrame).toBeUndefined();
   });
 
-  it("uses entity generators for known entity keys", () => {
+  it("uses entity generators for known entity keys with walk frames", () => {
     const { scene, canvases } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
-    // Entity canvases should match generator dimensions (not all white squares)
+    // Zombie canvases should be 2-frame strips (double width)
     const zombieCanvas = canvases.find((c) => c.key === "spr_zombie");
     expect(zombieCanvas).toBeDefined();
-    expect(zombieCanvas!.width).toBe(20);
+    expect(zombieCanvas!.width).toBe(40); // 2 × 20
     expect(zombieCanvas!.height).toBe(20);
 
     const bruteCanvas = canvases.find((c) => c.key === "spr_zombie_brute");
     expect(bruteCanvas).toBeDefined();
-    expect(bruteCanvas!.width).toBe(28);
+    expect(bruteCanvas!.width).toBe(56); // 2 × 28
     expect(bruteCanvas!.height).toBe(28);
   });
 

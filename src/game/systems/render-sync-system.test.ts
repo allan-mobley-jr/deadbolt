@@ -64,8 +64,9 @@ function createMockRegistry(): SpriteRegistry {
       bullet: 6,
     };
     const size = sizes[key] ?? 16;
-    // Player has multi-frame texture with defaultFrame
-    const defaultFrame = key === "player" ? 0 : undefined;
+    // Multi-frame entities have defaultFrame
+    const multiFrameKeys = new Set(["player", "zombie", "zombie_runner", "zombie_brute", "zombie_horde"]);
+    const defaultFrame = multiFrameKeys.has(key) ? 0 : undefined;
     return { textureKey: `spr_${key}`, width: size, height: size, defaultFrame };
   });
   return registry;
@@ -441,7 +442,7 @@ describe("RenderSyncSystem", () => {
       expect(mockSpr.setFrame).toHaveBeenCalledWith(0);
     });
 
-    it("sets frame to East (1) when aiming right", () => {
+    it("sets frame to East idle (3) when aiming right with no velocity", () => {
       const { ctx, addSprite, registry } = createMockContext(0);
       const mockSpr = createMockSprite(100, 100);
       addSprite.mockReturnValue(mockSpr);
@@ -460,9 +461,9 @@ describe("RenderSyncSystem", () => {
 
       system(DT);
 
-      // Last setFrame call should be East (1)
+      // East idle = frame 3 (animation frame 0 of idle_e)
       const lastCall = mockSpr.setFrame.mock.calls.at(-1);
-      expect(lastCall![0]).toBe(1);
+      expect(lastCall![0]).toBe(3);
     });
 
     it("sets frame to South (0) when aiming down", () => {
@@ -488,7 +489,7 @@ describe("RenderSyncSystem", () => {
       expect(lastCall![0]).toBe(0);
     });
 
-    it("sets frame to North (2) when aiming up", () => {
+    it("sets frame to North idle (6) when aiming up", () => {
       const { ctx, addSprite, registry } = createMockContext(0);
       const mockSpr = createMockSprite(100, 100);
       addSprite.mockReturnValue(mockSpr);
@@ -508,10 +509,11 @@ describe("RenderSyncSystem", () => {
       system(DT);
 
       const lastCall = mockSpr.setFrame.mock.calls.at(-1);
-      expect(lastCall![0]).toBe(2);
+      // North idle = frame 6
+      expect(lastCall![0]).toBe(6);
     });
 
-    it("sets frame to West (3) when aiming left", () => {
+    it("sets frame to West idle (9) when aiming left", () => {
       const { ctx, addSprite, registry } = createMockContext(0);
       const mockSpr = createMockSprite(100, 100);
       addSprite.mockReturnValue(mockSpr);
@@ -530,8 +532,9 @@ describe("RenderSyncSystem", () => {
 
       system(DT);
 
+      // West idle = frame 9
       const lastCall = mockSpr.setFrame.mock.calls.at(-1);
-      expect(lastCall![0]).toBe(3);
+      expect(lastCall![0]).toBe(9);
     });
   });
 
