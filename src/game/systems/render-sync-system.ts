@@ -10,6 +10,8 @@ import { FIRE } from "./fire-constants";
 import { ELECTRICITY } from "./electricity-constants";
 import { PALETTE, resolveColor, colorByHpTier } from "@/game/rendering/palette";
 import type { SpriteRegistry } from "@/game/rendering/sprite-registry";
+import { PLAYER_ANIMS, ZOMBIE_ANIMS, DIRECTION_SUFFIXES, ANIM_FPS, getZombieWalkFps } from "@/game/rendering/animation-constants";
+import type { AnimDef } from "@/game/rendering/animation-constants";
 
 // ---------------------------------------------------------------------------
 // Visual config
@@ -289,6 +291,40 @@ export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegist
   /** Total elapsed time for i-frame flicker calculation. */
   let totalElapsed = 0;
 
+  // --- Animation state tracking ---
+  interface AnimState {
+    anim: string;
+    frame: number;
+    elapsed: number;
+    fps: number;
+  }
+
+  const animStates = new Map<Entity, AnimState>();
+
+  function setAnim(entity: Entity, animName: string, fps: number): void {
+    const current = animStates.get(entity);
+    if (current && current.anim === animName) return;
+    animStates.set(entity, { anim: animName, frame: 0, elapsed: 0, fps });
+  }
+
+  function advanceAnim(entity: Entity, dt: number, animDefs: Readonly<Record<string, AnimDef>>): number {
+    const state = animStates.get(entity);
+    if (!state) return 0;
+    const def = animDefs[state.anim];
+    if (!def || def.frames.length <= 1) return def?.frames[0] ?? 0;
+
+    state.elapsed += dt;
+    const frameDuration = 1 / state.fps;
+    while (state.elapsed >= frameDuration) {
+      state.elapsed -= frameDuration;
+      state.frame++;
+      if (state.frame >= def.frames.length) {
+        state.frame = def.loop ? 0 : def.frames.length - 1;
+      }
+    }
+    return def.frames[state.frame];
+  }
+
   return (_dt: number): void => {
     const alpha = ctx.getAlpha();
     const { scene, inputState } = ctx;
@@ -330,6 +366,21 @@ export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegist
       } else if (entity.material && !entity.barricade) {
         // Reset to the base sprite colour when not burning or electrified.
         sprite.setTint(resolveColor(entity.renderable.spriteKey));
+      }
+
+      // --- Zombie animation ---
+      if (entity.aiState && entity.zombieType) {
+        let zombieAnim: string;
+        switch (entity.aiState.state) {
+          case "attacking": zombieAnim = "attack"; break;
+          case "staggered": zombieAnim = "stagger"; break;
+          case "pathing":   zombieAnim = "walk"; break;
+          default:          zombieAnim = "idle";
+        }
+        const fps = getZombieWalkFps(entity.zombieType.variant);
+        setAnim(entity, zombieAnim, fps);
+        const zFrame = advanceAnim(entity, _dt, ZOMBIE_ANIMS);
+        sprite.setFrame(zFrame);
       }
 
       // --- Color-blind mode: shape indicators on zombie sprites ---
@@ -401,6 +452,7 @@ export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegist
       if (!activeEntities.has(entity) && !deathFlashes.has(entity)) {
         sprite.destroy();
         sprites.delete(entity);
+        animStates.delete(entity);
         // Also clean up color-blind shape overlays
         const overlay = shapeOverlays.get(entity);
         if (overlay) {
@@ -439,9 +491,29 @@ export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegist
           );
           aimGfx.strokePath();
 
-          // Update player sprite direction based on aim angle
+          // Update player sprite direction and animation based on aim angle
           const aimAngle = Math.atan2(dy, dx);
-          playerSprite.setFrame(angleToDirectionFrame(aimAngle));
+          const dirIndex = angleToDirectionFrame(aimAngle);
+          const dirSuffix = DIRECTION_SUFFIXES[dirIndex];
+
+          // Determine player animation from ECS state
+          const cp = combatPlayerEntities.entities[0];
+          const isAttacking = cp && cp.combatState.swingTimeRemaining > 0;
+          const vel = player.velocity;
+          const speedSq = vel ? vel.vx * vel.vx + vel.vy * vel.vy : 0;
+
+          let playerAnim: string;
+          if (isAttacking) {
+            playerAnim = `attack_${dirSuffix}`;
+          } else if (speedSq > 1) {
+            playerAnim = `walk_${dirSuffix}`;
+          } else {
+            playerAnim = `idle_${dirSuffix}`;
+          }
+
+          setAnim(player, playerAnim, ANIM_FPS.PLAYER_WALK);
+          const globalFrame = advanceAnim(player, _dt, PLAYER_ANIMS);
+          playerSprite.setFrame(globalFrame);
         }
 
         // --- Equipped item indicator ---
@@ -637,6 +709,7 @@ export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegist
       const remaining = timeLeft - _dt;
       if (remaining <= 0) {
         deathFlashes.delete(entity);
+        animStates.delete(entity);
         // Sprite was preserved past entity removal for the flash — destroy it now
         if (sprite) {
           sprite.destroy();
