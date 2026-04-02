@@ -22,6 +22,16 @@ export default function GameContainer() {
         createGame("game-container");
         destroy = destroyGame;
 
+        // Focus the Phaser canvas so the browser directs keyboard
+        // events to the game area. tabindex is required because canvas
+        // elements are not natively focusable.
+        const parent = document.getElementById("game-container");
+        const canvas = parent?.querySelector("canvas");
+        if (canvas) {
+          canvas.setAttribute("tabindex", "0");
+          canvas.focus();
+        }
+
         // Connect the bridge once the bus is available.
         // The bus is set synchronously in GameScene.create(), which runs
         // during scene boot after createGame(). Poll briefly in case

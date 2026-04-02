@@ -58,6 +58,15 @@ describe("buildGameConfig", () => {
     const config = buildGameConfig("test");
     expect(config.banner).toBe(false);
   });
+
+  it("binds keyboard events to window", () => {
+    const config = buildGameConfig("test");
+    expect(config.input).toEqual({
+      keyboard: {
+        target: window,
+      },
+    });
+  });
 });
 
 describe("game singleton", () => {

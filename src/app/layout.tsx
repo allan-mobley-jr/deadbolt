@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://deadbolt.vercel.app"),
+  metadataBase: new URL("https://deadbolt-hazel.vercel.app"),
   title: "Deadbolt",
   description:
     "A top-down zombie survival base builder that runs entirely in the browser",

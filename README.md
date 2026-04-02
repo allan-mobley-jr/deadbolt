@@ -2,7 +2,7 @@
 
 A top-down zombie survival base builder that runs entirely in the browser.
 
-[**Play Now →**](https://deadbolt.vercel.app)
+[**Play Now →**](https://deadbolt-hazel.vercel.app)
 
 ## About
 
