@@ -208,6 +208,17 @@ export function connectBridge(bus: GameEventBus): BridgeConnection {
     });
   });
 
+  // --- System health notifications ------------------------------------------
+
+  onBus("system-disabled", (e) => {
+    useUIStore.getState().addNotification({
+      id: generateEphemeralId("sys-disabled"),
+      message: `"${e.systemName}" was disabled due to repeated errors. Consider restarting the run.`,
+      type: "danger",
+      timestamp: Date.now(),
+    });
+  });
+
   // --- Minimap data (issue #33) ---------------------------------------------
 
   onBus("minimap-init", (e) => {

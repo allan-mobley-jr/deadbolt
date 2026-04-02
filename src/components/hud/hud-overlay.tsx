@@ -7,6 +7,7 @@ import { WaveIndicator } from "./wave-indicator";
 import { InventoryBar } from "./inventory-bar";
 import { Minimap } from "./minimap";
 import { LowHealthVignette } from "./low-health-vignette";
+import { NotificationToasts } from "./notification-toasts";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -40,6 +41,7 @@ export function HudOverlay() {
       <Minimap />
       <InventoryBar />
       <LowHealthVignette />
+      <NotificationToasts />
     </div>
   );
 }
