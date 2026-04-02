@@ -19,3 +19,7 @@ export { getObjectSpriteGenerator, getObjectGeneratorKeys } from "./generators/o
 
 // UI icon generators
 export { getUiSpriteGenerator, getUiGeneratorKeys } from "./generators/ui-sprites";
+
+// Tile sprite generators
+export { getTileSpriteDrawFn } from "./generators/tile-sprites";
+export type { TileSpriteDrawFn } from "./generators/tile-sprites";
