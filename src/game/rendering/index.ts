@@ -7,6 +7,7 @@ export {
   getSpriteRegistry,
   initializeSpriteRegistry,
   resetSpriteRegistry,
+  ATLAS_KEYS,
 } from "./sprite-registry";
 export type { SpriteEntry } from "./sprite-registry";
 

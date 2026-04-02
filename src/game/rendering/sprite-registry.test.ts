@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { SpriteRegistry, resetSpriteRegistry } from "./sprite-registry";
+import { SpriteRegistry, resetSpriteRegistry, ATLAS_KEYS } from "./sprite-registry";
 
 // ---------------------------------------------------------------------------
 // Mock Phaser scene with texture manager
@@ -17,6 +17,12 @@ function createMockScene() {
   const existingKeys = new Set<string>();
   const mockTextureAdd = vi.fn();
 
+  /**
+   * Atlas mock: maps atlasKey → set of frame names.
+   * Populate via `atlasFrames.set("atlas-entities", new Set(["zombie"]))`.
+   */
+  const atlasFrames = new Map<string, Set<string>>();
+
   const scene = {
     textures: {
       exists: vi.fn().mockImplementation((key: string) => existingKeys.has(key)),
@@ -26,11 +32,17 @@ function createMockScene() {
         canvases.push(canvas);
         return canvas;
       }),
-      get: vi.fn().mockReturnValue({ add: mockTextureAdd }),
+      get: vi.fn().mockImplementation((key: string) => {
+        const frames = atlasFrames.get(key);
+        return {
+          add: mockTextureAdd,
+          has: (frameName: string) => frames?.has(frameName) ?? false,
+        };
+      }),
     },
   } as unknown as Phaser.Scene;
 
-  return { scene, canvases, existingKeys, mockTextureAdd };
+  return { scene, canvases, existingKeys, mockTextureAdd, atlasFrames };
 }
 
 describe("SpriteRegistry", () => {
@@ -299,5 +311,100 @@ describe("SpriteRegistry", () => {
     expect(entry.textureKey).toBe("spr_ui_bookshelf");
     expect(entry.width).toBe(16);
     expect(entry.height).toBe(16);
+  });
+
+  // -------------------------------------------------------------------------
+  // Atlas pipeline (issue #181)
+  // -------------------------------------------------------------------------
+
+  it("prioritises atlas frame over programmatic generation", () => {
+    const { scene, canvases, existingKeys, atlasFrames } = createMockScene();
+
+    // Simulate a loaded atlas with a "zombie" frame
+    existingKeys.add(ATLAS_KEYS.ENTITIES);
+    atlasFrames.set(ATLAS_KEYS.ENTITIES, new Set(["zombie"]));
+
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // Entry should use the atlas texture key + frame name
+    const entry = registry.get("zombie");
+    expect(entry.textureKey).toBe(ATLAS_KEYS.ENTITIES);
+    expect(entry.defaultFrame).toBe("zombie");
+
+    // No programmatic canvas should have been created for zombie
+    const zombieCanvas = canvases.find((c) => c.key === "spr_zombie");
+    expect(zombieCanvas).toBeUndefined();
+  });
+
+  it("falls back to programmatic generation when atlas has no matching frame", () => {
+    const { scene, canvases, existingKeys, atlasFrames } = createMockScene();
+
+    // Atlas loaded but contains no zombie frame
+    existingKeys.add(ATLAS_KEYS.ENTITIES);
+    atlasFrames.set(ATLAS_KEYS.ENTITIES, new Set(["bullet"]));
+
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // Zombie should still be programmatically generated
+    const entry = registry.get("zombie");
+    expect(entry.textureKey).toBe("spr_zombie");
+
+    const zombieCanvas = canvases.find((c) => c.key === "spr_zombie");
+    expect(zombieCanvas).toBeDefined();
+  });
+
+  it("supports partial atlas coverage (some frames from atlas, rest programmatic)", () => {
+    const { scene, canvases, existingKeys, atlasFrames } = createMockScene();
+
+    // Atlas has zombie but not zombie_runner
+    existingKeys.add(ATLAS_KEYS.ENTITIES);
+    atlasFrames.set(ATLAS_KEYS.ENTITIES, new Set(["zombie"]));
+
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // zombie → atlas
+    expect(registry.get("zombie").textureKey).toBe(ATLAS_KEYS.ENTITIES);
+    // zombie_runner → programmatic
+    expect(registry.get("zombie_runner").textureKey).toBe("spr_zombie_runner");
+    // player → programmatic (not in atlas)
+    expect(registry.get("player").textureKey).toBe("spr_player");
+  });
+
+  it("falls back gracefully when no atlas files are loaded (current state)", () => {
+    const { scene, canvases } = createMockScene();
+    // No atlas keys in existingKeys — default state
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // All entries should use spr_ prefix (programmatic)
+    expect(registry.get("player").textureKey).toBe("spr_player");
+    expect(registry.get("zombie").textureKey).toBe("spr_zombie");
+    expect(registry.get("bookshelf").textureKey).toBe("spr_bookshelf");
+
+    // Programmatic canvases should have been created
+    expect(canvases.length).toBeGreaterThan(10);
+  });
+
+  it("prioritises atlas frames for UI icons", () => {
+    const { scene, existingKeys, atlasFrames } = createMockScene();
+
+    existingKeys.add(ATLAS_KEYS.UI);
+    atlasFrames.set(ATLAS_KEYS.UI, new Set(["ui_bookshelf"]));
+
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    const entry = registry.get("ui_bookshelf");
+    expect(entry.textureKey).toBe(ATLAS_KEYS.UI);
+    expect(entry.defaultFrame).toBe("ui_bookshelf");
+  });
+
+  it("exports ATLAS_KEYS constants", () => {
+    expect(ATLAS_KEYS.ENTITIES).toBe("atlas-entities");
+    expect(ATLAS_KEYS.OBJECTS).toBe("atlas-objects");
+    expect(ATLAS_KEYS.UI).toBe("atlas-ui");
   });
 });

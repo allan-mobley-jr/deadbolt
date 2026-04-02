@@ -71,6 +71,44 @@ const ZOMBIE_VISUAL_SIZES: Readonly<Record<string, number>> = {
 const TEX_PREFIX = "spr_";
 
 // ---------------------------------------------------------------------------
+// Atlas support
+// ---------------------------------------------------------------------------
+
+/**
+ * Atlas texture keys that the preload phase attempts to load.
+ * If an atlas is loaded, its frame names are checked against sprite keys
+ * before falling back to programmatic generation.
+ */
+export const ATLAS_KEYS = {
+  ENTITIES: "atlas-entities",
+  OBJECTS: "atlas-objects",
+  UI: "atlas-ui",
+} as const;
+
+/** All atlas keys as an iterable array. */
+const ALL_ATLAS_KEYS = Object.values(ATLAS_KEYS);
+
+/**
+ * Check loaded atlases for a frame matching the given sprite key.
+ *
+ * Returns the atlas texture key if a match is found, or `null` if no
+ * atlas contains this frame. Frame names in the atlas JSON must match
+ * the sprite key exactly (e.g. `"player"`, `"zombie"`, `"bookshelf"`).
+ */
+function findAtlasFrame(
+  scene: Phaser.Scene,
+  spriteKey: string,
+): string | null {
+  for (const atlasKey of ALL_ATLAS_KEYS) {
+    if (!scene.textures.exists(atlasKey)) continue;
+    const tex = scene.textures.get(atlasKey);
+    // Phaser Texture.has() checks if a frame name exists
+    if (tex.has(spriteKey)) return atlasKey;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Known entity sprite keys (hard-coded manifest)
 // ---------------------------------------------------------------------------
 
@@ -130,7 +168,19 @@ export class SpriteRegistry {
     for (const { spriteKey, width, height } of manifest) {
       const textureKey = `${TEX_PREFIX}${spriteKey}`;
 
-      // Hot-swap: if an atlas already provides this texture, skip generation
+      // 1. Atlas priority: check if any loaded atlas has a frame for this key
+      const atlasKey = findAtlasFrame(scene, spriteKey);
+      if (atlasKey) {
+        this.entries.set(spriteKey, {
+          textureKey: atlasKey,
+          width,
+          height,
+          defaultFrame: spriteKey,
+        });
+        continue;
+      }
+
+      // 2. Hot-swap: if a standalone texture already exists, skip generation
       if (!scene.textures.exists(textureKey)) {
         const generator = getEntitySpriteGenerator(spriteKey) ?? getObjectSpriteGenerator(spriteKey);
         if (generator) {
@@ -158,6 +208,14 @@ export class SpriteRegistry {
     for (const def of getAllObjectDefs()) {
       const uiKey = `ui_${def.type}`;
       const uiTextureKey = `${TEX_PREFIX}${uiKey}`;
+
+      // Atlas priority for UI icons
+      const uiAtlasKey = findAtlasFrame(scene, uiKey);
+      if (uiAtlasKey) {
+        this.entries.set(uiKey, { textureKey: uiAtlasKey, width: 16, height: 16, defaultFrame: uiKey });
+        continue;
+      }
+
       if (!scene.textures.exists(uiTextureKey)) {
         const uiGen = getUiSpriteGenerator(def.type);
         if (uiGen) {
