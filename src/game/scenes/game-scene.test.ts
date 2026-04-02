@@ -83,13 +83,20 @@ function createMockKeys() {
 
 /** Create a mock tilemap returned by this.make.tilemap(). */
 function createMockTilemap() {
-  const mockLayer = { id: "layer-0" };
+  // Create mock tiles for each position so per-tile tinting can be tested
+  const mockTiles = new Map<string, { index: number; tint: number }>();
+  const mockLayer = {
+    id: "layer-0",
+    getTileAt: vi.fn((x: number, y: number) => mockTiles.get(`${x},${y}`) ?? null),
+    _mockTiles: mockTiles,
+  };
   const mockTileset = { name: "tileset" };
   return {
     addTilesetImage: vi.fn().mockReturnValue(mockTileset),
     createLayer: vi.fn().mockReturnValue(mockLayer),
     setCollision: vi.fn(),
     _mockLayer: mockLayer,
+    _mockTiles: mockTiles,
   };
 }
 
@@ -184,6 +191,17 @@ describe("GameScene", () => {
     convertTilemapLayer = vi.fn();
     mockTilemap = createMockTilemap();
     mockWorldData = createMockWorldData();
+
+    // Populate mock tiles from world data so per-tile tinting works
+    const { tiles: tileGrid } = mockWorldData.layout;
+    for (let y = 0; y < mockWorldData.layout.heightTiles; y++) {
+      for (let x = 0; x < mockWorldData.layout.widthTiles; x++) {
+        const idx = tileGrid[y][x];
+        if (idx > 0) {
+          mockTilemap._mockTiles.set(`${x},${y}`, { index: idx, tint: 0xffffff });
+        }
+      }
+    }
 
     let textCallCount = 0;
 

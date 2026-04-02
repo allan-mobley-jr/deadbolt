@@ -86,9 +86,9 @@ describe("tileset-generator", () => {
       );
     });
 
-    it("draws exactly RENDERABLE_TILE_COUNT rectangles", () => {
+    it("draws at least RENDERABLE_TILE_COUNT rectangles (base fill + detail)", () => {
       generateTileset(mockScene);
-      expect(mockCtx.fillRect).toHaveBeenCalledTimes(RENDERABLE_TILE_COUNT);
+      expect(mockCtx.fillRect.mock.calls.length).toBeGreaterThanOrEqual(RENDERABLE_TILE_COUNT);
     });
 
     it("skips TileType.Empty (does not draw at frame index -1)", () => {
@@ -147,12 +147,19 @@ describe("tileset-generator", () => {
       expect(mockTexture.refresh).toHaveBeenCalledTimes(1);
     });
 
-    it("all tiles are drawn at y=0 with full tile height", () => {
+    it("each tile frame starts with a base fill at y=0 with full tile dimensions", () => {
       generateTileset(mockScene);
 
-      for (const call of mockCtx.fillRect.mock.calls) {
-        expect(call[1]).toBe(0);        // y position
-        expect(call[3]).toBe(TILE_SIZE); // height
+      // For each renderable tile type, verify the first fillRect call at that
+      // frame's x-offset is a full-tile base fill.
+      for (const key of Object.values(TileType)) {
+        if (typeof key !== "number" || key === TileType.Empty) continue;
+        const frameX = (key - 1) * TILE_SIZE;
+        const baseCall = mockCtx.fillRect.mock.calls.find(
+          (args: unknown[]) => args[0] === frameX && args[1] === 0 &&
+            args[2] === TILE_SIZE && args[3] === TILE_SIZE,
+        );
+        expect(baseCall, `missing base fill for TileType ${key}`).toBeDefined();
       }
     });
   });
