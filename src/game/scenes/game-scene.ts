@@ -452,10 +452,98 @@ export default class GameScene extends Phaser.Scene {
     // Store tilemap reference for runtime tile mutations.
     this.tileMap = map;
 
+    // Per-tile brightness variation for visual richness (seeded, deterministic).
+    // Uses a separate RNG derived from the seed to avoid perturbing the main
+    // RNG sequence. Brightness ±5% applied via Phaser's Tile.tint.
+    const tintRng = new RNG(this.worldData!.config.seed + "-tile-tint");
+    this.applyTileTints(layer, widthTiles, heightTiles, tintRng);
+    this.applyBuildingTints(layer);
+
     // Camera bounds match map dimensions.
     const mapWidth = widthTiles * TILE_SIZE;
     const mapHeight = heightTiles * TILE_SIZE;
     this.cameras.main.setBounds(0, 0, mapWidth, mapHeight);
+  }
+
+  /**
+   * Apply subtle per-tile brightness variation so adjacent tiles of the
+   * same type don't look identical. Range: 90-100% brightness (tint can
+   * only darken, not brighten).
+   */
+  private applyTileTints(
+    layer: Phaser.Tilemaps.TilemapLayer,
+    width: number,
+    height: number,
+    rng: RNG,
+  ): void {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const tile = layer.getTileAt(x, y);
+        if (!tile || tile.index <= 0) continue;
+
+        // 90-100% brightness (tint is multiplicative, can only darken)
+        const factor = 0.90 + rng.float() * 0.10;
+        const channel = Math.round(factor * 255);
+        tile.tint = (channel << 16) | (channel << 8) | channel;
+      }
+    }
+  }
+
+  /** Tint multipliers per building class for visual differentiation. */
+  private static readonly BUILDING_CLASS_TINTS: Readonly<Record<string, number>> = {
+    residential: 0xfff0e0, // warm amber shift
+    commercial: 0xe8f0ff,  // cool blue shift
+    industrial: 0xe8e8e8,  // desaturated gray
+  };
+
+  /**
+   * Apply building-class-based tint shifts to interior floor/door tiles
+   * so residential, commercial, and industrial structures are visually
+   * distinguishable.
+   */
+  private applyBuildingTints(
+    layer: Phaser.Tilemaps.TilemapLayer,
+  ): void {
+    const buildings = this.worldData!.layout.buildings;
+    const buildingClasses = this.worldData!.buildingClasses;
+
+    for (const building of buildings) {
+      const cls = buildingClasses.get(building.id);
+      if (!cls) continue;
+
+      const overlay = GameScene.BUILDING_CLASS_TINTS[cls];
+      if (!overlay) continue;
+
+      // Tint interior tiles (skip 1px wall border)
+      for (let dy = 1; dy < building.height - 1; dy++) {
+        for (let dx = 1; dx < building.width - 1; dx++) {
+          const tx = building.origin.x + dx;
+          const ty = building.origin.y + dy;
+          const tile = layer.getTileAt(tx, ty);
+          if (!tile || tile.index <= 0) continue;
+
+          // Only tint walkable interior tiles (floors and doors)
+          if (tile.index !== TileType.Floor && tile.index !== TileType.Door) continue;
+
+          // Blend building class tint with existing per-tile tint
+          tile.tint = GameScene.blendTints(tile.tint, overlay);
+        }
+      }
+    }
+  }
+
+  /** Multiply two tint values channel-by-channel. */
+  private static blendTints(existing: number, overlay: number): number {
+    const er = (existing >> 16) & 0xff;
+    const eg = (existing >> 8) & 0xff;
+    const eb = existing & 0xff;
+    const or_ = (overlay >> 16) & 0xff;
+    const og = (overlay >> 8) & 0xff;
+    const ob = overlay & 0xff;
+    const r = Math.round((er * or_) / 255);
+    const g = Math.round((eg * og) / 255);
+    const b = Math.round((eb * ob) / 255);
+    return (r << 16) | (g << 8) | b;
   }
 
   // -----------------------------------------------------------------------
