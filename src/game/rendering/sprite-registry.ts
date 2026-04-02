@@ -15,6 +15,8 @@
 
 import type Phaser from "phaser";
 import { getObjectDef, getAllObjectDefs } from "@/game/procgen/object-defs";
+import { getEntitySpriteGenerator } from "./generators/entity-sprites";
+import type { EntitySpriteGenerator } from "./generators/entity-sprites";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,10 +130,26 @@ export class SpriteRegistry {
 
       // Hot-swap: if an atlas already provides this texture, skip generation
       if (!scene.textures.exists(textureKey)) {
-        this.generateWhiteTexture(scene, textureKey, width, height);
+        const generator = getEntitySpriteGenerator(spriteKey);
+        if (generator) {
+          this.generateEntityTexture(scene, textureKey, generator);
+        } else {
+          this.generateWhiteTexture(scene, textureKey, width, height);
+        }
       }
 
-      this.entries.set(spriteKey, { textureKey, width, height });
+      // For multi-frame generators, use per-frame dimensions and set defaultFrame
+      const generator = getEntitySpriteGenerator(spriteKey);
+      if (generator && generator.frameCount > 1) {
+        this.entries.set(spriteKey, {
+          textureKey,
+          width: generator.frameWidth,
+          height: generator.height,
+          defaultFrame: 0,
+        });
+      } else {
+        this.entries.set(spriteKey, { textureKey, width, height });
+      }
     }
 
     // Generate fallback texture
@@ -178,6 +196,38 @@ export class SpriteRegistry {
   /** Check whether the registry has been initialized. */
   get isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Generate a canvas texture using a custom entity sprite generator.
+   *
+   * For multi-frame sprites (e.g. player directional strip), defines
+   * individual frame regions on the underlying Phaser Texture so
+   * `sprite.setFrame(index)` works at runtime.
+   */
+  private generateEntityTexture(
+    scene: Phaser.Scene,
+    key: string,
+    generator: EntitySpriteGenerator,
+  ): void {
+    const canvas = scene.textures.createCanvas(key, generator.width, generator.height);
+    if (!canvas) {
+      throw new Error(
+        `[SpriteRegistry] Failed to create canvas texture "${key}" (${generator.width}x${generator.height})`,
+      );
+    }
+
+    const ctx = canvas.getContext();
+    generator.draw(ctx);
+    canvas.refresh();
+
+    // Define frame regions for multi-frame strips
+    if (generator.frameCount > 1) {
+      const tex = scene.textures.get(key);
+      for (let i = 0; i < generator.frameCount; i++) {
+        tex.add(i, 0, i * generator.frameWidth, 0, generator.frameWidth, generator.height);
+      }
+    }
   }
 
   /**

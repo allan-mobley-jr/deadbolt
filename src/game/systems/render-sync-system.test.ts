@@ -19,6 +19,7 @@ function createMockSprite(x = 0, y = 0) {
     setDepth: vi.fn().mockReturnThis(),
     setTint: vi.fn().mockReturnThis(),
     setDisplaySize: vi.fn().mockReturnThis(),
+    setFrame: vi.fn().mockReturnThis(),
     setAlpha: vi.fn(function (this: { alpha: number }, a: number) {
       this.alpha = a;
       return this;
@@ -63,7 +64,9 @@ function createMockRegistry(): SpriteRegistry {
       bullet: 6,
     };
     const size = sizes[key] ?? 16;
-    return { textureKey: `spr_${key}`, width: size, height: size };
+    // Player has multi-frame texture with defaultFrame
+    const defaultFrame = key === "player" ? 0 : undefined;
+    return { textureKey: `spr_${key}`, width: size, height: size, defaultFrame };
   });
   return registry;
 }
@@ -409,6 +412,127 @@ describe("RenderSyncSystem", () => {
       startFollow: ReturnType<typeof vi.fn>;
     };
     expect(cam.startFollow).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Player direction frame switching (issue #176)
+  // -------------------------------------------------------------------------
+
+  describe("player direction frame switching", () => {
+    it("calls setFrame with defaultFrame on sprite creation", () => {
+      const { ctx, addSprite, registry } = createMockContext(0);
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+      });
+
+      ctx.inputState.aimX = 200;
+      ctx.inputState.aimY = 100;
+
+      system(DT);
+
+      // setFrame called at creation time with defaultFrame=0
+      expect(mockSpr.setFrame).toHaveBeenCalledWith(0);
+    });
+
+    it("sets frame to East (1) when aiming right", () => {
+      const { ctx, addSprite, registry } = createMockContext(0);
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+      });
+
+      ctx.inputState.aimX = 200;
+      ctx.inputState.aimY = 100;
+
+      system(DT);
+
+      // Last setFrame call should be East (1)
+      const lastCall = mockSpr.setFrame.mock.calls.at(-1);
+      expect(lastCall![0]).toBe(1);
+    });
+
+    it("sets frame to South (0) when aiming down", () => {
+      const { ctx, addSprite, registry } = createMockContext(0);
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+      });
+
+      ctx.inputState.aimX = 100;
+      ctx.inputState.aimY = 200;
+
+      system(DT);
+
+      const lastCall = mockSpr.setFrame.mock.calls.at(-1);
+      expect(lastCall![0]).toBe(0);
+    });
+
+    it("sets frame to North (2) when aiming up", () => {
+      const { ctx, addSprite, registry } = createMockContext(0);
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+      });
+
+      ctx.inputState.aimX = 100;
+      ctx.inputState.aimY = 0;
+
+      system(DT);
+
+      const lastCall = mockSpr.setFrame.mock.calls.at(-1);
+      expect(lastCall![0]).toBe(2);
+    });
+
+    it("sets frame to West (3) when aiming left", () => {
+      const { ctx, addSprite, registry } = createMockContext(0);
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
+
+      world.add({
+        position: { x: 100, y: 100 },
+        previousPosition: { x: 100, y: 100 },
+        velocity: { vx: 0, vy: 0 },
+        renderable: { spriteKey: "player" },
+        playerControlled: { active: true },
+      });
+
+      ctx.inputState.aimX = 0;
+      ctx.inputState.aimY = 100;
+
+      system(DT);
+
+      const lastCall = mockSpr.setFrame.mock.calls.at(-1);
+      expect(lastCall![0]).toBe(3);
+    });
   });
 
   // -------------------------------------------------------------------------

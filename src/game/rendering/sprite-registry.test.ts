@@ -15,6 +15,7 @@ function createMockScene() {
   }> = [];
 
   const existingKeys = new Set<string>();
+  const mockTextureAdd = vi.fn();
 
   const scene = {
     textures: {
@@ -25,10 +26,11 @@ function createMockScene() {
         canvases.push(canvas);
         return canvas;
       }),
+      get: vi.fn().mockReturnValue({ add: mockTextureAdd }),
     },
   } as unknown as Phaser.Scene;
 
-  return { scene, canvases, existingKeys };
+  return { scene, canvases, existingKeys, mockTextureAdd };
 }
 
 describe("SpriteRegistry", () => {
@@ -52,14 +54,31 @@ describe("SpriteRegistry", () => {
     expect(canvases.length).toBeGreaterThan(10);
   });
 
-  it("fills all canvas textures with white", () => {
+  it("fills world object canvas textures with white", () => {
+    const { scene, canvases } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // Filter to object textures (not entity generators, not fallback)
+    const entityKeys = new Set(["spr_player", "spr_zombie", "spr_zombie_runner", "spr_zombie_brute", "spr_zombie_horde", "spr_bullet"]);
+    const objectCanvases = canvases.filter(
+      (c) => !entityKeys.has(c.key) && c.key !== "spr___fallback",
+    );
+
+    expect(objectCanvases.length).toBeGreaterThan(0);
+    for (const c of objectCanvases) {
+      expect(c.ctx.fillStyle).toBe("#ffffff");
+      expect(c.ctx.fillRect).toHaveBeenCalledWith(0, 0, c.width, c.height);
+      expect(c.refresh).toHaveBeenCalled();
+    }
+  });
+
+  it("calls refresh on all canvas textures", () => {
     const { scene, canvases } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
     for (const c of canvases) {
-      expect(c.ctx.fillStyle).toBe("#ffffff");
-      expect(c.ctx.fillRect).toHaveBeenCalledWith(0, 0, c.width, c.height);
       expect(c.refresh).toHaveBeenCalled();
     }
   });
@@ -176,5 +195,85 @@ describe("SpriteRegistry", () => {
     const elapsed = performance.now() - start;
 
     expect(elapsed).toBeLessThan(100);
+  });
+
+  // -------------------------------------------------------------------------
+  // Entity sprite generators (issue #176)
+  // -------------------------------------------------------------------------
+
+  it("creates wider canvas for player sprite strip (4 frames)", () => {
+    const { scene, canvases } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    const playerCanvas = canvases.find((c) => c.key === "spr_player");
+    expect(playerCanvas).toBeDefined();
+    // 4 frames × 24px = 96px wide, 24px tall
+    expect(playerCanvas!.width).toBe(96);
+    expect(playerCanvas!.height).toBe(24);
+  });
+
+  it("defines 4 frame regions on the player texture", () => {
+    const { scene, mockTextureAdd } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // textures.get should have been called for multi-frame textures
+    const getTextures = scene.textures.get as ReturnType<typeof vi.fn>;
+    expect(getTextures).toHaveBeenCalledWith("spr_player");
+
+    // 4 frame definitions: (index, sourceIndex=0, x, y, width, height)
+    expect(mockTextureAdd).toHaveBeenCalledWith(0, 0, 0, 0, 24, 24);
+    expect(mockTextureAdd).toHaveBeenCalledWith(1, 0, 24, 0, 24, 24);
+    expect(mockTextureAdd).toHaveBeenCalledWith(2, 0, 48, 0, 24, 24);
+    expect(mockTextureAdd).toHaveBeenCalledWith(3, 0, 72, 0, 24, 24);
+  });
+
+  it("sets defaultFrame on player entry", () => {
+    const { scene } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    const entry = registry.get("player");
+    expect(entry.defaultFrame).toBe(0);
+  });
+
+  it("does not set defaultFrame on single-frame entities", () => {
+    const { scene } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    expect(registry.get("zombie").defaultFrame).toBeUndefined();
+    expect(registry.get("zombie_runner").defaultFrame).toBeUndefined();
+    expect(registry.get("bullet").defaultFrame).toBeUndefined();
+  });
+
+  it("uses entity generators for known entity keys", () => {
+    const { scene, canvases } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // Entity canvases should match generator dimensions (not all white squares)
+    const zombieCanvas = canvases.find((c) => c.key === "spr_zombie");
+    expect(zombieCanvas).toBeDefined();
+    expect(zombieCanvas!.width).toBe(20);
+    expect(zombieCanvas!.height).toBe(20);
+
+    const bruteCanvas = canvases.find((c) => c.key === "spr_zombie_brute");
+    expect(bruteCanvas).toBeDefined();
+    expect(bruteCanvas!.width).toBe(28);
+    expect(bruteCanvas!.height).toBe(28);
+  });
+
+  it("still generates plain white rectangles for world objects", () => {
+    const { scene, canvases } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // World object canvases should be plain white fills
+    const chairCanvas = canvases.find((c) => c.key === "spr_wooden_chair");
+    expect(chairCanvas).toBeDefined();
+    expect(chairCanvas!.ctx.fillStyle).toBe("#ffffff");
+    expect(chairCanvas!.ctx.fillRect).toHaveBeenCalledWith(0, 0, 16, 16);
   });
 });
