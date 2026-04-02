@@ -8,6 +8,7 @@ import { createInputSystem } from "@/game/systems/input-system";
 import { createMovementSystem } from "@/game/systems/movement-system";
 import { createPhysicsSyncSystem } from "@/game/systems/physics-sync-system";
 import { createRenderSyncSystem } from "@/game/systems/render-sync-system";
+import { getSpriteRegistry } from "@/game/rendering/sprite-registry";
 import { createDayNightSystem } from "@/game/systems/day-night-system";
 import { createLightingSystem } from "@/game/systems/lighting-system";
 import { createCommandSystem } from "@/game/systems/command-system";
@@ -285,7 +286,7 @@ export default class GameScene extends Phaser.Scene {
     // camera position (e.g., LightingSystem reads cam.scrollX/scrollY).
     const renderSystems: SystemFn[] = [
       createCameraSystem(ctx),
-      createRenderSyncSystem(ctx),
+      createRenderSyncSystem(ctx, getSpriteRegistry()),
       createParticleSystem(ctx),
       createLightingSystem(ctx),
     ];
