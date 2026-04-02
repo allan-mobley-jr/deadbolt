@@ -9,7 +9,7 @@
  * NO React imports — this is pure TypeScript.
  */
 
-import type { ZombieVariant, ZombieType } from "./components";
+import type { ZombieVariant } from "./components";
 import type { Entity } from "./entity";
 import type { ZombieEntity } from "./archetypes";
 import type { BodyRegistry } from "@/game/systems/body-registry";
