@@ -158,8 +158,20 @@ export const PARTICLES = {
 // ---------------------------------------------------------------------------
 
 export const PARTICLE_TEXTURES = {
-  /** 4x4 white circle — tinted at emit time. */
+  /** 4x4 white circle — tinted at emit time (generic fallback). */
   CIRCLE: "particle-circle",
-  /** 3x3 white square — tinted at emit time. */
+  /** 3x3 white square — tinted at emit time (generic fallback). */
   SQUARE: "particle-square",
+
+  // Purpose-shaped particle textures (issue #179)
+  /** 4x4 diamond — fire embers and flame effects. */
+  EMBER: "particle-ember",
+  /** 3x3 irregular blob — blood and combat damage. */
+  BLOOD: "particle-blood",
+  /** 4x4 cross/star — electric sparks. */
+  SPARK: "particle-spark",
+  /** 2x5 elongated rectangle — wood splinters and debris. */
+  SPLINTER: "particle-splinter",
+  /** 3x3 soft-edged circle — dust puffs. */
+  DUST: "particle-dust",
 } as const;
