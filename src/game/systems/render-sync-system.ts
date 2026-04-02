@@ -8,26 +8,12 @@ import type { BarricadeSnapEvent, DamageDealtEvent, MeleeSwingEvent, FireDamageE
 import { COMBAT } from "./combat-constants";
 import { FIRE } from "./fire-constants";
 import { ELECTRICITY } from "./electricity-constants";
+import { PALETTE, resolveColor, colorByHpTier } from "@/game/rendering/palette";
+import type { SpriteRegistry } from "@/game/rendering/sprite-registry";
 
 // ---------------------------------------------------------------------------
 // Visual config
 // ---------------------------------------------------------------------------
-
-/** Colour map for sprite keys (temporary until real sprites exist). */
-const SPRITE_COLOURS: Record<string, number> = {
-  player: 0x4ade80,       // green
-  zombie: 0xef4444,       // red (shambler)
-  zombie_runner: 0xf97316, // orange
-  zombie_brute: 0x7c3aed, // purple
-  zombie_horde: 0xa3e635, // lime green
-  barricade: 0x94a3b8,    // slate
-  bullet: 0xfacc15,       // yellow
-};
-
-const FALLBACK_COLOUR = 0xffffff;
-
-/** Player rectangle dimensions. */
-const PLAYER_SIZE = 24;
 
 /** Length of the aiming direction indicator line. */
 const AIM_LINE_LENGTH = 32;
@@ -44,19 +30,7 @@ const HEALTH_BAR_WIDTH = 28;
 const HEALTH_BAR_HEIGHT = 4;
 const HEALTH_BAR_OFFSET_Y = -20;
 
-/** Barricade health bar fill colours by HP fraction tier. */
-const HEALTH_COLOR_GOOD = 0x4ade80;    // green
-const HEALTH_COLOR_WARNING = 0xf59e0b; // amber
-const HEALTH_COLOR_DANGER = 0xef4444;  // red
-const HEALTH_BG_COLOR = 0x1a1a2e;      // dark background
-
-/** Barricade damage tint colours by HP fraction tier. */
-const BARRICADE_TINT_GOOD = 0x94a3b8;    // slate (default barricade colour)
-const BARRICADE_TINT_WARNING = 0xf59e0b; // amber
-const BARRICADE_TINT_DANGER = 0xef4444;  // red
-
-/** Snap indicator colour and opacity. */
-const SNAP_COLOR = 0x60a5fa;           // blue-400
+/** Snap indicator opacity and size. */
 const SNAP_ALPHA = 0.35;
 const SNAP_RECT_SIZE = 36;
 
@@ -66,12 +40,10 @@ const BARRICADE_VIEW_RANGE_SQ = 96 * 96;
 // --- Combat visual config ---
 
 /** Melee swing arc visual properties. */
-const SWING_ARC_COLOUR = 0xffffff;
 const SWING_ARC_ALPHA = 0.8;
 const SWING_ARC_LINE_WIDTH = 3;
 
 /** Damage number visual properties. */
-const DAMAGE_TEXT_COLOUR = "#ef4444"; // red
 const DAMAGE_TEXT_FONT_SIZE = "14px";
 
 /** How long damage numbers float before being destroyed (seconds). */
@@ -79,12 +51,6 @@ const DAMAGE_TEXT_LIFETIME = 0.8;
 
 /** Upward drift speed for damage numbers (pixels/second). */
 const DAMAGE_TEXT_DRIFT = 30;
-
-/** Fire damage number colour (orange to distinguish from melee red). */
-const FIRE_DAMAGE_TEXT_COLOUR = "#ff6b00";
-
-/** Electricity damage number colour (blue to distinguish from fire/melee). */
-const ELECTRICITY_DAMAGE_TEXT_COLOUR = "#4488ff";
 
 /** How long the zombie death flash lasts (seconds). */
 const DEATH_FLASH_DURATION = 0.12;
@@ -99,97 +65,61 @@ const SWING_ARC_SPREAD = 0.6;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function spriteColour(key: string): number {
-  if (SPRITE_COLOURS[key] !== undefined) return SPRITE_COLOURS[key];
-  // Fall back to object definition render colour
-  const def = getObjectDef(key);
-  if (def) return def.renderColor;
-  return FALLBACK_COLOUR;
-}
-
-/** Size of world objects (immovable objects are full tile size). */
-const OBJECT_SIZE = 16;
-const IMMOVABLE_OBJECT_SIZE = 32;
-
 /**
- * Visual sizes per zombie variant sprite key.
+ * Blend a base colour toward a target colour using a sinusoidal pulse.
  *
- * These are intentionally slightly smaller than the physics body sizes
- * (defined in VARIANT_STATS.bodySize) so that zombies don't visually
- * overlap when packed together. The physics body handles collision; the
- * visual rectangle is purely cosmetic.
- *   shambler: physics 20, visual 20  (baseline)
- *   runner:   physics 20, visual 18  (appears nimble)
- *   brute:    physics 28, visual 28  (looms large)
- *   horde:    physics 14, visual 12  (swarm of tiny dots)
+ * The pulse factor oscillates as `center + amplitude * sin(elapsed * rate * 2pi)`.
+ *
+ * @param baseColor   - Starting RGB colour (hex integer).
+ * @param targetColor - Colour to blend toward (hex integer).
+ * @param elapsed     - Total elapsed time in seconds.
+ * @param rate        - Oscillation frequency (cycles per second).
+ * @param center      - Midpoint of the blend factor oscillation.
+ * @param amplitude   - Half-range of the oscillation around the center.
  */
-const ZOMBIE_VISUAL_SIZES: Record<string, number> = {
-  zombie: 20,
-  zombie_runner: 18,
-  zombie_brute: 28,
-  zombie_horde: 12,
-};
-
-function getVisualSize(key: string): number {
-  if (key === "bullet") return 6;
-  if (ZOMBIE_VISUAL_SIZES[key] !== undefined) return ZOMBIE_VISUAL_SIZES[key];
-  const def = getObjectDef(key);
-  if (def) return def.immovable ? IMMOVABLE_OBJECT_SIZE : OBJECT_SIZE;
-  return PLAYER_SIZE;
-}
-
-/** Blend a base colour toward the fire tint based on a pulse factor (0-1). */
-function blendWithFireTint(baseColor: number, elapsed: number): number {
-  const pulse =
-    0.6 + 0.4 * Math.sin(elapsed * FIRE.BURN_TINT_PULSE_RATE * Math.PI * 2);
-  const br = (baseColor >> 16) & 0xff;
-  const bg = (baseColor >> 8) & 0xff;
-  const bb = baseColor & 0xff;
-  const fr = (FIRE.BURN_TINT_COLOR >> 16) & 0xff;
-  const fg = (FIRE.BURN_TINT_COLOR >> 8) & 0xff;
-  const fb = FIRE.BURN_TINT_COLOR & 0xff;
-  const r = Math.round(br + (fr - br) * pulse);
-  const g = Math.round(bg + (fg - bg) * pulse);
-  const b = Math.round(bb + (fb - bb) * pulse);
-  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
-}
-
-/** Blend a base colour toward the electric tint based on a pulse factor (0-1). */
-function blendWithElectricTint(baseColor: number, elapsed: number): number {
-  const pulse =
-    0.5 + 0.5 * Math.sin(elapsed * ELECTRICITY.ELECTRIFIED_TINT_PULSE_RATE * Math.PI * 2);
-  const br = (baseColor >> 16) & 0xff;
-  const bg = (baseColor >> 8) & 0xff;
-  const bb = baseColor & 0xff;
-  const er = (ELECTRICITY.ELECTRIFIED_TINT_COLOR >> 16) & 0xff;
-  const eg = (ELECTRICITY.ELECTRIFIED_TINT_COLOR >> 8) & 0xff;
-  const eb = ELECTRICITY.ELECTRIFIED_TINT_COLOR & 0xff;
-  const r = Math.round(br + (er - br) * pulse);
-  const g = Math.round(bg + (eg - bg) * pulse);
-  const b = Math.round(bb + (eb - bb) * pulse);
-  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
-}
-
-/** Pick a colour from a three-tier palette based on HP fraction. */
-function colorByHpTier(
-  hpFraction: number,
-  good: number,
-  warning: number,
-  danger: number,
+function blendTint(
+  baseColor: number,
+  targetColor: number,
+  elapsed: number,
+  rate: number,
+  center: number,
+  amplitude: number,
 ): number {
-  if (hpFraction <= 0.33) return danger;
-  if (hpFraction <= 0.66) return warning;
-  return good;
+  const pulse = center + amplitude * Math.sin(elapsed * rate * Math.PI * 2);
+  const br = (baseColor >> 16) & 0xff;
+  const bg = (baseColor >> 8) & 0xff;
+  const bb = baseColor & 0xff;
+  const tr = (targetColor >> 16) & 0xff;
+  const tg = (targetColor >> 8) & 0xff;
+  const tb = targetColor & 0xff;
+  const r = Math.round(br + (tr - br) * pulse);
+  const g = Math.round(bg + (tg - bg) * pulse);
+  const b = Math.round(bb + (tb - bb) * pulse);
+  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+}
+
+/** Blend a base colour toward the fire tint based on elapsed time. */
+function blendWithFireTint(baseColor: number, elapsed: number): number {
+  return blendTint(baseColor, FIRE.BURN_TINT_COLOR, elapsed, FIRE.BURN_TINT_PULSE_RATE, 0.6, 0.4);
+}
+
+/** Blend a base colour toward the electric tint based on elapsed time. */
+function blendWithElectricTint(baseColor: number, elapsed: number): number {
+  return blendTint(baseColor, ELECTRICITY.ELECTRIFIED_TINT_COLOR, elapsed, ELECTRICITY.ELECTRIFIED_TINT_PULSE_RATE, 0.5, 0.5);
 }
 
 function createVisual(
   scene: Phaser.Scene,
+  registry: SpriteRegistry,
   key: string,
   x: number,
   y: number,
-): Phaser.GameObjects.Rectangle {
-  const size = getVisualSize(key);
-  return scene.add.rectangle(x, y, size, size, spriteColour(key));
+): Phaser.GameObjects.Sprite {
+  const entry = registry.get(key);
+  const sprite = scene.add.sprite(x, y, entry.textureKey);
+  sprite.setDisplaySize(entry.width, entry.height);
+  sprite.setTint(resolveColor(key));
+  return sprite;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,16 +130,16 @@ function createVisual(
  * Factory that returns a RenderSyncSystem.
  *
  * Runs once per render frame (not per fixed tick). For each Renderable
- * entity it lazily creates a Phaser Rectangle, then positions it using
+ * entity it lazily creates a Phaser Sprite, then positions it using
  * linear interpolation between previousPosition and position based on
  * the GameLoop alpha.
  *
  * Also draws an aim-direction indicator line for the player entity and
  * wires Phaser camera follow on the first player sprite it creates.
  */
-export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
+export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegistry): SystemFn {
   /** Entity reference → Phaser visual. */
-  const sprites = new Map<Entity, Phaser.GameObjects.Rectangle>();
+  const sprites = new Map<Entity, Phaser.GameObjects.Sprite>();
 
   /** Aim indicator graphics object (created lazily). */
   let aimGfx: Phaser.GameObjects.Graphics | null = null;
@@ -235,22 +165,31 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
   let colorBlindMode = false;
   let highContrastMode = false;
 
-  /** Graphics overlays for color-blind shape indicators. */
+  /** Graphics overlays for color-blind shape indicators and high-contrast borders. */
   const shapeOverlays = new Map<Entity, Phaser.GameObjects.Graphics>();
 
   ctx.eventBus.on("cmd:settings-changed", (e) => {
     if (e.key === "colorBlindMode" && typeof e.value === "boolean") {
+      const wasOn = colorBlindMode;
       colorBlindMode = e.value;
-      // Clear existing overlays when toggling off
-      if (!e.value) {
-        for (const gfx of shapeOverlays.values()) {
-          gfx.destroy();
-        }
+      // Destroy overlays on toggle-off so stale shapes don't persist.
+      // If highContrastMode is still active, its per-entity block will
+      // lazily recreate the needed Graphics on the next render tick.
+      if (wasOn && !e.value) {
+        for (const gfx of shapeOverlays.values()) gfx.destroy();
         shapeOverlays.clear();
       }
     }
     if (e.key === "highContrast" && typeof e.value === "boolean") {
+      const wasOn = highContrastMode;
       highContrastMode = e.value;
+      // Destroy overlays on toggle-off so stale border rects don't persist.
+      // If colorBlindMode is still active, its per-entity block will
+      // lazily recreate the needed Graphics on the next render tick.
+      if (wasOn && !e.value) {
+        for (const gfx of shapeOverlays.values()) gfx.destroy();
+        shapeOverlays.clear();
+      }
     }
   });
 
@@ -295,17 +234,17 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
 
   // Listen for damage-dealt events
   ctx.eventBus.on("damage-dealt", (e: DamageDealtEvent) => {
-    spawnDamageText(e.position.x, e.position.y, e.damage, DAMAGE_TEXT_COLOUR);
+    spawnDamageText(e.position.x, e.position.y, e.damage, PALETTE.damageText.melee);
   });
 
   // Listen for fire-damage events (orange floating numbers)
   ctx.eventBus.on("fire-damage", (e: FireDamageEvent) => {
-    spawnDamageText(e.position.x, e.position.y, e.damage, FIRE_DAMAGE_TEXT_COLOUR);
+    spawnDamageText(e.position.x, e.position.y, e.damage, PALETTE.damageText.fire);
   });
 
   // Listen for electricity-damage events (blue floating numbers)
   ctx.eventBus.on("electricity-damage", (e: ElectricityDamageEvent) => {
-    spawnDamageText(e.position.x, e.position.y, e.damage, ELECTRICITY_DAMAGE_TEXT_COLOUR);
+    spawnDamageText(e.position.x, e.position.y, e.damage, PALETTE.damageText.electricity);
   });
 
   /**
@@ -346,6 +285,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         // Lazy-create the Phaser visual
         sprite = createVisual(
           scene,
+          registry,
           entity.renderable.spriteKey,
           entity.position.x,
           entity.position.y,
@@ -364,16 +304,16 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
       // Barricade tints are handled separately in the barricade health section.
       // Burning takes visual priority over electrified.
       if (entity.material?.state === "burning" && !entity.barricade) {
-        sprite.setFillStyle(
-          blendWithFireTint(spriteColour(entity.renderable.spriteKey), totalElapsed),
+        sprite.setTint(
+          blendWithFireTint(resolveColor(entity.renderable.spriteKey), totalElapsed),
         );
       } else if (entity.material?.state === "electrified" && !entity.barricade) {
-        sprite.setFillStyle(
-          blendWithElectricTint(spriteColour(entity.renderable.spriteKey), totalElapsed),
+        sprite.setTint(
+          blendWithElectricTint(resolveColor(entity.renderable.spriteKey), totalElapsed),
         );
       } else if (entity.material && !entity.barricade) {
         // Reset to the base sprite colour when not burning or electrified.
-        sprite.setFillStyle(spriteColour(entity.renderable.spriteKey));
+        sprite.setTint(resolveColor(entity.renderable.spriteKey));
       }
 
       // --- Color-blind mode: shape indicators on zombie sprites ---
@@ -411,18 +351,30 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         }
       }
 
-      // --- High contrast: white stroke border on all entities ---
-      if (typeof sprite.setStrokeStyle === "function") {
-        if (highContrastMode) {
-          sprite.setStrokeStyle(1, 0xffffff, 0.8);
-          // Pulsing outline on highlighted interactable objects
-          if (entity.interactable?.highlighted) {
-            const pulse = 0.5 + 0.5 * Math.sin(totalElapsed * 4);
-            sprite.setStrokeStyle(2, 0xffffff, pulse);
-          }
-        } else {
-          sprite.setStrokeStyle(0);
+      // --- High contrast: Graphics overlay for entity borders ---
+      if (highContrastMode) {
+        let gfx = shapeOverlays.get(entity);
+        if (!gfx) {
+          gfx = scene.add.graphics();
+          shapeOverlays.set(entity, gfx);
         }
+        // If color-blind mode is not active, we need to clear first;
+        // if it IS active, the clear + shape already happened above
+        // and we append the border to the same graphics.
+        if (!colorBlindMode || !entity.zombieType) {
+          gfx.clear();
+          gfx.setPosition(sprite.x, sprite.y);
+        }
+        const entry = registry.get(entity.renderable.spriteKey);
+        const hw = entry.width / 2;
+        const hh = entry.height / 2;
+        if (entity.interactable?.highlighted) {
+          const pulse = 0.5 + 0.5 * Math.sin(totalElapsed * 4);
+          gfx.lineStyle(2, PALETTE.ui.highContrastBorder, pulse);
+        } else {
+          gfx.lineStyle(1, PALETTE.ui.highContrastBorder, 0.8);
+        }
+        gfx.strokeRect(-hw, -hh, entry.width, entry.height);
       }
     }
 
@@ -454,7 +406,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         aimGfx.clear();
         const aimWidth = highContrastMode ? 3 : 2;
         const aimAlpha = highContrastMode ? 1.0 : 0.7;
-        aimGfx.lineStyle(aimWidth, 0xffffff, aimAlpha);
+        aimGfx.lineStyle(aimWidth, PALETTE.ui.aim, aimAlpha);
 
         const dx = inputState.aimX - playerSprite.x;
         const dy = inputState.aimY - playerSprite.y;
@@ -481,7 +433,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
 
           if (activeSlot && activeSlot.primary) {
             const itemDef = getObjectDef(activeSlot.objectType);
-            const color = itemDef?.renderColor ?? FALLBACK_COLOUR;
+            const color = itemDef?.renderColor ?? PALETTE.sprite.fallback;
 
             if (!equipGfx) {
               equipGfx = scene.add.rectangle(
@@ -532,13 +484,13 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         // Apply damage tint to the sprite (burning overrides damage colour)
         const sprite = sprites.get(entity);
         if (sprite) {
-          const baseTint = colorByHpTier(hpFraction, BARRICADE_TINT_GOOD, BARRICADE_TINT_WARNING, BARRICADE_TINT_DANGER);
+          const baseTint = colorByHpTier(hpFraction, PALETTE.barricadeTint.good, PALETTE.barricadeTint.warning, PALETTE.barricadeTint.danger);
           if (entity.material?.state === "burning") {
-            sprite.setFillStyle(blendWithFireTint(baseTint, totalElapsed));
+            sprite.setTint(blendWithFireTint(baseTint, totalElapsed));
           } else if (entity.material?.state === "electrified") {
-            sprite.setFillStyle(blendWithElectricTint(baseTint, totalElapsed));
+            sprite.setTint(blendWithElectricTint(baseTint, totalElapsed));
           } else {
-            sprite.setFillStyle(baseTint);
+            sprite.setTint(baseTint);
           }
         }
 
@@ -550,11 +502,11 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
         // Background bar
         const barX = ex - HEALTH_BAR_WIDTH / 2;
         const barY = ey + HEALTH_BAR_OFFSET_Y;
-        barricadeGfx.fillStyle(HEALTH_BG_COLOR, 0.8);
+        barricadeGfx.fillStyle(PALETTE.healthBar.bg, 0.8);
         barricadeGfx.fillRect(barX, barY, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
 
         // Fill bar
-        const fillColor = colorByHpTier(hpFraction, HEALTH_COLOR_GOOD, HEALTH_COLOR_WARNING, HEALTH_COLOR_DANGER);
+        const fillColor = colorByHpTier(hpFraction, PALETTE.healthBar.good, PALETTE.healthBar.warning, PALETTE.healthBar.danger);
         barricadeGfx.fillStyle(fillColor, 1.0);
         barricadeGfx.fillRect(
           barX,
@@ -573,10 +525,10 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
           0,
           SNAP_RECT_SIZE,
           SNAP_RECT_SIZE,
-          SNAP_COLOR,
+          PALETTE.ui.snap,
           SNAP_ALPHA,
         );
-        snapGfx.setStrokeStyle(2, SNAP_COLOR, 0.8);
+        snapGfx.setStrokeStyle(2, PALETTE.ui.snap, 0.8);
         snapGfx.setDepth(Number.MAX_SAFE_INTEGER - 3);
       }
       snapGfx.setPosition(snapState.snapCenter.x, snapState.snapCenter.y);
@@ -601,7 +553,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
 
       if (swingFraction < 1) {
         const fadeAlpha = SWING_ARC_ALPHA * (1 - swingFraction);
-        swingGfx.lineStyle(SWING_ARC_LINE_WIDTH, SWING_ARC_COLOUR, fadeAlpha);
+        swingGfx.lineStyle(SWING_ARC_LINE_WIDTH, PALETTE.ui.swingArc, fadeAlpha);
 
         // Draw a short arc line from the player position in the aim direction
         const playerSpr = player ? sprites.get(player) : null;
@@ -660,7 +612,7 @@ export function createRenderSyncSystem(ctx: SceneContext): SystemFn {
     for (const [entity, timeLeft] of deathFlashes) {
       const sprite = sprites.get(entity);
       if (sprite) {
-        sprite.setFillStyle(0xffffff);
+        sprite.setTint(0xffffff);
       }
       const remaining = timeLeft - _dt;
       if (remaining <= 0) {

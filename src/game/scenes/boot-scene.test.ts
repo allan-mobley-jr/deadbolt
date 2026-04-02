@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import BootScene from "@/game/scenes/boot-scene";
 import { PLAYER_TEXTURE_KEY, PLAYER_SIZE } from "@/game/scenes/boot-scene";
 import { TILE_SIZE } from "@/game/tiles/tile-types";
 import { TILESET_KEY } from "@/game/tiles/tileset-generator";
+import { resetSpriteRegistry } from "@/game/rendering/sprite-registry";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -49,6 +50,10 @@ describe("BootScene", () => {
 
   beforeEach(() => {
     scene = createMockScene();
+  });
+
+  afterEach(() => {
+    resetSpriteRegistry();
   });
 
   it("registers with the key 'BootScene'", () => {
@@ -99,6 +104,39 @@ describe("BootScene", () => {
     expect(mockCtx.fillStyle).toBe("#3366ff");
     expect(mockCtx.fillRect).toHaveBeenCalledWith(offset, offset, PLAYER_SIZE, PLAYER_SIZE);
     expect(mockCanvas.refresh).toHaveBeenCalled();
+  });
+
+  it("initializes the sprite registry during create", () => {
+    scene.create();
+    const createCanvas = scene.textures.createCanvas as ReturnType<typeof vi.fn>;
+    // Registry generates textures with spr_ prefix
+    const sprCalls = createCanvas.mock.calls.filter(
+      (args: unknown[]) => typeof args[0] === "string" && (args[0] as string).startsWith("spr_"),
+    );
+    // Should have generated textures for player, zombies, bullet, and all object types + fallback
+    expect(sprCalls.length).toBeGreaterThan(10);
+  });
+
+  it("initializes sprite registry before transitioning to LoadingScene", () => {
+    const callOrder: string[] = [];
+    const createCanvas = scene.textures.createCanvas as ReturnType<typeof vi.fn>;
+    createCanvas.mockImplementation((...args: unknown[]) => {
+      const key = args[0] as string;
+      if (key.startsWith("spr_")) {
+        callOrder.push("registry");
+      }
+      return createMockCanvasTexture();
+    });
+    (scene.scene.start as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      callOrder.push("transition");
+    });
+
+    scene.create();
+
+    // Registry should be initialized before scene transition
+    const registryIndex = callOrder.indexOf("registry");
+    const transitionIndex = callOrder.indexOf("transition");
+    expect(registryIndex).toBeLessThan(transitionIndex);
   });
 
   it("emits boot-error event when asset generation fails", () => {

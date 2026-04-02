@@ -3,6 +3,7 @@ import { generateTileset } from "@/game/tiles/tileset-generator";
 import { TILE_SIZE } from "@/game/tiles/tile-types";
 import { ALL_SOUND_KEYS } from "@/game/systems/audio-constants";
 import { PARTICLE_TEXTURES } from "@/game/systems/particle-constants";
+import { initializeSpriteRegistry } from "@/game/rendering/sprite-registry";
 
 /** Texture key for the player sprite. */
 export const PLAYER_TEXTURE_KEY = "player";
@@ -33,6 +34,10 @@ export default class BootScene extends Phaser.Scene {
 
       // Generate particle textures (tiny colored shapes).
       this.generateParticleTextures();
+
+      // Initialize the sprite registry (generates white canvas textures
+      // for all known spriteKeys). Must complete before LoadingScene.
+      initializeSpriteRegistry(this);
 
       // All assets ready — proceed to loading / world generation.
       this.scene.start("LoadingScene");

@@ -6,8 +6,31 @@ import { BodyRegistry } from "./body-registry";
 import { createGameEventBus } from "@/game/events/event-bus";
 import { world, resetWorld } from "@/game/ecs/world";
 import type { InventorySlotData } from "@/game/ecs/components";
+import { SpriteRegistry, resetSpriteRegistry } from "@/game/rendering/sprite-registry";
 
 const DT = 1 / 60;
+
+function createMockSprite(x = 0, y = 0) {
+  return {
+    x,
+    y,
+    alpha: 1,
+    destroy: vi.fn(),
+    setDepth: vi.fn().mockReturnThis(),
+    setTint: vi.fn().mockReturnThis(),
+    setDisplaySize: vi.fn().mockReturnThis(),
+    setAlpha: vi.fn(function (this: { alpha: number }, a: number) {
+      this.alpha = a;
+      return this;
+    }),
+    setPosition: vi.fn(function (this: { x: number; y: number }, nx: number, ny: number) {
+      this.x = nx;
+      this.y = ny;
+      return this;
+    }),
+    setVisible: vi.fn().mockReturnThis(),
+  };
+}
 
 function createMockRect(x = 0, y = 0) {
   return {
@@ -26,14 +49,37 @@ function createMockRect(x = 0, y = 0) {
   };
 }
 
+/** Create a mock SpriteRegistry. */
+function createMockRegistry(): SpriteRegistry {
+  const registry = new SpriteRegistry();
+  // Patch the get method to return a valid entry without needing scene initialization
+  registry.get = vi.fn().mockImplementation((key: string) => {
+    const sizes: Record<string, number> = {
+      player: 24,
+      zombie: 20,
+      zombie_runner: 18,
+      zombie_brute: 28,
+      zombie_horde: 12,
+      bullet: 6,
+    };
+    const size = sizes[key] ?? 16;
+    return { textureKey: `spr_${key}`, width: size, height: size };
+  });
+  return registry;
+}
+
 function createMockContext(alphaValue = 0.5): {
   ctx: SceneContext;
+  addSprite: ReturnType<typeof vi.fn>;
   addRectangle: ReturnType<typeof vi.fn>;
+  registry: SpriteRegistry;
 } {
+  const addSprite = vi.fn().mockImplementation(() => createMockSprite());
   const addRectangle = vi.fn().mockImplementation(() => createMockRect());
 
   const scene = {
     add: {
+      sprite: addSprite,
       rectangle: addRectangle,
       graphics: vi.fn().mockReturnValue({
         clear: vi.fn(),
@@ -43,8 +89,15 @@ function createMockContext(alphaValue = 0.5): {
         lineTo: vi.fn(),
         strokePath: vi.fn(),
         setDepth: vi.fn().mockReturnThis(),
+        setPosition: vi.fn().mockReturnThis(),
         fillStyle: vi.fn(),
         fillRect: vi.fn(),
+        fillCircle: vi.fn(),
+        strokeCircle: vi.fn(),
+        strokeTriangle: vi.fn(),
+        lineBetween: vi.fn(),
+        strokeRect: vi.fn(),
+        destroy: vi.fn(),
       }),
     },
     cameras: {
@@ -53,6 +106,8 @@ function createMockContext(alphaValue = 0.5): {
       },
     },
   } as unknown as Phaser.Scene;
+
+  const registry = createMockRegistry();
 
   return {
     ctx: {
@@ -63,18 +118,21 @@ function createMockContext(alphaValue = 0.5): {
       clockState: createClockState(),
       eventBus: createGameEventBus(),
     },
+    addSprite,
     addRectangle,
+    registry,
   };
 }
 
 describe("RenderSyncSystem", () => {
   afterEach(() => {
     resetWorld();
+    resetSpriteRegistry();
   });
 
-  it("creates a Phaser rectangle for a renderable entity", () => {
-    const { ctx, addRectangle } = createMockContext();
-    const system = createRenderSyncSystem(ctx);
+  it("creates a Phaser sprite for a renderable entity", () => {
+    const { ctx, addSprite, registry } = createMockContext();
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 200 },
@@ -83,12 +141,12 @@ describe("RenderSyncSystem", () => {
 
     system(DT);
 
-    expect(addRectangle).toHaveBeenCalledTimes(1);
+    expect(addSprite).toHaveBeenCalledTimes(1);
   });
 
   it("does not recreate visuals on subsequent ticks", () => {
-    const { ctx, addRectangle } = createMockContext();
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext();
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 200 },
@@ -99,15 +157,15 @@ describe("RenderSyncSystem", () => {
     system(DT);
     system(DT);
 
-    expect(addRectangle).toHaveBeenCalledTimes(1);
+    expect(addSprite).toHaveBeenCalledTimes(1);
   });
 
   it("interpolates position using alpha", () => {
     const alpha = 0.5;
-    const { ctx, addRectangle } = createMockContext(alpha);
-    const mockRect = createMockRect();
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(alpha);
+    const mockSpr = createMockSprite();
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 200, y: 300 },
@@ -120,15 +178,15 @@ describe("RenderSyncSystem", () => {
     // Interpolated: prev + (curr - prev) * alpha
     // x: 100 + (200 - 100) * 0.5 = 150
     // y: 200 + (300 - 200) * 0.5 = 250
-    expect(mockRect.x).toBeCloseTo(150, 5);
-    expect(mockRect.y).toBeCloseTo(250, 5);
+    expect(mockSpr.x).toBeCloseTo(150, 5);
+    expect(mockSpr.y).toBeCloseTo(250, 5);
   });
 
   it("falls back to current position when previousPosition is absent", () => {
-    const { ctx, addRectangle } = createMockContext(0.5);
-    const mockRect = createMockRect();
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(0.5);
+    const mockSpr = createMockSprite();
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -138,15 +196,15 @@ describe("RenderSyncSystem", () => {
     system(DT);
 
     // No previous → lerp(100, 100, 0.5) = 100
-    expect(mockRect.x).toBe(100);
-    expect(mockRect.y).toBe(100);
+    expect(mockSpr.x).toBe(100);
+    expect(mockSpr.y).toBe(100);
   });
 
   it("destroys sprites for removed entities", () => {
-    const { ctx, addRectangle } = createMockContext();
-    const mockRect = createMockRect();
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext();
+    const mockSpr = createMockSprite();
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     const entity = world.add({
       position: { x: 50, y: 50 },
@@ -154,18 +212,18 @@ describe("RenderSyncSystem", () => {
     });
 
     system(DT);
-    expect(mockRect.destroy).not.toHaveBeenCalled();
+    expect(mockSpr.destroy).not.toHaveBeenCalled();
 
     // Remove the entity
     world.remove(entity);
     system(DT);
 
-    expect(mockRect.destroy).toHaveBeenCalledTimes(1);
+    expect(mockSpr.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("does not wire camera follow (handled by camera system)", () => {
-    const { ctx } = createMockContext();
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, registry } = createMockContext();
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -186,10 +244,10 @@ describe("RenderSyncSystem", () => {
   // -------------------------------------------------------------------------
 
   it("positions sprite at previous position when alpha is 0", () => {
-    const { ctx, addRectangle } = createMockContext(0);
-    const mockRect = createMockRect();
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(0);
+    const mockSpr = createMockSprite();
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 200, y: 300 },
@@ -199,15 +257,15 @@ describe("RenderSyncSystem", () => {
 
     system(DT);
 
-    expect(mockRect.x).toBe(100);
-    expect(mockRect.y).toBe(200);
+    expect(mockSpr.x).toBe(100);
+    expect(mockSpr.y).toBe(200);
   });
 
   it("positions sprite at current position when alpha is 1", () => {
-    const { ctx, addRectangle } = createMockContext(1);
-    const mockRect = createMockRect();
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(1);
+    const mockSpr = createMockSprite();
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 200, y: 300 },
@@ -217,8 +275,8 @@ describe("RenderSyncSystem", () => {
 
     system(DT);
 
-    expect(mockRect.x).toBe(200);
-    expect(mockRect.y).toBe(300);
+    expect(mockSpr.x).toBe(200);
+    expect(mockSpr.y).toBe(300);
   });
 
   // -------------------------------------------------------------------------
@@ -226,10 +284,10 @@ describe("RenderSyncSystem", () => {
   // -------------------------------------------------------------------------
 
   it("lazily creates a Graphics object for the aim indicator", () => {
-    const { ctx, addRectangle } = createMockContext(0);
-    const mockRect = createMockRect(100, 100);
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(0);
+    const mockSpr = createMockSprite(100, 100);
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -249,11 +307,11 @@ describe("RenderSyncSystem", () => {
   });
 
   it("draws the aim line toward the mouse position", () => {
-    const { ctx, addRectangle } = createMockContext(0);
+    const { ctx, addSprite, registry } = createMockContext(0);
     // Sprite will be at (100, 100) due to alpha=0 and prev=current
-    const mockRect = createMockRect(100, 100);
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const mockSpr = createMockSprite(100, 100);
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -282,10 +340,10 @@ describe("RenderSyncSystem", () => {
   });
 
   it("does not draw the aim line when aim position equals player position", () => {
-    const { ctx, addRectangle } = createMockContext(0);
-    const mockRect = createMockRect(100, 100);
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(0);
+    const mockSpr = createMockSprite(100, 100);
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -310,10 +368,10 @@ describe("RenderSyncSystem", () => {
   });
 
   it("reuses the same Graphics object across ticks", () => {
-    const { ctx, addRectangle } = createMockContext(0);
-    const mockRect = createMockRect(100, 100);
-    addRectangle.mockReturnValue(mockRect);
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, addSprite, registry } = createMockContext(0);
+    const mockSpr = createMockSprite(100, 100);
+    addSprite.mockReturnValue(mockSpr);
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -334,8 +392,8 @@ describe("RenderSyncSystem", () => {
   });
 
   it("does not call startFollow on repeated ticks", () => {
-    const { ctx } = createMockContext();
-    const system = createRenderSyncSystem(ctx);
+    const { ctx, registry } = createMockContext();
+    const system = createRenderSyncSystem(ctx, registry);
 
     world.add({
       position: { x: 100, y: 100 },
@@ -382,10 +440,10 @@ describe("RenderSyncSystem", () => {
     }
 
     it("does not create indicator when activeSlot is -1", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      const playerRect = createMockRect(100, 100);
-      addRectangle.mockReturnValue(playerRect);
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerWithInventory(
         [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
@@ -394,15 +452,16 @@ describe("RenderSyncSystem", () => {
 
       system(DT);
 
-      // Only 1 rectangle call: the player sprite. No indicator.
-      expect(addRectangle).toHaveBeenCalledTimes(1);
+      // Only 1 sprite call: the player sprite. No indicator rectangle.
+      expect(addSprite).toHaveBeenCalledTimes(1);
+      expect(addRectangle).not.toHaveBeenCalled();
     });
 
     it("does not create indicator when active slot is empty", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      const playerRect = createMockRect(100, 100);
-      addRectangle.mockReturnValue(playerRect);
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerWithInventory(
         [null, null, null, null, null, null, null, null],
@@ -411,20 +470,18 @@ describe("RenderSyncSystem", () => {
 
       system(DT);
 
-      // Only the player sprite rectangle
-      expect(addRectangle).toHaveBeenCalledTimes(1);
+      // Only the player sprite
+      expect(addSprite).toHaveBeenCalledTimes(1);
+      expect(addRectangle).not.toHaveBeenCalled();
     });
 
     it("creates indicator when active slot has a primary item", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
       const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      addRectangle.mockReturnValue(equipRect);
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerWithInventory(
         [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
@@ -433,20 +490,18 @@ describe("RenderSyncSystem", () => {
 
       system(DT);
 
-      // 2 rectangles: player sprite + equip indicator
-      expect(addRectangle).toHaveBeenCalledTimes(2);
+      // 1 sprite (player) + 1 rectangle (equip indicator)
+      expect(addSprite).toHaveBeenCalledTimes(1);
+      expect(addRectangle).toHaveBeenCalledTimes(1);
     });
 
     it("positions indicator at player sprite + offset", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
       const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      addRectangle.mockReturnValue(equipRect);
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerWithInventory(
         [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
@@ -460,15 +515,12 @@ describe("RenderSyncSystem", () => {
     });
 
     it("sets high depth on the indicator", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
       const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      addRectangle.mockReturnValue(equipRect);
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerWithInventory(
         [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
@@ -481,15 +533,12 @@ describe("RenderSyncSystem", () => {
     });
 
     it("hides indicator when active slot becomes empty", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
       const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      addRectangle.mockReturnValue(equipRect);
+      const system = createRenderSyncSystem(ctx, registry);
 
       const entity = addPlayerWithInventory(
         [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
@@ -509,15 +558,10 @@ describe("RenderSyncSystem", () => {
     });
 
     it("hides indicator when active slot points to a continuation slot", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
-      const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Slot 0 = primary, slot 1 = continuation. Active slot points to the continuation slot.
       addPlayerWithInventory(
@@ -534,19 +578,17 @@ describe("RenderSyncSystem", () => {
       system(DT);
       // equipGfx was not created because slot 1 is not primary
       // The code checks `activeSlot && activeSlot.primary` — slot 1 exists but primary=false
-      expect(addRectangle).toHaveBeenCalledTimes(1); // only player sprite
+      expect(addSprite).toHaveBeenCalledTimes(1); // only player sprite
+      expect(addRectangle).not.toHaveBeenCalled();
     });
 
     it("reuses the indicator rectangle across ticks", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
       const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      addRectangle.mockReturnValue(equipRect);
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerWithInventory(
         [{ objectType: "wooden_plank", sizeCategory: "small", primary: true }, null, null, null, null, null, null, null],
@@ -557,20 +599,17 @@ describe("RenderSyncSystem", () => {
       system(DT);
       system(DT);
 
-      // Only 2 total rectangle calls: 1 for player sprite, 1 for equip indicator
-      expect(addRectangle).toHaveBeenCalledTimes(2);
+      // Only 1 rectangle call for equip indicator (reused across ticks)
+      expect(addRectangle).toHaveBeenCalledTimes(1);
     });
 
-    it("updates fill color when equipped item changes", () => {
-      const { ctx, addRectangle } = createMockContext(0);
-      let callCount = 0;
-      const playerRect = createMockRect(100, 100);
+    it("updates tint color when equipped item changes", () => {
+      const { ctx, addSprite, addRectangle, registry } = createMockContext(0);
+      const playerSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(playerSpr);
       const equipRect = createMockRect(0, 0);
-      addRectangle.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? playerRect : equipRect;
-      });
-      const system = createRenderSyncSystem(ctx);
+      addRectangle.mockReturnValue(equipRect);
+      const system = createRenderSyncSystem(ctx, registry);
 
       const entity = addPlayerWithInventory(
         [
@@ -599,10 +638,10 @@ describe("RenderSyncSystem", () => {
 
   describe("zombie death flash", () => {
     it("applies white tint to sprite during death flash duration", () => {
-      const { ctx, addRectangle } = createMockContext();
-      const mockRect = createMockRect();
-      addRectangle.mockReturnValue(mockRect);
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, registry } = createMockContext();
+      const mockSpr = createMockSprite();
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Create a zombie entity with aiState in 'dead' state
       const zombie = world.add({
@@ -623,7 +662,7 @@ describe("RenderSyncSystem", () => {
 
       // First tick to create the sprite
       system(DT);
-      expect(addRectangle).toHaveBeenCalled();
+      expect(addSprite).toHaveBeenCalled();
 
       // Emit zombie-killed event at the zombie's position
       ctx.eventBus.emit("zombie-killed", {
@@ -638,15 +677,15 @@ describe("RenderSyncSystem", () => {
       // Next tick: death flash should keep sprite alive and tint it white
       system(DT);
 
-      expect(mockRect.setFillStyle).toHaveBeenCalledWith(0xffffff);
-      expect(mockRect.destroy).not.toHaveBeenCalled();
+      expect(mockSpr.setTint).toHaveBeenCalledWith(0xffffff);
+      expect(mockSpr.destroy).not.toHaveBeenCalled();
     });
 
     it("destroys sprite after death flash duration expires", () => {
-      const { ctx, addRectangle } = createMockContext();
-      const mockRect = createMockRect();
-      addRectangle.mockReturnValue(mockRect);
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, registry } = createMockContext();
+      const mockSpr = createMockSprite();
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Create a zombie entity with aiState in 'dead' state
       const zombie = world.add({
@@ -683,7 +722,7 @@ describe("RenderSyncSystem", () => {
       }
 
       // Sprite should be destroyed after flash expires
-      expect(mockRect.destroy).toHaveBeenCalledTimes(1);
+      expect(mockSpr.destroy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -720,8 +759,8 @@ describe("RenderSyncSystem", () => {
     }
 
     it("creates barricade health bar graphics on first tick with barricade", () => {
-      const { ctx } = createMockContext();
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, registry } = createMockContext();
+      const system = createRenderSyncSystem(ctx, registry);
 
       addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 60, 60);
       system(DT);
@@ -732,8 +771,8 @@ describe("RenderSyncSystem", () => {
     });
 
     it("draws green health bar fill when HP is above 66%", () => {
-      const { ctx } = createMockContext();
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, registry } = createMockContext();
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Full health: 60/60 = 100%
       addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 60, 60);
@@ -750,8 +789,8 @@ describe("RenderSyncSystem", () => {
     });
 
     it("draws amber health bar fill when HP is between 33% and 66%", () => {
-      const { ctx } = createMockContext();
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, registry } = createMockContext();
+      const system = createRenderSyncSystem(ctx, registry);
 
       // 50% health: 30/60
       addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 30, 60);
@@ -766,8 +805,8 @@ describe("RenderSyncSystem", () => {
     });
 
     it("draws red health bar fill when HP is at or below 33%", () => {
-      const { ctx } = createMockContext();
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, registry } = createMockContext();
+      const system = createRenderSyncSystem(ctx, registry);
 
       // 20% health: 12/60
       addPlayerAndBarricade({ x: 100, y: 100 }, { x: 120, y: 120 }, 12, 60);
@@ -782,8 +821,8 @@ describe("RenderSyncSystem", () => {
     });
 
     it("does not draw health bar when barricade is beyond view range", () => {
-      const { ctx } = createMockContext();
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, registry } = createMockContext();
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Player at origin, barricade very far away
       addPlayerAndBarricade({ x: 0, y: 0 }, { x: 9999, y: 9999 }, 60, 60);
@@ -799,11 +838,11 @@ describe("RenderSyncSystem", () => {
     });
 
     it("shows snap indicator when barricade-snap event fires with snapping:true", () => {
-      const { ctx, addRectangle } = createMockContext();
+      const { ctx, addRectangle, registry } = createMockContext();
       const snapRect = createMockRect();
       addRectangle.mockReturnValue(snapRect);
 
-      const system = createRenderSyncSystem(ctx);
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Emit snap event
       ctx.eventBus.emit("barricade-snap", {
@@ -822,11 +861,11 @@ describe("RenderSyncSystem", () => {
     });
 
     it("hides snap indicator when barricade-snap fires with snapping:false", () => {
-      const { ctx, addRectangle } = createMockContext();
+      const { ctx, addRectangle, registry } = createMockContext();
       const snapRect = createMockRect();
       addRectangle.mockReturnValue(snapRect);
 
-      const system = createRenderSyncSystem(ctx);
+      const system = createRenderSyncSystem(ctx, registry);
 
       // Show snap indicator first
       ctx.eventBus.emit("barricade-snap", {
@@ -852,10 +891,10 @@ describe("RenderSyncSystem", () => {
 
   describe("burning tint", () => {
     it("applies fire tint to non-barricade burning entities", () => {
-      const { ctx, addRectangle } = createMockContext();
-      const mockSprite = createMockRect(100, 100);
-      addRectangle.mockReturnValue(mockSprite);
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, registry } = createMockContext();
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       world.add({
         position: { x: 100, y: 100 },
@@ -874,17 +913,17 @@ describe("RenderSyncSystem", () => {
       system(DT); // Creates visual
       system(DT); // Updates with tint
 
-      // setFillStyle should have been called with a fire-blended colour
-      expect(mockSprite.setFillStyle).toHaveBeenCalled();
-      const lastCall = mockSprite.setFillStyle.mock.calls.at(-1);
+      // setTint should have been called with a fire-blended colour
+      expect(mockSpr.setTint).toHaveBeenCalled();
+      const lastCall = mockSpr.setTint.mock.calls.at(-1);
       expect(lastCall![0]).toBeTypeOf("number");
     });
 
     it("does not apply fire tint to inert entities", () => {
-      const { ctx, addRectangle } = createMockContext();
-      const mockSprite = createMockRect(100, 100);
-      addRectangle.mockReturnValue(mockSprite);
-      const system = createRenderSyncSystem(ctx);
+      const { ctx, addSprite, registry } = createMockContext();
+      const mockSpr = createMockSprite(100, 100);
+      addSprite.mockReturnValue(mockSpr);
+      const system = createRenderSyncSystem(ctx, registry);
 
       world.add({
         position: { x: 100, y: 100 },
@@ -900,15 +939,15 @@ describe("RenderSyncSystem", () => {
         },
       });
 
-      system(DT); // Creates visual (may call setFillStyle for initial colour)
-      mockSprite.setFillStyle.mockClear();
+      system(DT); // Creates visual (may call setTint for initial colour)
+      mockSpr.setTint.mockClear();
       system(DT); // Update tick
 
-      // setFillStyle IS called to reset to base sprite colour (ensures tint
+      // setTint IS called to reset to base sprite colour (ensures tint
       // is removed after a burning/electrified → inert transition), but the
       // value should be the plain sprite colour — not a fire or electric tint.
-      expect(mockSprite.setFillStyle).toHaveBeenCalled();
-      const resetColour = mockSprite.setFillStyle.mock.calls[0][0];
+      expect(mockSpr.setTint).toHaveBeenCalled();
+      const resetColour = mockSpr.setTint.mock.calls[0][0];
       expect(resetColour).toBeTypeOf("number");
     });
   });

@@ -72,6 +72,13 @@ export interface ObjectDefinition {
 // Render colors by category
 // ---------------------------------------------------------------------------
 
+/**
+ * Render colours by object category.
+ *
+ * These values are duplicated in the palette module (src/game/rendering/palette.ts)
+ * which is the authoritative source. We keep a local copy here to avoid a circular
+ * dependency (palette → getObjectDef → object-defs → palette).
+ */
 const COLOR = {
   FURNITURE: 0x8b4513,  // saddle brown
   LOOT: 0xffd700,       // gold

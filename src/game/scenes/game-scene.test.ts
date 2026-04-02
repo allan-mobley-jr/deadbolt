@@ -6,6 +6,7 @@ import type { WorldData } from "@/types/world";
 import { TileType as ProcgenTileType } from "@/types/procgen";
 import { setActiveBus, getActiveBus, getActiveSeed, getActiveMinimapInit } from "@/game/PhaserGame";
 import { safeEmit } from "@/game/events/event-bus";
+import { initializeSpriteRegistry, resetSpriteRegistry } from "@/game/rendering/sprite-registry";
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -25,6 +26,21 @@ function createMockText() {
 /** Create a mock Phaser Rectangle game object. */
 function createMockRect() {
   return { x: 0, y: 0, destroy: vi.fn() };
+}
+
+/** Create a mock Phaser Sprite game object. */
+function createMockSpriteObj() {
+  return {
+    x: 0, y: 0,
+    alpha: 1,
+    destroy: vi.fn(),
+    setTint: vi.fn().mockReturnThis(),
+    setDisplaySize: vi.fn().mockReturnThis(),
+    setAlpha: vi.fn().mockReturnThis(),
+    setVisible: vi.fn().mockReturnThis(),
+    setDepth: vi.fn().mockReturnThis(),
+    setPosition: vi.fn().mockReturnThis(),
+  };
 }
 
 /** Unique auto-incrementing body id. */
@@ -202,6 +218,7 @@ describe("GameScene", () => {
         return textCallCount === 1 ? fpsText : createMockText();
       }),
       rectangle: vi.fn().mockImplementation(() => createMockRect()),
+      sprite: vi.fn().mockImplementation(() => createMockSpriteObj()),
       graphics: vi.fn().mockImplementation(() => ({
         clear: vi.fn(),
         lineStyle: vi.fn(),
@@ -210,8 +227,15 @@ describe("GameScene", () => {
         lineTo: vi.fn(),
         strokePath: vi.fn(),
         setDepth: vi.fn().mockReturnThis(),
+        setPosition: vi.fn().mockReturnThis(),
         fillStyle: vi.fn(),
         fillRect: vi.fn(),
+        fillCircle: vi.fn(),
+        strokeCircle: vi.fn(),
+        strokeTriangle: vi.fn(),
+        lineBetween: vi.fn(),
+        strokeRect: vi.fn(),
+        destroy: vi.fn(),
       })),
       renderTexture: vi.fn().mockReturnValue(mockRenderTexture),
     } as unknown as Phaser.GameObjects.GameObjectFactory;
@@ -227,14 +251,19 @@ describe("GameScene", () => {
 
     scene.textures = {
       exists: vi.fn().mockReturnValue(false),
-      createCanvas: vi.fn().mockReturnValue({
-        context: {
+      createCanvas: vi.fn().mockImplementation(() => {
+        const ctx = {
+          fillStyle: "",
+          fillRect: vi.fn(),
           createRadialGradient: vi.fn().mockReturnValue({
             addColorStop: vi.fn(),
           }),
-          fillRect: vi.fn(),
-        },
-        refresh: vi.fn(),
+        };
+        return {
+          getContext: vi.fn().mockReturnValue(ctx),
+          context: ctx,
+          refresh: vi.fn(),
+        };
       }),
     } as unknown as Phaser.Textures.TextureManager;
 
@@ -303,12 +332,16 @@ describe("GameScene", () => {
       emit: vi.fn(),
     } as unknown as Phaser.Events.EventEmitter;
 
+    // Initialize the sprite registry (normally done by BootScene)
+    initializeSpriteRegistry(scene as unknown as Phaser.Scene);
+
     // Provide world data before create
     scene.init(mockWorldData);
   });
 
   afterEach(() => {
     resetWorld();
+    resetSpriteRegistry();
   });
 
   it("registers with the key 'GameScene'", () => {
