@@ -30,6 +30,7 @@ function createMockScene() {
   scene.textures = {
     createCanvas: vi.fn().mockImplementation(() => createMockCanvasTexture()),
     exists: vi.fn().mockReturnValue(false),
+    get: vi.fn().mockReturnValue({ add: vi.fn() }),
   } as unknown as Phaser.Textures.TextureManager;
 
   scene.game = {

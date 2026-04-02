@@ -108,6 +108,19 @@ function blendWithElectricTint(baseColor: number, elapsed: number): number {
   return blendTint(baseColor, ELECTRICITY.ELECTRIFIED_TINT_COLOR, elapsed, ELECTRICITY.ELECTRIFIED_TINT_PULSE_RATE, 0.5, 0.5);
 }
 
+/** Quantise an angle (radians) to a 4-direction frame index: S=0, E=1, N=2, W=3. */
+function angleToDirectionFrame(angle: number): number {
+  // In screen coords: +Y is down.
+  //   East:  angle in [-π/4, π/4)
+  //   South: angle in [π/4, 3π/4)
+  //   North: angle in [-3π/4, -π/4)
+  //   West:  everything else (|angle| >= 3π/4)
+  if (angle >= -Math.PI / 4 && angle < Math.PI / 4) return 1; // East
+  if (angle >= Math.PI / 4 && angle < (3 * Math.PI) / 4) return 0; // South
+  if (angle >= -(3 * Math.PI) / 4 && angle < -Math.PI / 4) return 2; // North
+  return 3; // West
+}
+
 function createVisual(
   scene: Phaser.Scene,
   registry: SpriteRegistry,
@@ -117,6 +130,9 @@ function createVisual(
 ): Phaser.GameObjects.Sprite {
   const entry = registry.get(key);
   const sprite = scene.add.sprite(x, y, entry.textureKey);
+  if (entry.defaultFrame !== undefined) {
+    sprite.setFrame(entry.defaultFrame);
+  }
   sprite.setDisplaySize(entry.width, entry.height);
   sprite.setTint(resolveColor(key));
   return sprite;
@@ -422,6 +438,10 @@ export function createRenderSyncSystem(ctx: SceneContext, registry: SpriteRegist
             playerSprite.y + ny * AIM_LINE_LENGTH,
           );
           aimGfx.strokePath();
+
+          // Update player sprite direction based on aim angle
+          const aimAngle = Math.atan2(dy, dx);
+          playerSprite.setFrame(angleToDirectionFrame(aimAngle));
         }
 
         // --- Equipped item indicator ---

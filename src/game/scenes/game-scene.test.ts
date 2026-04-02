@@ -36,6 +36,7 @@ function createMockSpriteObj() {
     destroy: vi.fn(),
     setTint: vi.fn().mockReturnThis(),
     setDisplaySize: vi.fn().mockReturnThis(),
+    setFrame: vi.fn().mockReturnThis(),
     setAlpha: vi.fn().mockReturnThis(),
     setVisible: vi.fn().mockReturnThis(),
     setDepth: vi.fn().mockReturnThis(),
@@ -265,6 +266,7 @@ describe("GameScene", () => {
           refresh: vi.fn(),
         };
       }),
+      get: vi.fn().mockReturnValue({ add: vi.fn() }),
     } as unknown as Phaser.Textures.TextureManager;
 
     scene.input = {
