@@ -195,6 +195,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Explosion burst ---
   ctx.eventBus.on("explosion-detonated", (e) => {
     burstAt(e.position.x, e.position.y, {
+      texture: PARTICLE_TEXTURES.EMBER,
       count: PARTICLES.EXPLOSION_COUNT,
       lifespan: PARTICLES.EXPLOSION_LIFESPAN,
       speedMin: PARTICLES.EXPLOSION_SPEED_MIN,
@@ -208,6 +209,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Blood/damage on player hit ---
   ctx.eventBus.on("player-hit", (e) => {
     burstAt(e.position.x, e.position.y, {
+      texture: PARTICLE_TEXTURES.BLOOD,
       count: PARTICLES.BLOOD_COUNT,
       lifespan: PARTICLES.BLOOD_LIFESPAN,
       speedMin: PARTICLES.BLOOD_SPEED_MIN,
@@ -219,6 +221,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Blood/damage on zombie hit ---
   ctx.eventBus.on("damage-dealt", (e) => {
     burstAt(e.position.x, e.position.y, {
+      texture: PARTICLE_TEXTURES.BLOOD,
       count: PARTICLES.BLOOD_COUNT,
       lifespan: PARTICLES.BLOOD_LIFESPAN,
       speedMin: PARTICLES.BLOOD_SPEED_MIN,
@@ -230,6 +233,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Zombie death burst ---
   ctx.eventBus.on("zombie-killed", (e) => {
     burstAt(e.position.x, e.position.y, {
+      texture: PARTICLE_TEXTURES.BLOOD,
       count: PARTICLES.DEATH_COUNT,
       lifespan: PARTICLES.DEATH_LIFESPAN,
       speedMin: PARTICLES.DEATH_SPEED_MIN,
@@ -254,7 +258,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Barricade break splinters ---
   ctx.eventBus.on("barricade-broken", (e) => {
     burstAt(e.position.x, e.position.y, {
-      texture: PARTICLE_TEXTURES.SQUARE,
+      texture: PARTICLE_TEXTURES.SPLINTER,
       count: PARTICLES.BREAK_COUNT,
       lifespan: PARTICLES.BREAK_LIFESPAN,
       speedMin: PARTICLES.BREAK_SPEED_MIN,
@@ -267,6 +271,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Electricity zap sparks ---
   ctx.eventBus.on("electricity-damage", (e) => {
     burstAt(e.position.x, e.position.y, {
+      texture: PARTICLE_TEXTURES.SPARK,
       count: 4,
       lifespan: PARTICLES.ELECTRIC_LIFESPAN,
       speedMin: PARTICLES.ELECTRIC_SPEED_MIN,
@@ -278,6 +283,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
   // --- Fire ignition burst ---
   ctx.eventBus.on("fire-ignited", (e) => {
     burstAt(e.position.x, e.position.y, {
+      texture: PARTICLE_TEXTURES.EMBER,
       count: 8,
       lifespan: PARTICLES.FIRE_LIFESPAN,
       speedMin: PARTICLES.FIRE_SPEED_MIN,
@@ -347,6 +353,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
           const config =
             type === "fire"
               ? {
+                  texture: PARTICLE_TEXTURES.EMBER,
                   count: PARTICLES.FIRE_COUNT,
                   lifespan: PARTICLES.FIRE_LIFESPAN,
                   speedMin: PARTICLES.FIRE_SPEED_MIN,
@@ -359,6 +366,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
                   gravityY: -30,
                 }
               : {
+                  texture: PARTICLE_TEXTURES.SPARK,
                   count: PARTICLES.ELECTRIC_COUNT,
                   lifespan: PARTICLES.ELECTRIC_LIFESPAN,
                   speedMin: PARTICLES.ELECTRIC_SPEED_MIN,
@@ -400,6 +408,7 @@ export function createParticleSystem(ctx: SceneContext): SystemFn {
         if (dustTimer <= 0) {
           dustTimer = PARTICLES.DUST_FREQUENCY;
           burstAt(player.position.x, player.position.y, {
+            texture: PARTICLE_TEXTURES.DUST,
             count: PARTICLES.DUST_COUNT,
             lifespan: PARTICLES.DUST_LIFESPAN,
             speedMin: 5,

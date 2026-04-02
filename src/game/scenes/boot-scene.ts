@@ -4,6 +4,7 @@ import { TILE_SIZE } from "@/game/tiles/tile-types";
 import { ALL_SOUND_KEYS } from "@/game/systems/audio-constants";
 import { PARTICLE_TEXTURES } from "@/game/systems/particle-constants";
 import { initializeSpriteRegistry } from "@/game/rendering/sprite-registry";
+import { PARTICLE_GENERATORS } from "@/game/rendering/generators/particle-sprites";
 
 /** Texture key for the player sprite. */
 export const PLAYER_TEXTURE_KEY = "player";
@@ -34,6 +35,9 @@ export default class BootScene extends Phaser.Scene {
 
       // Generate particle textures (tiny colored shapes).
       this.generateParticleTextures();
+
+      // Generate purpose-shaped particle textures (ember, blood, spark, etc.)
+      this.generateShapedParticleTextures();
 
       // Initialize the sprite registry (generates white canvas textures
       // for all known spriteKeys). Must complete before LoadingScene.
@@ -110,6 +114,24 @@ export default class BootScene extends Phaser.Scene {
         sCtx.fillStyle = "#ffffff";
         sCtx.fillRect(0, 0, 3, 3);
         squareCanvas.refresh();
+      }
+    }
+  }
+
+  /**
+   * Generate purpose-shaped particle textures (ember, blood, spark, etc.)
+   * from the particle-sprites generators. Each texture is a tiny canvas
+   * (2-5px) drawn in white for tinting at emission time.
+   */
+  private generateShapedParticleTextures(): void {
+    for (const [key, gen] of Object.entries(PARTICLE_GENERATORS)) {
+      if (this.textures.exists(key)) continue;
+
+      const canvas = this.textures.createCanvas(key, gen.width, gen.height);
+      if (canvas) {
+        const ctx = canvas.getContext();
+        gen.draw(ctx);
+        canvas.refresh();
       }
     }
   }
