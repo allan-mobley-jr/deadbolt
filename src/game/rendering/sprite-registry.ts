@@ -16,6 +16,8 @@
 import type Phaser from "phaser";
 import { getObjectDef, getAllObjectDefs } from "@/game/procgen/object-defs";
 import { getEntitySpriteGenerator } from "./generators/entity-sprites";
+import { getObjectSpriteGenerator } from "./generators/object-sprites";
+import { getUiSpriteGenerator } from "./generators/ui-sprites";
 import type { EntitySpriteGenerator } from "./generators/entity-sprites";
 
 // ---------------------------------------------------------------------------
@@ -130,7 +132,7 @@ export class SpriteRegistry {
 
       // Hot-swap: if an atlas already provides this texture, skip generation
       if (!scene.textures.exists(textureKey)) {
-        const generator = getEntitySpriteGenerator(spriteKey);
+        const generator = getEntitySpriteGenerator(spriteKey) ?? getObjectSpriteGenerator(spriteKey);
         if (generator) {
           this.generateEntityTexture(scene, textureKey, generator);
         } else {
@@ -139,7 +141,7 @@ export class SpriteRegistry {
       }
 
       // For multi-frame generators, use per-frame dimensions and set defaultFrame
-      const generator = getEntitySpriteGenerator(spriteKey);
+      const generator = getEntitySpriteGenerator(spriteKey) ?? getObjectSpriteGenerator(spriteKey);
       if (generator && generator.frameCount > 1) {
         this.entries.set(spriteKey, {
           textureKey,
@@ -150,6 +152,21 @@ export class SpriteRegistry {
       } else {
         this.entries.set(spriteKey, { textureKey, width, height });
       }
+    }
+
+    // Generate 16×16 UI icon textures for inventory display
+    for (const def of getAllObjectDefs()) {
+      const uiKey = `ui_${def.type}`;
+      const uiTextureKey = `${TEX_PREFIX}${uiKey}`;
+      if (!scene.textures.exists(uiTextureKey)) {
+        const uiGen = getUiSpriteGenerator(def.type);
+        if (uiGen) {
+          this.generateEntityTexture(scene, uiTextureKey, uiGen);
+        } else {
+          this.generateWhiteTexture(scene, uiTextureKey, 16, 16);
+        }
+      }
+      this.entries.set(uiKey, { textureKey: uiTextureKey, width: 16, height: 16 });
     }
 
     // Generate fallback texture
