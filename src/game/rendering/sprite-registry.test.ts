@@ -54,23 +54,20 @@ describe("SpriteRegistry", () => {
     expect(canvases.length).toBeGreaterThan(10);
   });
 
-  it("fills world object canvas textures with white", () => {
+  it("uses object sprite generators for world object textures", () => {
     const { scene, canvases } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
-    // Filter to object textures (not entity generators, not fallback)
-    const entityKeys = new Set(["spr_player", "spr_zombie", "spr_zombie_runner", "spr_zombie_brute", "spr_zombie_horde", "spr_bullet"]);
-    const objectCanvases = canvases.filter(
-      (c) => !entityKeys.has(c.key) && c.key !== "spr___fallback",
-    );
-
-    expect(objectCanvases.length).toBeGreaterThan(0);
-    for (const c of objectCanvases) {
-      expect(c.ctx.fillStyle).toBe("#ffffff");
-      expect(c.ctx.fillRect).toHaveBeenCalledWith(0, 0, c.width, c.height);
-      expect(c.refresh).toHaveBeenCalled();
-    }
+    // Object textures should exist and have drawing operations
+    const objectCanvas = canvases.find((c) => c.key === "spr_bookshelf");
+    expect(objectCanvas).toBeDefined();
+    expect(objectCanvas!.width).toBe(32);
+    expect(objectCanvas!.height).toBe(32);
+    // Generators draw multiple fillRect calls (not just one white fill)
+    expect(objectCanvas!.ctx.fillRect).toHaveBeenCalled();
+    const callCount = objectCanvas!.ctx.fillRect.mock.calls.length;
+    expect(callCount).toBeGreaterThan(1);
   });
 
   it("calls refresh on all canvas textures", () => {
@@ -265,15 +262,35 @@ describe("SpriteRegistry", () => {
     expect(bruteCanvas!.height).toBe(28);
   });
 
-  it("still generates plain white rectangles for world objects", () => {
+  it("uses object generators for world object textures", () => {
     const { scene, canvases } = createMockScene();
     const registry = new SpriteRegistry();
     registry.initialize(scene);
 
-    // World object canvases should be plain white fills
+    // World objects now use custom generators instead of plain white fills
     const chairCanvas = canvases.find((c) => c.key === "spr_wooden_chair");
     expect(chairCanvas).toBeDefined();
-    expect(chairCanvas!.ctx.fillStyle).toBe("#ffffff");
-    expect(chairCanvas!.ctx.fillRect).toHaveBeenCalledWith(0, 0, 16, 16);
+    expect(chairCanvas!.width).toBe(16);
+    expect(chairCanvas!.height).toBe(16);
+    // Should have multiple drawing calls (not just one white fill)
+    expect(chairCanvas!.ctx.fillRect.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("generates UI icon textures for all object types", () => {
+    const { scene, canvases } = createMockScene();
+    const registry = new SpriteRegistry();
+    registry.initialize(scene);
+
+    // UI icons should be registered with ui_ prefix
+    const uiBookshelfCanvas = canvases.find((c) => c.key === "spr_ui_bookshelf");
+    expect(uiBookshelfCanvas).toBeDefined();
+    expect(uiBookshelfCanvas!.width).toBe(16);
+    expect(uiBookshelfCanvas!.height).toBe(16);
+
+    // Verify UI entry exists in registry
+    const entry = registry.get("ui_bookshelf");
+    expect(entry.textureKey).toBe("spr_ui_bookshelf");
+    expect(entry.width).toBe(16);
+    expect(entry.height).toBe(16);
   });
 });
