@@ -6,7 +6,6 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/useUIStore";
 import { useGameStore } from "@/stores/useGameStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePersistenceStore } from "@/stores/usePersistenceStore";
 import { resetSessionStores } from "@/stores/resetSessionStores";
 import { computeRunScore } from "@/types/persistence";

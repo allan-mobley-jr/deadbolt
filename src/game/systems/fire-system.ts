@@ -183,8 +183,6 @@ export function createFireSystem(ctx: SceneContext): SystemFn {
           FIRE.SPREAD_RADIUS,
         );
 
-        const sourceObjectType = getObjectType(entity);
-
         for (const result of flammables) {
           const target = result.entity;
 

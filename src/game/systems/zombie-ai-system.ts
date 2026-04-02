@@ -140,19 +140,9 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
   const pathCache = new Map<Entity, CachedPath>();
 
   // --- A* frame budget tracking ---
-  let aStarCallsThisTick = 0;
   let aStarBudgetExhausted = false;
 
-  // --- Topology change listener ---
-  let topologyDirty = false;
-  let lastTopologyChangeTileX = 0;
-  let lastTopologyChangeTileY = 0;
-
   ctx.eventBus.on("topology-changed", (e) => {
-    topologyDirty = true;
-    lastTopologyChangeTileX = e.tileX;
-    lastTopologyChangeTileY = e.tileY;
-
     // Invalidate flow field
     if (flowField) flowField.invalidate();
 
@@ -189,7 +179,6 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
 
     // --- Reset per-tick tracking ---
     toRemove.length = 0;
-    aStarCallsThisTick = 0;
     aStarBudgetExhausted = false;
     const tickStart = now();
 
@@ -218,9 +207,6 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
       }
     }
 
-    // Reset topology dirty flag after flow field recompute
-    topologyDirty = false;
-
     // --- Zombie loop ---
     for (const entity of zombieEntities) {
       const { aiState: ai, zombieType: stats, health } = entity;
@@ -246,7 +232,6 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
         case "idle":
           ai.state = "pathing";
           handlePathingInit(entity, ai, pathfindingGrid, safehouseCenter, noiseMap, tickStart);
-          // eslint-disable-next-line no-fallthrough
         case "pathing":
           runPathingState(entity, dt, pathfindingGrid, safehouseCenter, player, noiseMap, tickStart);
           break;
@@ -536,7 +521,6 @@ export function createZombieAISystem(ctx: SceneContext): SystemFn {
 
     // --- A* search ---
     const result = pathfindingGrid.findSmoothedPath(start, target);
-    aStarCallsThisTick++;
 
     if (result.found) {
       ai.path = result.path;
