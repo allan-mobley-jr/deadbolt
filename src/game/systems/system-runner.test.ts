@@ -442,6 +442,51 @@ describe("SystemRunner", () => {
       consoleSpy.mockRestore();
       warnSpy.mockRestore();
     });
+
+    it("logs when onError callback throws", () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const callbackError = new Error("callback boom");
+      const failing: SystemFn = () => { throw new Error("sys"); };
+      const runner = new SystemRunner([failing], {
+        names: ["TestSys"],
+        onError: () => { throw callbackError; },
+      });
+
+      runner.run(DT);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[SystemRunner] onError callback threw for "TestSys":',
+        callbackError,
+      );
+
+      consoleSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it("logs when onDisabled callback throws", () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const callbackError = new Error("disabled boom");
+      const failing: SystemFn = () => { throw new Error("sys"); };
+      const runner = new SystemRunner([failing], {
+        names: ["TestSys"],
+        errorBudget: 1,
+        onDisabled: () => { throw callbackError; },
+      });
+
+      runner.run(DT);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[SystemRunner] onDisabled callback threw for "TestSys":',
+        callbackError,
+      );
+
+      consoleSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
   });
 
   describe("disabledCount", () => {

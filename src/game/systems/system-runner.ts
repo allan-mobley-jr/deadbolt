@@ -106,14 +106,22 @@ export class SystemRunner {
           `[${name}] System error ${count}/${this.errorBudget}:`,
           err,
         );
-        try { this._onError?.(i, name, err, count); } catch { /* swallow — callback must not break isolation */ }
+        try {
+          this._onError?.(i, name, err, count);
+        } catch (cbErr) {
+          console.error(`[SystemRunner] onError callback threw for "${name}":`, cbErr);
+        }
 
         if (count >= this.errorBudget) {
           this.disabledFlags[i] = true;
           console.warn(
             `[${name}] Disabled after ${count} errors`,
           );
-          try { this._onDisabled?.(i, name); } catch { /* swallow — callback must not break isolation */ }
+          try {
+            this._onDisabled?.(i, name);
+          } catch (cbErr) {
+            console.error(`[SystemRunner] onDisabled callback threw for "${name}":`, cbErr);
+          }
         }
       }
     }
