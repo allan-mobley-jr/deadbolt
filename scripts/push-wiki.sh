@@ -210,14 +210,14 @@ Strategic placement matters. A metal filing cabinet blocks better than a wooden 
 
 The game runs on a four-phase clock:
 
-| Phase | Duration | What Happens |
-|-------|----------|-------------|
-| **Dawn** | 30s | Transition lighting; brief respite |
-| **Day** | 120s | Full visibility; scavenge and explore |
-| **Dusk** | 60s | Warning phase; prepare barricades |
-| **Night** | 120s | Zombie waves attack; reduced visibility |
+| Phase | Day 1 | Day 2 | Day 3 | Day 4+ | What Happens |
+|-------|-------|-------|-------|--------|-------------|
+| **Dawn** | 15s | 15s | 15s | 15s | Transition lighting; brief respite |
+| **Day** | 300s | 240s | 180s | 120s | Full visibility; scavenge and explore |
+| **Dusk** | 15s | 15s | 15s | 15s | Warning phase; prepare barricades |
+| **Night** | 90s | 120s | 150s | 180s | Zombie waves attack; reduced visibility |
 
-As days progress, night phases get longer and day phases get shorter, increasing pressure. The HUD displays the current phase, day number, and remaining time.
+Day phases shrink and night phases grow each cycle, creating escalating pressure. Dawn and dusk are fixed-length transitions. The HUD displays the current phase, day number, and remaining time.
 
 Visibility shrinks at night — your view radius drops with a soft-edge falloff, and tile lighting shifts through amber (dawn), neutral (day), purple (dusk), and deep blue-black (night).
 
